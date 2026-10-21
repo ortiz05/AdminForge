@@ -14,6 +14,7 @@ import { errorDescription } from '../lib/errors';
 import { useMe } from '../lib/session';
 import { Callout } from '../ops/ui';
 import { labelOf, latestSteps, type RunDetail, type StepIndex } from './contracts';
+import { activeRunsQueryKey } from './keys';
 import { runDetailQuery } from './queries';
 
 /** POST /api/runs/:id/resume — the way out of `awaiting_arm` and `awaiting_reauth` — then the run reloads. */
@@ -25,6 +26,9 @@ function useResumeRun(id: string) {
     onSuccess: () => {
       toast({ tone: 'info', title: 'Run resumed' });
       void queryClient.invalidateQueries({ queryKey: runDetailQuery(id).queryKey });
+      // The run dock and the Runs list say "Waiting to be resumed" until they read it again.
+      void queryClient.invalidateQueries({ queryKey: activeRunsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: ['runs', 'list'] });
     },
     onError: (e) => toast({ tone: 'crit', title: 'The run didn’t resume', description: errorDescription(e) }),
   });

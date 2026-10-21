@@ -233,7 +233,8 @@ export function RunPage({ id }: { id: string }) {
         : 'Ran as the automation identity'
       : `Started by ${run.initiator.upn === me.user.upn ? 'you' : (run.initiator.upn ?? 'someone')}`,
     run.createdAt ? formatRelative(run.createdAt, now) : null,
-    took ? (terminal ? `took ${took}` : `running for ${took}`) : null,
+    // A parked or queued run isn't running: its start time says enough (its status says what it waits for).
+    took ? (terminal ? `took ${took}` : run.status === 'running' ? `running for ${took}` : null) : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -478,8 +479,10 @@ export function RunPage({ id }: { id: string }) {
                     'Ended',
                     run.endedAt ? (
                       <time dateTime={run.endedAt}>{formatTimestamp(run.endedAt)}</time>
-                    ) : terminal ? null : (
+                    ) : terminal ? null : run.status === 'running' ? (
                       'Still running'
+                    ) : (
+                      'Not yet'
                     ),
                   ],
                   ...(run.parentRunId

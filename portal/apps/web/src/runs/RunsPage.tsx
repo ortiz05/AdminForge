@@ -142,7 +142,8 @@ export function RunsPage({ search }: { search: RunsSearch }) {
             </span>
           );
         },
-        width: 'minmax(96px, 0.6fr)',
+        // "20 min 24 s" whole at 1440 px.
+        width: 'minmax(120px, 0.6fr)',
       },
     ],
     [now],

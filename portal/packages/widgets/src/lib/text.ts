@@ -12,7 +12,57 @@ const ENTITIES: Record<string, string> = {
   '#39': "'",
 };
 
-const looksLikeHtml = (s: string) => /<\/?[a-z][a-z0-9]*(\s[^>]*)?\/?>/i.test(s);
+/**
+ * Runs a tag pattern over the text up to its last `>` and keeps the rest as it is. Every tag pattern here ends with
+ * `>`, so nothing after the last one can match — and before it, a pattern's scan for its `>` always succeeds. Without
+ * this, each `<` of a hostile value ("<a x<a x…", 64,000 "<") would scan to the end of the text: seconds of frozen
+ * page for one table cell.
+ */
+function beforeLastGt(s: string, pass: (markup: string) => string): string {
+  const end = s.lastIndexOf('>') + 1;
+  return end === s.length ? pass(s) : pass(s.slice(0, end)) + s.slice(end);
+}
+
+const looksLikeHtml = (s: string) =>
+  s.includes('>') && /<\/?[a-z][a-z0-9]*(\s[^>]*)?\/?>/i.test(s.slice(0, s.lastIndexOf('>') + 1));
+
+/**
+ * Removes `<script>` and `<style>` elements with their content. An element that is never closed stays (its tag is
+ * dropped with the others); once no end tag follows, no later element of that name is searched again, so this is one
+ * forward pass.
+ */
+function dropScripts(s: string): string {
+  const open = /<(script|style)[^<>]*>/gi;
+  const unclosed = new Set<string>();
+  let out = '';
+  let kept = 0;
+  for (let m = open.exec(s); m; m = open.exec(s)) {
+    const name = m[1]!.toLowerCase();
+    if (unclosed.has(name)) continue;
+    const close = new RegExp(`</${name}>`, 'gi');
+    close.lastIndex = open.lastIndex;
+    const end = close.exec(s);
+    if (!end) {
+      unclosed.add(name);
+      continue;
+    }
+    out += s.slice(kept, m.index);
+    kept = open.lastIndex = end.index + end[0].length;
+  }
+  return kept === 0 ? s : out + s.slice(kept);
+}
+
+/** Spaces and tabs at the end of each line (a hand-written loop: `/[ \t]+\n/` is quadratic on a long run of spaces). */
+function trimLineEnds(s: string): string {
+  return s
+    .split('\n')
+    .map((line) => {
+      let end = line.length;
+      while (end > 0 && (line[end - 1] === ' ' || line[end - 1] === '\t')) end--;
+      return end === line.length ? line : line.slice(0, end);
+    })
+    .join('\n');
+}
 
 /**
  * The character a numeric reference (`#65`, `#x41`, lower-cased) names, or null when it names none: zero, past
@@ -28,26 +78,33 @@ function numericReference(ref: string): string | null {
   return String.fromCodePoint(n);
 }
 
+/** Line breaks, list items and block ends become line structure; every other tag goes. */
+const TAG_PASSES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/<br\s*\/?>/gi, '\n'],
+  [/<li[^>]*>/gi, '\n- '],
+  [/<\/(p|div|h[1-6]|ul|ol|li|tr|table|section|article|blockquote)>/gi, '\n\n'],
+  [/<[^>]+>/g, ''],
+];
+
 /**
  * HTML from Microsoft APIs (message center posts, service health updates) → plain text with paragraph breaks.
  * Nothing is ever rendered as HTML: tags are dropped (block tags become line breaks, list items become "- ")
- * and entities decoded. Script/style contents are removed entirely.
+ * and entities decoded. Script/style contents are removed entirely. Every pass is linear in the input: this runs
+ * while widgets render, and tenant text can be crafted.
  */
 export function htmlToText(input: string): string {
   if (!looksLikeHtml(input)) return input;
-  return input
-    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<li[^>]*>/gi, '\n- ')
-    .replace(/<\/(p|div|h[1-6]|ul|ol|li|tr|table|section|article|blockquote)>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&(#?[a-z0-9]+);/gi, (m, e: string) => {
-      const k = e.toLowerCase();
-      if (ENTITIES[k]) return ENTITIES[k]!;
-      if (k.startsWith('#')) return numericReference(k) ?? m;
-      return m;
-    })
-    .replace(/[ \t]+\n/g, '\n')
+  let text = dropScripts(input);
+  // Each pass on its own text up to the last `>`: an earlier pass may have removed the one that ended it.
+  for (const [pattern, replacement] of TAG_PASSES)
+    text = beforeLastGt(text, (markup) => markup.replace(pattern, replacement));
+  text = text.replace(/&(#?[a-z0-9]+);/gi, (m, e: string) => {
+    const k = e.toLowerCase();
+    if (ENTITIES[k]) return ENTITIES[k]!;
+    if (k.startsWith('#')) return numericReference(k) ?? m;
+    return m;
+  });
+  return trimLineEnds(text)
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

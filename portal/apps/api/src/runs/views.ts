@@ -96,7 +96,7 @@ function waitingOf(steps: StepRecord[]): RunView['waiting'] {
 
 /** Shown where a metadata-only viewer would read an error's message. */
 export const RESTRICTED_DETAIL =
-  'The details are shown only to the person who started this run, its approvers and Portal.Admin.';
+  'The details are shown only to the person who started this run, its approvers and Portal Admins.';
 
 /**
  * An error as a metadata-only viewer sees it: the code and the references (step, HTTP status, Microsoft request-id),

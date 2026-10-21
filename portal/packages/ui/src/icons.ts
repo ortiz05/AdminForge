@@ -29,6 +29,7 @@ export {
   DotsThreeVerticalIcon,
   DownloadSimpleIcon,
   EyeIcon,
+  EyeSlashIcon,
   FlaskIcon,
   FloppyDiskIcon,
   FunnelSimpleIcon,

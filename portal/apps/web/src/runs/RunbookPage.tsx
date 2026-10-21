@@ -30,7 +30,7 @@ import { RiskBanner } from '../playbooks/Preflight';
 import { playbookSearch } from '../playbooks/url';
 import { latestSteps, StartRunResponse, type RunDetail, type RunStep, type StepStatus } from './contracts';
 import { ManualStepCard } from './HumanTasks';
-import { RunDataHidden } from './RunDataHidden';
+import { ErrorCode, RunDataHidden } from './RunDataHidden';
 import { Markdown } from './Markdown';
 import { STEP_STATUS_VIEW, RunStatusPill, StatusGlyph } from './status';
 import { TYPE_LABEL } from './RunTimeline';
@@ -46,9 +46,15 @@ export interface RunbookSearch {
 const asMarkdownText = (v: unknown) =>
   escapeMarkdown(v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 
-/** Renders `${ … }` in runbook text against the run's inputs (JSONata loads on demand); raw text until then. */
-function useTemplated(text: string | undefined, scope: Record<string, unknown>): string {
-  const key = JSON.stringify(scope);
+/** What a `${ … }` in runbook text shows to someone who can't see the run's inputs (S-25). */
+const HIDDEN_VALUE = '(hidden)';
+
+/**
+ * Renders `${ … }` in runbook text against the run's inputs (JSONata loads on demand); raw text until then. With
+ * `hidden` (someone else's run, S-25) every expression shows as "(hidden)" instead of being evaluated.
+ */
+function useTemplated(text: string | undefined, scope: Record<string, unknown>, hidden = false): string {
+  const key = `${hidden ? 'hidden' : ''}${JSON.stringify(scope)}`;
   const [rendered, setRendered] = useState<{ for: string; value: string } | null>(null);
   useEffect(() => {
     let live = true;
@@ -57,7 +63,12 @@ function useTemplated(text: string | undefined, scope: Record<string, unknown>):
       .then(async ({ evaluate, splitTemplate }) => {
         let out = '';
         for (const seg of splitTemplate(text))
-          out += seg.type === 'text' ? seg.value : asMarkdownText(await evaluate(seg.source, scope));
+          out +=
+            seg.type === 'text'
+              ? seg.value
+              : hidden
+                ? HIDDEN_VALUE
+                : asMarkdownText(await evaluate(seg.source, scope));
         return out;
       })
       .then((value) => live && setRendered({ for: `${text}\u0000${key}`, value }))
@@ -70,8 +81,16 @@ function useTemplated(text: string | undefined, scope: Record<string, unknown>):
   return rendered && rendered.for === `${text}\u0000${key}` ? rendered.value : (text ?? '');
 }
 
-function TemplatedMarkdown({ source, scope }: { source: string; scope: Record<string, unknown> }) {
-  return <Markdown source={useTemplated(source, scope)} />;
+function TemplatedMarkdown({
+  source,
+  scope,
+  hidden = false,
+}: {
+  source: string;
+  scope: Record<string, unknown>;
+  hidden?: boolean;
+}) {
+  return <Markdown source={useTemplated(source, scope, hidden)} />;
 }
 
 type SectionState = 'done' | 'active' | 'blocked' | 'pending';
@@ -92,6 +111,7 @@ function StepRow({
   runId,
   scope,
   full = true,
+  waitingFor = null,
 }: {
   step: Step;
   record?: RunStep;
@@ -99,6 +119,8 @@ function StepRow({
   scope: Record<string, unknown>;
   /** Whether the viewer sees the run whole (S-25); a manual step waits for its own person only. */
   full?: boolean;
+  /** Who the run's manual steps wait for, named to someone else (S-25). */
+  waitingFor?: string | null;
 }) {
   const status: StepStatus = record?.status ?? 'pending';
   const view = STEP_STATUS_VIEW[status];
@@ -129,7 +151,12 @@ function StepRow({
           <span className="sr-only">: {view.label}</span>
           <Badge className="ml-auto">Manual</Badge>
         </p>
-        <TemplatedMarkdown source={step.instructions} scope={scope} />
+        <TemplatedMarkdown source={step.instructions} scope={scope} hidden={!full} />
+        {!full && status === 'waiting' && (
+          <p className="text-sm font-medium text-warn">
+            Waiting for {waitingFor ?? 'the person who started it'} to work through this checklist.
+          </p>
+        )}
         {(step.checklist ?? []).length > 0 && (
           <div className="flex flex-col gap-1.5" role="group" aria-label={`${label} checklist`}>
             {(step.checklist ?? []).map((c, i) => (
@@ -140,7 +167,7 @@ function StepRow({
         {!runId && <p className="text-xs text-fg-3">Start the runbook to work through this checklist.</p>}
         {record?.error && (
           <p className="text-sm text-crit">
-            {full ? record.error.message : <span className="font-mono text-xs">{record.error.code}</span>}
+            {full ? record.error.message : <ErrorCode code={record.error.code} />}
           </p>
         )}
       </div>
@@ -164,7 +191,7 @@ function StepRow({
         </p>
         {record?.error && (
           <p className="text-sm text-crit">
-            {full ? record.error.message : <span className="font-mono text-xs">{record.error.code}</span>}
+            {full ? record.error.message : <ErrorCode code={record.error.code} />}
             {record.error.hint && <span className="block text-fg-2">{record.error.hint}</span>}
           </p>
         )}
@@ -422,7 +449,13 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
                 </span>
                 {section.title}
               </h2>
-              {section.body && <TemplatedMarkdown source={section.body} scope={scope} />}
+              {section.body && (
+                <TemplatedMarkdown
+                  source={section.body}
+                  scope={scope}
+                  hidden={detail?.run.access === 'metadata'}
+                />
+              )}
               {(section.steps ?? []).map((step) => (
                 <StepRow
                   key={step.id}
@@ -431,6 +464,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
                   runId={runId}
                   scope={scope}
                   full={detail?.run.access !== 'metadata'}
+                  waitingFor={detail?.run.initiator.upn ?? null}
                 />
               ))}
             </section>

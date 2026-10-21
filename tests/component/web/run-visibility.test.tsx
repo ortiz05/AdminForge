@@ -4,6 +4,8 @@ import {
   approvalRunDetail,
   failedDetail,
   IDS,
+  liveDetail,
+  offboardRunbook,
   runbookRunDetail,
 } from '../../support/web/fixtures/automation';
 import { FIXED_NOW } from '../../support/web/fixtures/session';
@@ -15,7 +17,7 @@ import type { MockHandler } from '../../support/web/mock-handler';
 // found. The page says who can see the rest instead of showing empty panels.
 
 const HIDDEN =
-  'The details are shown only to the person who started this run, its approvers and Portal.Admin.';
+  'The details are shown only to the person who started this run, its approvers and Portal Admins.';
 /** Someone other than the signed-in engineer (mock.engineer@example.com). */
 const OWNER = { initiatorUpn: 'r.patel@example.com', initiatorOid: IDS.rPatel };
 
@@ -63,7 +65,7 @@ describe('run page: someone else’s delegated run (S-25)', () => {
     });
     expect(await screen.findByRole('heading', { level: 1, name: 'Disable sign-in' })).toBeInTheDocument();
     const note = await screen.findByText('Only r.patel@example.com can see the inputs and results');
-    expect(note.closest('div')!.parentElement).toHaveTextContent(/approvers and Portal\.Admin/);
+    expect(note.closest('div')!.parentElement).toHaveTextContent(/approvers and Portal Admins/);
     // What ran, when, and how each step ended.
     const steps = await screen.findByRole('list', { name: 'Steps of Disable sign-in' });
     expect(within(steps).getByText('Set accountEnabled to false')).toBeInTheDocument();
@@ -77,6 +79,8 @@ describe('run page: someone else’s delegated run (S-25)', () => {
     expect(alert).toHaveTextContent('Authorization_RequestDenied');
     expect(within(alert).getByRole('button', { name: /Copy Microsoft request-id/ })).toBeInTheDocument();
     expect(alert).not.toHaveTextContent('Microsoft Graph refused this change');
+    // …and doesn't repeat the note in its own words.
+    expect(alert).not.toHaveTextContent(HIDDEN);
     // No empty Inputs, Result or Logs panels.
     expect(screen.queryByText('What it ran with')).not.toBeInTheDocument();
     expect(screen.queryByText('Step output')).not.toBeInTheDocument();
@@ -104,8 +108,25 @@ describe('run page: someone else’s delegated run (S-25)', () => {
     const card = await screen.findByRole('article', { name: /Approval: Disable sign-in/ });
     expect(within(card).queryByText(/contract ended early/)).not.toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: 'Approve and continue' })).not.toBeInTheDocument();
-    // Cancelling is for the person who started it (or a Portal.Admin), who see the run whole.
+    // Cancelling is for the person who started it (or a Portal Admin).
     expect(screen.queryByRole('button', { name: 'Cancel run' })).not.toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('a run paused for its initiator’s write access says who it waits for, without their buttons', async () => {
+    const detail = liveDetail('running') as unknown as Detail;
+    const parked = metadataOnly({
+      ...detail,
+      run: {
+        ...detail.run,
+        status: 'awaiting_arm',
+        waiting: { kind: 'arm', path: 'disable', stepId: 'disable', since: null },
+      },
+    } as Detail);
+    renderApp({ path: `/runs/${IDS.liveRun}`, handlers: [serve(IDS.liveRun, parked)] });
+    expect(await screen.findByText('Paused until r.patel@example.com arms write access')).toBeInTheDocument();
+    expect(screen.queryByText(/Paused: the next step changes your tenant/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume run' })).not.toBeInTheDocument();
   });
 
   it('a runbook run: the note, and no checklist to tick for someone it isn’t waiting for', async () => {
@@ -122,6 +143,33 @@ describe('run page: someone else’s delegated run (S-25)', () => {
     const rail = screen.getByRole('navigation', { name: 'Runbook progress' });
     expect(await within(rail).findByRole('link', { name: /Confirm the request.*done/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mark done' })).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Waiting for r.patel@example.com to work through this checklist.'),
+    ).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
+  });
+
+  it('runbook text shows “(hidden)” where it would show the run’s inputs', async () => {
+    const templated = {
+      ...offboardRunbook,
+      sections: offboardRunbook.sections.map((x, i) =>
+        i === 0 ? { ...x, body: 'Leaver ticket: **${ inputs.ticket }**.' } : x,
+      ),
+    };
+    const definition: MockHandler = ({ method, path }) =>
+      method === 'GET' && path === '/api/definitions/runbook/identity.offboard-leaver'
+        ? { body: templated }
+        : undefined;
+    const path = `/runbooks/identity.offboard-leaver?run=${IDS.runbookRun}`;
+    const restricted = metadataOnly(runbookRunDetail() as unknown as Detail);
+    const view = renderApp({ path, handlers: [definition, serve(IDS.runbookRun, restricted)] });
+    const hidden = await screen.findByText('(hidden)');
+    expect(hidden.closest('p')).toHaveTextContent('Leaver ticket: (hidden).');
+    expect(screen.queryByText(/HR-2231/)).not.toBeInTheDocument();
+    view.unmount();
+    vi.unstubAllGlobals();
+    // The initiator's own view fills it in.
+    renderApp({ path, handlers: [definition] });
+    expect(await screen.findByText('HR-2231')).toBeInTheDocument();
   });
 });

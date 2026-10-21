@@ -2,7 +2,15 @@ import { Link } from '@tanstack/react-router';
 import { flattenSteps, walkSteps, type Playbook, type Runbook, type Step } from '@adminforge/schemas';
 import { Badge, CodeBlock, formatRelative, formatTimestamp, timeline, useNow } from '@adminforge/ui';
 import { elapsed } from '../ops/ui';
-import { latestSteps, type RunDetail, type RunStep, type StepIndex, type StepStatus } from './contracts';
+import {
+  labelOf,
+  latestSteps,
+  type RunDetail,
+  type RunStep,
+  type StepIndex,
+  type StepStatus,
+} from './contracts';
+import { ErrorCode } from './RunDataHidden';
 import { Disclosure } from './Disclosure';
 import { maskSecrets } from './secrets';
 import { STEP_STATUS_VIEW, StatusGlyph } from './status';
@@ -77,7 +85,11 @@ export function buildTimeline(detail: RunDetail, def?: Playbook | Runbook | null
   }
   const index = stepIndex(def);
   const nameOf = (r: RunStep) =>
-    r.name ?? index.get(r.stepId)?.name ?? index.get(r.stepId)?.describe ?? r.describe ?? r.stepId;
+    r.name ??
+    index.get(r.stepId)?.name ??
+    index.get(r.stepId)?.describe ??
+    r.describe ??
+    labelOf(index, r.stepId);
   const fromRecord = (r: RunStep): TimelineEntry => ({
     key: r.path,
     label: r.path.includes('#compensate') ? `Roll back: ${nameOf(r)}` : nameOf(r),
@@ -122,7 +134,7 @@ const hasOutput = (v: unknown) =>
 
 /** What a failed step says: its message, or (metadata view, S-25) just its code — the message isn't sent. */
 const ErrorText = ({ error, restricted }: { error: NonNullable<RunStep['error']>; restricted: boolean }) =>
-  restricted ? <span className="font-mono text-xs">{error.code}</span> : <>{error.message}</>;
+  restricted ? <ErrorCode code={error.code} /> : <>{error.message}</>;
 
 function Children({ items, restricted }: { items: RunStep[]; restricted: boolean }) {
   const done = items.filter((c) =>

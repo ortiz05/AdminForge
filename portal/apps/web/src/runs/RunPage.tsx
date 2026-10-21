@@ -11,6 +11,7 @@ import {
   ConfirmDialog,
   formatRelative,
   formatTimestamp,
+  HourglassMediumIcon,
   IdChip,
   LockKeyOpenIcon,
   PageHeader,
@@ -102,8 +103,24 @@ function ParkedBanner({
         ? 'awaiting_reauth'
         : run.status;
 
-  // Write access and a fresh sign-in are the initiator's to give; someone who sees only the metadata can't resume it.
-  if (run.access !== 'full' && (status === 'awaiting_arm' || status === 'awaiting_reauth')) return null;
+  // Write access and a fresh sign-in are the initiator's to give: anyone else is told who the run waits for.
+  const mine = run.initiator.oid !== null && run.initiator.oid === me.user.oid;
+  if (!mine && (status === 'awaiting_arm' || status === 'awaiting_reauth')) {
+    const who = run.initiator.upn ?? 'the person who started it';
+    return (
+      <Callout
+        tone="neutral"
+        icon={<HourglassMediumIcon size={18} />}
+        title={
+          status === 'awaiting_arm'
+            ? `Paused until ${who} arms write access`
+            : `Paused until ${who} signs in again`
+        }
+      >
+        The next step runs with their access, so nothing else runs until they do.
+      </Callout>
+    );
+  }
   switch (status) {
     case 'awaiting_arm':
       return (
@@ -318,6 +335,7 @@ export function RunPage({ id }: { id: string }) {
 
   const terminal = isTerminal(run.status);
   const full = run.access === 'full';
+  const mine = run.initiator.oid !== null && run.initiator.oid === me.user.oid;
   const took = elapsed(run.startedAt ?? run.createdAt, run.endedAt, now);
   const done = entries.filter((e) =>
     ['succeeded', 'skipped', 'planned', 'failed', 'compensated'].includes(e.status),
@@ -364,8 +382,8 @@ export function RunPage({ id }: { id: string }) {
               <ArrowClockwiseIcon size={15} aria-hidden />
               Refresh
             </Button>
-            {/* Only its initiator or a Portal.Admin can cancel a run; both see it whole (S-25). */}
-            {!terminal && full && (
+            {/* Only its initiator or a Portal Admin can cancel a run. */}
+            {!terminal && (mine || me.roles.includes('Portal.Admin')) && (
               <ConfirmDialog
                 trigger={
                   <Button>
@@ -386,7 +404,6 @@ export function RunPage({ id }: { id: string }) {
       />
 
       <div className="flex flex-col gap-6">
-        {!full && <RunDataHidden initiator={run.initiator.upn} />}
         {secrets.map((s) => {
           const child = s.runId !== run.id ? detail.children.find((c) => c.id === s.runId) : undefined;
           return (
@@ -425,7 +442,8 @@ export function RunPage({ id }: { id: string }) {
                 : 'The run failed'
             }
           >
-            <p>{run.error.message}</p>
+            {/* Someone else's run (S-25): the message is withheld; the code and references stay. */}
+            {full && <p>{run.error.message}</p>}
             {run.error.hint && <p className="mt-1">{run.error.hint}</p>}
             <p className="mt-2 flex flex-wrap items-center gap-2">
               {run.error.code && (
@@ -444,6 +462,7 @@ export function RunPage({ id }: { id: string }) {
           </Callout>
         )}
         <HumanTaskPanels detail={detail} def={def} index={index} />
+        {!full && <RunDataHidden initiator={run.initiator.upn} />}
 
         <div className="grid items-start gap-6 xl:grid-cols-3">
           <div className="flex min-w-0 flex-col gap-6 xl:col-span-2">

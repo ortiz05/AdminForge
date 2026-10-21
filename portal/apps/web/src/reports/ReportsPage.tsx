@@ -352,6 +352,7 @@ export function ReportsPage({ search }: { search: ReportsSearch }) {
   return (
     <>
       <PageHeader
+        layout="list"
         eyebrow="Catalogue"
         title="Reports"
         description="Every report in AdminForge. Open one to see what it covers, run it now, or schedule it to be delivered as a file, by email or to Teams."

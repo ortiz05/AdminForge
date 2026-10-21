@@ -155,6 +155,7 @@ export function RunsPage({ search }: { search: RunsSearch }) {
   return (
     <>
       <PageHeader
+        layout="list"
         eyebrow="Automation"
         title="Runs"
         description="Every playbook and runbook run — live, waiting on someone, or finished. Open one for its steps, logs and outputs."

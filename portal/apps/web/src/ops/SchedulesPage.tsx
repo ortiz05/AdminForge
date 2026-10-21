@@ -270,6 +270,7 @@ export function SchedulesPage() {
   return (
     <>
       <PageHeader
+        layout="list"
         eyebrow="Automation"
         title="Schedules"
         description="Jobs that run on their own on this host: reports, synthetic tests, content health and approved playbooks."

@@ -350,7 +350,7 @@ export function AuditPage({ search }: { search: AuditSearch }) {
   if (q.isError && isForbidden(q.error))
     return (
       <>
-        <PageHeader eyebrow="Admin" title="Audit" />
+        <PageHeader layout="list" eyebrow="Admin" title="Audit" />
         <Panel>
           <EmptyState title="The audit log is for Portal Admins" icon={<SealCheckIcon size={20} />}>
             Your account ({me.user.upn}) doesn’t have the Portal Admin role. Ask a Portal Admin for an export
@@ -364,6 +364,7 @@ export function AuditPage({ search }: { search: AuditSearch }) {
   return (
     <>
       <PageHeader
+        layout="list"
         eyebrow="Admin"
         title="Audit"
         description="Every sign-in, arm and disarm, write request, run step, approval and setting change — append-only and hash-chained."

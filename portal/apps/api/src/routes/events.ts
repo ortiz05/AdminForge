@@ -22,7 +22,7 @@ const modeOf = (s: SessionRecord, now: Date) =>
  *   definitions.changed {all: true}                        content published / reloaded → refetch (no keys: bus.ts)
  *   session.mode        {mode: read|armed, armedUntil}       armed, disarmed, extended or expired
  *   session.ended       {}                                   signed out or expired (the stream then closes)
- *   run.updated         <runs worker payload>              relayed from NOTIFY run_events
+ *   run.updated         <run notification>                 relayed from the run repository (bus.ts `relayRun`)
  * Comment lines (`: ping`) every 25 s keep proxies from closing the stream.
  */
 export function eventRoutes(

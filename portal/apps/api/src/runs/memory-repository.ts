@@ -27,7 +27,10 @@ import {
 
 const clone = <T>(v: T): T => structuredClone(v);
 
-/** In-memory repository for tests and DB-less mock mode. `onNotify` stands in for NOTIFY run_events. */
+/**
+ * In-memory repository for tests and DB-less mock mode. `onNotify` delivers run notifications in this process, as the
+ * SQLite repository does (and, to other processes, through the `signals` table).
+ */
 export class MemoryRunRepository implements RunRepository {
   readonly runs = new Map<string, RunRow>();
   readonly steps = new Map<string, Map<number, StepRecord>>();

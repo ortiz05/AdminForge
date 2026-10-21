@@ -6,6 +6,10 @@ import { reportsApi } from '../../support/web/mock-reports';
 import { axeViolations } from '../axe';
 import { renderApp } from './automation/render';
 
+// What a sighted person reads: the form also announces its state in a screen-reader-only live region, 500 ms after
+// typing stops, and on a busy machine that announcement lands before these assertions run.
+const VISIBLE_ONLY = 'script, style, [role="status"].sr-only';
+
 // Schedule times in plain English: the schedule editor and the report schedule form take a sentence ("Type it in
 // English"), echo what they understood, name what they didn't, move a typed zone into the time zone field, offer every
 // IANA zone through a searchable field, and show the next runs the API worked out (POST /api/schedules/preview).
@@ -97,7 +101,9 @@ describe('schedule editor: English', () => {
       await userEvent.clear(box);
       expect(screen.getByText('Type when it should run, above.')).toBeInTheDocument();
       await userEvent.type(box, 'every tuesdy at 7');
-      expect(await screen.findAllByText(/Didn’t understand “tuesdy”/)).toHaveLength(1);
+      expect(await screen.findAllByText(/Didn’t understand “tuesdy”/, { ignore: VISIBLE_ONLY })).toHaveLength(
+        1,
+      );
       expect(box).toHaveAttribute('aria-invalid', 'true');
       expect(screen.getByText('Fix the sentence above to see when it runs.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Create YAML/ })).toHaveAttribute('aria-disabled', 'true');
@@ -245,7 +251,7 @@ describe('report schedule form: English', () => {
         ),
       ).toBeInTheDocument();
       expect(within(form).getByText('Fix the sentence above to see when it runs.')).toBeInTheDocument();
-      expect(within(form).queryByText(/^Understood/)).not.toBeInTheDocument();
+      expect(within(form).queryByText(/^Understood/, { ignore: VISIBLE_ONLY })).not.toBeInTheDocument();
       expect(await axeViolations()).toEqual([]);
     },
   );

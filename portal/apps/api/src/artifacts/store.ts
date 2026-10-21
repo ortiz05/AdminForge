@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { mkdir, open, readdir, realpath, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { pruneBudget, type PruneBudget } from '../housekeeping/budget';
@@ -141,7 +141,11 @@ export class ArtifactStore {
     let removed = 0;
     let folders: string[];
     try {
-      folders = (await readdir(this.dir)).filter((n) => SAFE_SEGMENT.test(n)).sort();
+      // Real folders and files only: a symbolic link could lead the sweep out of the directory.
+      folders = (await readdir(this.dir, { withFileTypes: true }))
+        .filter((e) => e.isDirectory() && SAFE_SEGMENT.test(e.name))
+        .map((e) => e.name)
+        .sort();
     } catch {
       return 0;
     }
@@ -152,7 +156,10 @@ export class ArtifactStore {
       if (from && folder < from.folder) continue;
       let names: string[];
       try {
-        names = (await readdir(path.join(this.dir, folder))).filter((n) => SAFE_FILE.test(n)).sort();
+        names = (await readdir(path.join(this.dir, folder), { withFileTypes: true }))
+          .filter((e) => e.isFile() && SAFE_FILE.test(e.name))
+          .map((e) => e.name)
+          .sort();
       } catch {
         continue;
       }
@@ -160,7 +167,7 @@ export class ArtifactStore {
         if (from && folder === from.folder && n <= from.file) continue;
         const abs = path.join(this.dir, folder, n);
         try {
-          if ((await stat(abs)).mtime.getTime() < cutoff.getTime()) {
+          if ((await lstat(abs)).mtime.getTime() < cutoff.getTime()) {
             await rm(abs, { force: true });
             removed++;
           }

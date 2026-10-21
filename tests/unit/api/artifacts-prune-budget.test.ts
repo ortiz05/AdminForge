@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ArtifactStore } from '@adminforge/api/src/artifacts/store';
@@ -78,5 +78,24 @@ describe('report file retention within the pass budget', () => {
     expect(files('reports.a')).toEqual(['2026-01-01T00-00-00Z.csv']);
     expect(await store.pruneOlderThan(CUTOFF)).toBe(1);
     expect(files('reports.a')).toEqual([]);
+  });
+
+  it('never follows a symbolic link out of the directory (a folder or a file)', async () => {
+    const outside = mkdtempSync(path.join(tmpdir(), 'af-artifacts-outside-'));
+    try {
+      const victim = path.join(outside, '2026-01-01T00-00-00Z.csv');
+      writeFileSync(victim, 'keep me');
+      const at = new Date(NOW - 400 * DAY);
+      utimesSync(victim, at, at);
+      symlinkSync(outside, path.join(dir, 'reports.linked'));
+      put('reports.a', 1, 200);
+      symlinkSync(victim, path.join(dir, 'reports.a', '2026-01-02T00-00-00Z.csv'));
+      const store = new ArtifactStore(dir);
+      expect(await store.pruneOlderThan(CUTOFF)).toBe(1);
+      expect(readdirSync(outside)).toEqual(['2026-01-01T00-00-00Z.csv']);
+      expect(files('reports.a')).toEqual(['2026-01-02T00-00-00Z.csv']);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

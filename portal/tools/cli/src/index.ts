@@ -241,11 +241,20 @@ program
 const audit = program.command('audit').description('The tamper-evident audit log');
 audit
   .command('verify')
-  .description('Re-walk the audit hash chain in the database at DATABASE_PATH (read-only)')
+  .description(
+    'Re-walk the audit hash chain in the database at DATABASE_PATH (read-only); a keyed chain needs AUDIT_CHAIN_KEY',
+  )
+  .option(
+    '--checkpoint <seq:hash>',
+    "also check a checkpoint from the api container's shipped log: the event at that seq must still have that hash",
+  )
   .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)', 'dev')
-  .action(async (opts: { env?: string }) => {
+  .action(async (opts: { env?: string; checkpoint?: string }) => {
     useEnv(opts.env);
-    if (!(await auditVerify(cliEnv('runtime'), (l) => console.log(l)))) process.exitCode = 1;
+    const ok = await auditVerify(cliEnv('runtime'), (l) => console.log(l), undefined, {
+      checkpoint: opts.checkpoint,
+    });
+    if (!ok) process.exitCode = 1;
   });
 
 const db = program.command('db').description('The database file (DATABASE_PATH)');

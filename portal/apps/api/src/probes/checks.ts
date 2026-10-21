@@ -848,17 +848,25 @@ async function auditChain(
     ? {
         metric: r.count,
         status: 'ok',
-        message:
+        message: `${
           r.scope === 'incremental'
             ? `${r.checked} new audit event${r.checked === 1 ? '' : 's'} verified since the last check (${r.count} in all); the whole chain is re-walked daily.`
-            : `${r.count} audit event${r.count === 1 ? '' : 's'} verified (the whole chain); every hash links to the one before it.`,
+            : `${r.count} audit event${r.count === 1 ? '' : 's'} verified (the whole chain); every hash links to the one before it.`
+        }${r.lostKey ? ` The events from seq ${r.lostKey.seq} keyed with a key declared lost (id ${r.lostKey.keyId}) are checked for links only.` : ''}`,
       }
-    : {
-        metric: r.brokenAt,
-        status: 'crit',
-        code: 'audit_chain_broken',
-        message: `The audit chain is broken at event #${r.brokenAt} (seq ${r.seq}): an event was changed or removed. Run \`adminforge audit verify\` and investigate database access.`,
-      };
+    : r.missingKey
+      ? {
+          metric: r.brokenAt,
+          status: 'crit',
+          code: 'audit_chain_key_missing',
+          message: `The audit chain can't be verified from event #${r.brokenAt} (seq ${r.seq}): it is keyed with a key that isn't configured (key id ${r.missingKey}). After a key rotation, put the earlier key in AUDIT_CHAIN_PREVIOUS_KEYS; if no such key was ever configured, the event was forged — investigate database access.`,
+        }
+      : {
+          metric: r.brokenAt,
+          status: 'crit',
+          code: 'audit_chain_broken',
+          message: `The audit chain is broken at event #${r.brokenAt} (seq ${r.seq}): an event was changed or removed. Run \`adminforge audit verify\` and investigate database access.`,
+        };
 }
 
 async function signInHealth(

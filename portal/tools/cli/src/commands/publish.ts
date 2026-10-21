@@ -39,6 +39,7 @@ import { checkContent } from '../content/check';
 import type { ContentCliContext } from '../content/context';
 import { runPlaybookTests } from '../content/playbook-tests';
 import { reviewState } from '../content/review-state';
+import { auditChainKeys } from './audit';
 
 /**
  * `adminforge publish [--dry-run] [--allow-unreviewed]` — runs the same checks as `adminforge validate` and
@@ -101,18 +102,23 @@ export async function publishContent(
   }));
   let target: { store: Pick<DbDefinitionStore, 'publish'>; close: () => Promise<void> };
   let audit = ctx.audit;
+  let assertCanRecord: (() => void) | undefined;
   if (ctx.openStore) target = await ctx.openStore();
   else {
+    const keys = auditChainKeys(ctx.env);
     const database = createDatabase(databasePath(ctx.env), { name: 'cli', pollSignals: false });
     migrateDatabase(database);
     target = {
       store: new DbDefinitionStore(database.db, ctx.now, database.signals),
       close: () => database.close(),
     };
-    const writer = new SqliteAuditWriter(database.db, ctx.now);
+    const writer = new SqliteAuditWriter(database.db, ctx.now, undefined, undefined, keys);
+    if (!audit) assertCanRecord = () => writer.assertCanAppend();
     audit ??= (input) => writer.append(input);
   }
   try {
+    // Nothing is published that can't be recorded (a keyed audit chain needs AUDIT_CHAIN_KEY).
+    if (!opts.dryRun) assertCanRecord?.();
     const result = await target.store.publish(entries, { dryRun: opts.dryRun });
     // Content changes what the portal can do: who published which versions goes into the audit chain.
     const created = result.items.filter((i) => i.action === 'create');

@@ -160,9 +160,9 @@ transactions are synchronous `BEGIN IMMEDIATE` (`writeTx`), so writers are seria
 The triggers stop the application rewriting history; they don't stop someone who can write the volume — SQLite has no
 roles, so the file is guarded instead (0600, local block storage only; `SECURITY.md`).
 
-Outside the database: the `adminforge-env` Secret (made from the env file: `TOKEN_CACHE_KEY`, the apps' credentials),
-report files (on the same volume) and the automation certificate. Back up the volume (snapshots, `adminforge db
-backup`) and the Secret separately (`portal/deploy/kubernetes/README.md` → Backups).
+Outside the database: the `adminforge-env` Secret (made from the env file: `TOKEN_CACHE_KEY`, `AUDIT_CHAIN_KEY`, the
+apps' credentials), report files (on the same volume) and the automation certificate. Back up the volume (snapshots,
+`adminforge db backup`) and the Secret separately (`portal/deploy/kubernetes/README.md` → Backups).
 
 ## Content flow
 

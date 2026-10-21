@@ -237,6 +237,8 @@ describe('GET /api/admin/settings', () => {
       contentSource: 'fs',
       writeSessionMaxMinutes: 60,
       writeStepUp: 'none',
+      // In-memory audit log without AUDIT_CHAIN_KEY (S-10): unkeyed.
+      auditChain: { keyed: false },
       apps: { read: false, write: false, automation: false },
       tenant: { name: 'Example Org', domain: 'example.com' },
     });

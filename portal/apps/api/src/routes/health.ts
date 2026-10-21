@@ -15,8 +15,23 @@ type Readiness =
 export function healthRoutes(app: FastifyInstance, ctx: AppContext) {
   app.get('/healthz', { config: { rateLimit: false } }, async () => ({ status: 'ok' }));
 
+  /**
+   * Whether the audit chain is keyed (S-10): `unkeyed` until AUDIT_CHAIN_KEY is set. Informational — the portal works
+   * either way, so it never makes the answer `degraded`.
+   */
+  const auditChain = (): Record<string, string> => {
+    try {
+      const state = ctx.audit.chainState?.();
+      return state ? { auditChain: state.keyed ? 'keyed' : 'unkeyed' } : {};
+    } catch {
+      // Deliberately tolerated: a database that can't be read is what `db` (above) reports; this detail is left out.
+      return {};
+    }
+  };
+
   const compute = async (): Promise<Readiness> => {
-    if (!ctx.database) return { ready: true, body: { status: 'ok', checks: { db: 'memory' } } };
+    if (!ctx.database)
+      return { ready: true, body: { status: 'ok', checks: { db: 'memory', ...auditChain() } } };
     try {
       await ctx.database.ping();
     } catch (err) {
@@ -32,7 +47,10 @@ export function healthRoutes(app: FastifyInstance, ctx: AppContext) {
     const degraded = !components || Object.values(components).some((s) => s !== 'ok');
     return {
       ready: true,
-      body: { status: degraded ? 'degraded' : 'ok', checks: { db: 'ok', ...(components ?? {}) } },
+      body: {
+        status: degraded ? 'degraded' : 'ok',
+        checks: { db: 'ok', ...(components ?? {}), ...auditChain() },
+      },
     };
   };
 

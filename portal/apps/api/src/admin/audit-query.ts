@@ -126,10 +126,14 @@ export async function queryAudit(
   return { items, ...(more ? { cursor: String(items.at(-1)!.seq) } : {}) };
 }
 
-/** GET /api/audit/verify: `checked` rows re-hashed; `brokenAt` = seq of the first row whose hash does not chain. */
+/**
+ * GET /api/audit/verify: `checked` rows re-hashed; `brokenAt` = seq of the first row whose hash does not chain — or,
+ * with `keyMissing`, the first row keyed with an audit chain key that isn't configured (S-10; never the key or its id).
+ */
 export async function verifyAudit(
   audit: AuditWriter,
-): Promise<{ ok: boolean; checked: number; brokenAt?: number }> {
+): Promise<{ ok: boolean; checked: number; brokenAt?: number; keyMissing?: boolean }> {
   const r = await audit.verify();
-  return r.ok ? { ok: true, checked: r.count } : { ok: false, checked: r.brokenAt, brokenAt: r.seq };
+  if (r.ok) return { ok: true, checked: r.count };
+  return { ok: false, checked: r.brokenAt, brokenAt: r.seq, ...(r.missingKey ? { keyMissing: true } : {}) };
 }

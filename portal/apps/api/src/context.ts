@@ -1,10 +1,13 @@
 import { randomBytes } from 'node:crypto';
+import { chainKeysFrom } from './audit/keys';
 import {
   MemoryAuditWriter,
   SqliteAuditWriter,
   stdoutCheckpoints,
+  VERIFY_BATCH,
   type AuditInput,
   type AuditWriter,
+  type ChainPrepared,
 } from './audit/writer';
 import { createMsalAuthClient, type MsalLogger } from './auth/msal-client';
 import { MemoryPreauthStore, SqlitePreauthStore, type PreauthStore } from './auth/preauth-store';
@@ -55,6 +58,11 @@ export type AppDeps = Partial<Omit<AppContext, 'config' | 'broker'>> & {
   runs?: RunsOptions;
   /** The process's name in signal origins and leases: api (default), scheduler, cli. */
   databaseName?: string;
+  /**
+   * Whether this process may append the audit chain's cut-over at start (S-10; default true). Only the API does: a
+   * scheduler one-shot started with another environment must not move the chain to its key.
+   */
+  prepareAuditChain?: boolean;
 };
 
 export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogger): AppContext {
@@ -78,9 +86,29 @@ export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogg
         ? createMsalAuthClient(config, tokenCache, log)
         : null;
   const broker = auth ? new TokenBroker(auth, config, now) : null;
-  // Each verification leaves its tail in the service log (journald): the audit chain's external anchor.
+  // Each verification leaves its tail in the api container's log: the audit chain's external anchor (shipped off the
+  // cluster).
   const checkpoints = log?.info ? (cp: object) => log.info!(cp, 'audit chain checkpoint') : stdoutCheckpoints;
-  const audit = deps.audit ?? (db ? new SqliteAuditWriter(db, now, checkpoints) : new MemoryAuditWriter(now));
+  // AUDIT_CHAIN_KEY (S-10): the chain is HMAC-keyed from a cut-over event on; the key stays in the Secret.
+  // The pin (AUDIT_CHAIN_KEYED_SINCE) anchors a chain that persists; an in-memory one starts empty every time.
+  const chainKeys = chainKeysFrom(db ? config : { ...config, AUDIT_CHAIN_KEYED_SINCE: undefined });
+  const audit =
+    deps.audit ??
+    (db
+      ? new SqliteAuditWriter(db, now, checkpoints, VERIFY_BATCH, chainKeys)
+      : new MemoryAuditWriter(now, chainKeys));
+  // Before anything else is audited: the cut-over to the configured key, or a refusal of a keyed chain without one.
+  if (!deps.audit && deps.prepareAuditChain !== false && audit.prepareChain) {
+    let prepared: ChainPrepared;
+    try {
+      prepared = audit.prepareChain();
+    } catch (err) {
+      // The process doesn't start: the connection it opened is closed with it.
+      if (deps.database === undefined) void database?.close();
+      throw err;
+    }
+    if (db) reportChain(prepared, log);
+  }
   const content = createContentServices(
     config,
     { database, broker, auth, audit, fetch: deps.fetch ?? fetch, now },
@@ -101,6 +129,43 @@ export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogg
     broker,
     fetch: deps.fetch ?? fetch,
   };
+}
+
+/**
+ * The audit chain's state at every start of a process with a database, in its log: a cut-over line (with the seq,
+ * hash and prev hash to check later with `adminforge audit verify --checkpoint`), the keyed state with the tail, or a
+ * warning that it is unkeyed. A new cut-over without a new key in the Secret, or a tail lower than the last one logged,
+ * means events were removed: compare with the shipped log. Key ids only, never a key. (An in-memory chain — mock mode —
+ * has nothing to anchor, so it logs nothing.)
+ */
+function reportChain({ state, cutOver, tail }: ChainPrepared, log: MsalLogger | undefined) {
+  const line = (level: 'info' | 'warn', obj: object, msg: string) => {
+    if (level === 'warn' && log) log.warn(obj, msg);
+    else if (log?.info) log.info(obj, msg);
+    else process.stdout.write(`${JSON.stringify({ level, msg, ...obj })}\n`);
+  };
+  if (cutOver) {
+    line('warn', cutOver, 'audit chain cut-over: events from this seq on are keyed with AUDIT_CHAIN_KEY');
+    if (cutOver.previousKeyLost)
+      line(
+        'warn',
+        { keyId: cutOver.previousKeyId },
+        'audit chain: the key the events before the cut-over were keyed with is declared lost (AUDIT_CHAIN_LOST_KEY_IDS); they can no longer be verified',
+      );
+  }
+  const at = tail ? { tailSeq: tail.seq, tailHash: tail.hash } : {};
+  if (state.keyed)
+    line(
+      'info',
+      { since: state.since, keyId: state.keyId, pinned: state.pinned, ...at },
+      'audit chain keyed',
+    );
+  else
+    line(
+      'warn',
+      at,
+      'audit chain unkeyed: AUDIT_CHAIN_KEY is not set, so whoever holds a copy of the database volume can rewrite the audit log and re-hash it',
+    );
 }
 
 /** Actor fields for an audit event from the request's session. */

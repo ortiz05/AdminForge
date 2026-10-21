@@ -4,6 +4,7 @@ import { requireRole, requireSession } from '../auth/guards';
 import { APPEARANCE_KEY, appearanceCss, Appearance, validateAppearance } from '../admin/appearance';
 import { queryAudit, verifyAudit } from '../admin/audit-query';
 import { writeAppConfigured } from '../config';
+import type { ChainState } from '../audit/writer';
 import { auditActor, type AppContext } from '../context';
 import { AppError } from '../errors';
 
@@ -13,6 +14,12 @@ const isoDate = (v: string | undefined, name: string) => {
   if (Number.isNaN(d.getTime())) throw new AppError(400, 'invalid_request', `${name} must be an ISO date.`);
   return d;
 };
+
+/** Settings' view of the audit chain: keyed or not, the first keyed event, and whether it is pinned (S-10). */
+const auditChainSetting = (
+  state: ChainState | undefined,
+): { keyed: boolean; since?: number; pinned?: boolean } =>
+  state?.keyed ? { keyed: true, since: state.since, pinned: state.pinned } : { keyed: false };
 
 async function currentAppearance(ctx: AppContext) {
   const rec = await ctx.settings.get<unknown>(APPEARANCE_KEY);
@@ -116,6 +123,8 @@ export function adminRoutes(api: FastifyInstance, ctx: AppContext) {
       writeSessionMaxMinutes: c.WRITE_SESSION_MAX_MINUTES,
       // Whether arming proves MFA (an authentication context) or only a fresh sign-in.
       writeStepUp: stepUpStrength(c),
+      // Whether the audit chain is keyed (AUDIT_CHAIN_KEY) and since which event — never the key or its id.
+      auditChain: auditChainSetting(ctx.audit.chainState?.()),
       apps: {
         read: Boolean(c.AF_READ_CLIENT_ID && c.AF_READ_CLIENT_SECRET),
         write: writeAppConfigured(c),

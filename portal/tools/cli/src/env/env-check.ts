@@ -13,6 +13,7 @@
  */
 import { parseEnv } from '@adminforge/config';
 import { identityEnvPrefix, KQL_SOURCES } from '@adminforge/schemas';
+import { chainKeyProblems } from '../content/api-bridge';
 import { isGuid } from '../provision/ids';
 import { originProblem } from '../provision/settings';
 
@@ -196,6 +197,24 @@ export function checkEnv(
   const unknown = Object.keys(fileValues).filter(
     (k) => !(k in example) && !identityKey(k) && !retired.has(k),
   );
+  // The audit chain key and its options, checked exactly as the API checks them at start (S-10, audit/keys.ts).
+  const valueOf = (k: string) => processEnv[k] || fileValues[k] || undefined;
+  const chainEnv = {
+    AUDIT_CHAIN_KEY: valueOf('AUDIT_CHAIN_KEY'),
+    AUDIT_CHAIN_PREVIOUS_KEYS: valueOf('AUDIT_CHAIN_PREVIOUS_KEYS'),
+    AUDIT_CHAIN_LOST_KEY_IDS: valueOf('AUDIT_CHAIN_LOST_KEY_IDS'),
+    AUDIT_CHAIN_KEYED_SINCE: valueOf('AUDIT_CHAIN_KEYED_SINCE'),
+  };
+  const chainProblems: Array<{ key: string; message: string }> = chainKeyProblems(chainEnv);
+  if (chainEnv.AUDIT_CHAIN_KEY && chainEnv.AUDIT_CHAIN_KEY === valueOf('TOKEN_CACHE_KEY'))
+    chainProblems.push({ key: 'AUDIT_CHAIN_KEY', message: 'must be a key of its own, not TOKEN_CACHE_KEY' });
+  for (const { key, message } of chainProblems) {
+    const r = byKey.get(key);
+    if (r && r.state === 'set') {
+      r.state = 'invalid';
+      r.problem ??= message;
+    }
+  }
   const ok = (k: string) => {
     const r = byKey.get(k);
     return !!r && (r.state === 'set' || r.state === 'default');
@@ -212,6 +231,11 @@ export function checkEnv(
   if (authMode !== 'mock' && !ok('WRITE_AUTH_CONTEXT') && 'WRITE_AUTH_CONTEXT' in example)
     warnings.push(
       'WRITE_AUTH_CONTEXT is not set: arming write access proves a fresh sign-in, not MFA. Set it to a Conditional Access authentication context that requires MFA (Entra ID P1).',
+    );
+  // Without the audit chain key, whoever can write the database volume can rewrite the audit log and re-hash it (S-10).
+  if (authMode !== 'mock' && !ok('AUDIT_CHAIN_KEY') && 'AUDIT_CHAIN_KEY' in example)
+    warnings.push(
+      "AUDIT_CHAIN_KEY is not set: the audit log is unkeyed, so whoever can write the database volume can rewrite it and re-hash it. Set it to 32 random bytes (openssl rand -base64 32) in the installation's Secret.",
     );
   return { keys, unknown, readiness, warnings };
 }

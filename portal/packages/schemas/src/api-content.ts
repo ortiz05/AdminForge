@@ -320,6 +320,8 @@ export const AuditVerifyResponse = z.object({
   ok: z.boolean(),
   checked: z.number(),
   brokenAt: z.number().optional(),
+  /** The events from `brokenAt` are keyed with an audit chain key that isn't configured: unverified, not proven changed. */
+  keyMissing: z.boolean().optional(),
 });
 export type AuditItem = z.infer<typeof AuditItem>;
 export type AuditPage = z.infer<typeof AuditPage>;
@@ -353,6 +355,16 @@ export const AdminSettingsResponse = z.object({
    * (WRITE_AUTH_CONTEXT, e.g. MFA); `freshSignIn` = a fresh interactive sign-in only (not necessarily MFA); `none` = mock.
    */
   writeStepUp: z.enum(['authContext', 'freshSignIn', 'none']),
+  /**
+   * Whether the audit log is HMAC-keyed (AUDIT_CHAIN_KEY), `since` which event (seq of the first keyed one) and whether
+   * that cut-over is `pinned` (AUDIT_CHAIN_KEYED_SINCE); `keyed: false` = SHA-256 only, which a copy of the database
+   * volume can rewrite and re-hash.
+   */
+  auditChain: z.object({
+    keyed: z.boolean(),
+    since: z.number().int().optional(),
+    pinned: z.boolean().optional(),
+  }),
   apps: z.object({ read: z.boolean(), write: z.boolean(), automation: z.boolean() }),
   tenant: z.object({ name: z.string(), domain: z.string() }),
 });

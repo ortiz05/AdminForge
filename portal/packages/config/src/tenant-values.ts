@@ -71,7 +71,7 @@ export const SKU_PART_NUMBER = /^[A-Z0-9_]{2,64}$/;
  * key in them.
  */
 export const TENANT_CONFIG_KEY =
-  /^(AF_|DATABASE_URL|POSTGRES_|TOKEN_CACHE_KEY|RUNNER_|ANTHROPIC_|PUBLIC_BASE_URL)/;
+  /^(AF_|DATABASE_URL|POSTGRES_|TOKEN_CACHE_KEY|AUDIT_CHAIN_|RUNNER_|ANTHROPIC_|PUBLIC_BASE_URL)/;
 
 /**
  * Values too generic to identify a tenant: booleans, numbers, a bare loopback origin (RUNNER_URL=http://127.0.0.1:3101,

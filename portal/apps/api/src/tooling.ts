@@ -57,8 +57,17 @@ export { DatasourceRunner, type UserScope } from './datasources/executor';
 // Which configuration keys content expressions can never read (CLI: validate).
 export { hiddenFromContent } from './datasources/env';
 
-// Audit writer (CLI: publish and audit).
-export { SqliteAuditWriter, type AuditInput } from './audit/writer';
+// Audit writer and the audit chain key (CLI: publish, audit, db).
+export {
+  AuditChainKeyError,
+  SqliteAuditWriter,
+  type AuditInput,
+  type ChainState,
+  type Checkpoint,
+  type CheckpointVerdict,
+  type VerifyResult,
+} from './audit/writer';
+export { chainKeysFrom, chainKeyProblems, type ChainKeyring } from './audit/keys';
 
 // Email and Teams delivery: the configuration keys delivery reads and the notifier (scheduler one-shots,
 // run-schedule-once, check-mail-sender).

@@ -43,7 +43,8 @@ describe('health, headers, errors', () => {
     const mem = await makeApp(mockConfig());
     expect((await mem.app.inject({ method: 'GET', url: '/readyz' })).json()).toEqual({
       status: 'ok',
-      checks: { db: 'memory' },
+      // The audit chain's state is informational (S-10): unkeyed never makes the answer degraded.
+      checks: { db: 'memory', auditChain: 'unkeyed' },
     });
     await mem.app.close();
 

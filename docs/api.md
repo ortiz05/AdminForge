@@ -1092,7 +1092,9 @@ Source: `src/routes/admin.ts`, `src/admin/*.ts`.
 #### `GET /api/audit/verify`
 
 - **Who:** `Portal.Admin`.
-- **Response:** `{ok, checked, brokenAt?}` — verifies the audit hash chain.
+- **Response:** `{ok, checked, brokenAt?, keyMissing?}` — verifies the audit hash chain (HMAC-keyed from its cut-over
+  when `AUDIT_CHAIN_KEY` is set). `keyMissing: true`: from `brokenAt` on the events are keyed with a key that isn't
+  configured, so they can't be checked (not proven changed); the key and its id are never in the answer.
 
 #### `GET /api/admin/appearance`
 
@@ -1119,9 +1121,11 @@ Source: `src/routes/admin.ts`, `src/admin/*.ts`.
 
 - **Who:** `Portal.Admin`.
 - **Response** (`AdminSettingsResponse`): `{authMode, dataMode, contentSource, writeSessionMaxMinutes, writeStepUp,
-apps, tenant}` — `contentSource` is `fs` or `db`; `writeStepUp` is how arming proves the person (`authContext` with
-  `WRITE_AUTH_CONTEXT`, `freshSignIn` without it, `none` in mock mode); `apps` is `{read, write, automation}` booleans
-  (configured or not — never ids or secrets); `tenant` is `{name, domain}`.
+auditChain, apps, tenant}` — `contentSource` is `fs` or `db`; `writeStepUp` is how arming proves the person
+  (`authContext` with `WRITE_AUTH_CONTEXT`, `freshSignIn` without it, `none` in mock mode); `auditChain` is
+  `{keyed, since?, pinned?}` — whether the audit log is HMAC-keyed with `AUDIT_CHAIN_KEY`, the seq of its first keyed
+  event and whether `AUDIT_CHAIN_KEYED_SINCE` pins it (never the key or its id); `apps` is `{read, write, automation}`
+  booleans (configured or not — never ids or secrets); `tenant` is `{name, domain}`.
 
 #### `GET /api/emergency`
 
@@ -1186,6 +1190,8 @@ Both are unauthenticated, not rate limited, `Cache-Control: no-store`.
   works, but runs or schedules are not being processed. If the heartbeats cannot be read, `degraded` with only
   `{db: "ok"}`.
 - 200 `{status: "ok", checks: {db: "memory"}}` without a database (in-memory dev).
+- Every answer also carries `checks.auditChain`: `keyed` when the audit log is HMAC-keyed (`AUDIT_CHAIN_KEY`),
+  `unkeyed` otherwise. Informational: it never makes the answer `degraded`.
 - 503 `not_ready` when the database can't be read.
 - Answered from a state cached for 5 s and limited to 60 requests per minute per client.
 

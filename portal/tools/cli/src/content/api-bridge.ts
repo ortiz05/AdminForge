@@ -6,7 +6,10 @@
  * them from this file, so a change to what the CLI needs from the API is made here.
  */
 export {
+  AuditChainKeyError,
   backupDatabase,
+  chainKeyProblems,
+  chainKeysFrom,
   createAutomationTokenProvider,
   createDatabase,
   createOutboundExecutor,
@@ -21,9 +24,14 @@ export {
   triggerStatement,
   type AuditInput,
   type AutomationTokenProvider,
+  type ChainKeyring,
+  type ChainState,
+  type Checkpoint,
+  type CheckpointVerdict,
   type Database,
   type PublishEntry,
   type PublishItem,
   type PublishResult,
   type UserScope,
+  type VerifyResult,
 } from '@adminforge/api/tooling';

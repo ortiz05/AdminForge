@@ -14,7 +14,9 @@
  * the process, a `database.backup` audit event (who, stdout or file — never the path —, plaintext, bytes, the copy's
  * audit tail) goes to the live database; if that can't be written, the copy doesn't leave. A file copy is written under
  * a hidden name next to its destination and takes the operator's name only once it is recorded. A failed copy is
- * recorded too. Copies from a read-only connection; writes the new file and that one event.
+ * recorded too. Copies from a read-only connection; writes the new file and that one event. A keyed audit chain
+ * (AUDIT_CHAIN_KEY, S-10) needs the key to check the copy and to record it: run it in the pod, where the key is. The key
+ * is never in the copy, so a keyed copy verifies only with it — keep the key as long as the backups.
  *
  * import-postgres: the one-time move from the Postgres releases. Reads the old database (its URL from DATABASE_URL in
  * the env file — never a command-line argument, so the password stays out of shell history and the process list; or
@@ -44,6 +46,7 @@ import {
 import { databasePath } from '../shared/database-path';
 import { ConfigError } from '../shared/errors';
 import type { Out } from '../shared/output';
+import { auditChainKeys } from './audit';
 
 /**
  * Who ran a `db` command, for the audit log: the account and machine (in the pod, the image's user and the pod's name;
@@ -81,6 +84,7 @@ export async function dbBackup(
     );
   const file = databasePath(env);
   if (!existsSync(file)) throw new ConfigError(`There is no database at ${file} (DATABASE_PATH).`);
+  const keys = auditChainKeys(env);
   const say = toStdout ? io.err : io.out;
   const final = toStdout ? null : databasePath({}, target);
   if (final && existsSync(final)) throw new ConfigError(`${final} already exists; choose a new file name.`);
@@ -95,7 +99,7 @@ export async function dbBackup(
   const record = async (result: 'success' | 'failure', details: Record<string, unknown>) => {
     const database = createDatabase(file, { ...cliDatabaseOptions(env), pollSignals: false });
     try {
-      await new SqliteAuditWriter(database.db, undefined, null).append({
+      await new SqliteAuditWriter(database.db, undefined, null, undefined, keys).append({
         ...cliActor(),
         mode: 'read',
         action: 'database.backup',
@@ -112,9 +116,11 @@ export async function dbBackup(
   /** The copy while it is not handed out: removed on any failure. */
   let unrecorded: string | undefined;
   try {
+    // No record, no copy: a keyed chain this command can't extend is refused before anything is copied.
+    new SqliteAuditWriter(source.db, undefined, null, undefined, keys).assertCanAppend();
     let result: Awaited<ReturnType<typeof backupDatabase>>;
     try {
-      result = await backupDatabase(source, dest);
+      result = await backupDatabase(source, dest, { keys });
     } catch (err) {
       // The attempt is history too. Its own failure must not hide why the copy failed, so it is only reported.
       await record('failure', where).catch(() =>
@@ -129,6 +135,7 @@ export async function dbBackup(
       bytes: result.bytes,
       auditEvents: result.audit.count,
       ...(result.audit.tail ? { tailSeq: result.audit.tail.seq } : {}),
+      auditKeyed: result.audit.keyed,
     });
     if (final) {
       if (existsSync(final)) throw new ConfigError(`${final} already exists; choose a new file name.`);
@@ -138,6 +145,10 @@ export async function dbBackup(
     say(
       `✓ Backup ${final ?? 'written to stdout'}: ${result.bytes} bytes, integrity ok, audit chain verified (${result.audit.count} event(s)${result.audit.tail ? `, tail seq ${result.audit.tail.seq}` : ''}); sessions, sign-ins and tokens left out; recorded in the audit log.`,
     );
+    if (result.audit.keyed)
+      say(
+        "  Its audit chain is keyed: the copy verifies only with AUDIT_CHAIN_KEY, which is not in it. Keep the key (the installation's Secret) for as long as the backups.",
+      );
     if (final)
       say('  It is not encrypted: encrypt it before it leaves this machine (docs/operations.md → Backups).');
   } finally {
@@ -159,10 +170,14 @@ export async function dbSignOutEveryone(
     );
   const file = databasePath(env);
   if (!existsSync(file)) throw new ConfigError(`There is no database at ${file} (DATABASE_PATH).`);
+  const keys = auditChainKeys(env);
   const database = createDatabase(file, { ...cliDatabaseOptions(env), pollSignals: false });
   try {
+    const audit = new SqliteAuditWriter(database.db, opts.now, null, undefined, keys);
+    // The change is made only when its audit event can be written (a keyed chain needs the key).
+    audit.assertCanAppend();
     const result = signOutEveryone(database.db, { scheduleGrants: opts.scheduleGrants });
-    await new SqliteAuditWriter(database.db, opts.now, null).append({
+    await audit.append({
       ...cliActor(),
       mode: 'write',
       action: 'sessions.signed_out_everyone',

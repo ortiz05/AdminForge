@@ -40,7 +40,7 @@ describe('/readyz', () => {
     expect(all.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200]);
     expect(all[0]!.json()).toEqual({
       status: 'degraded',
-      checks: { db: 'ok', worker: 'missing', scheduler: 'missing' },
+      checks: { db: 'ok', worker: 'missing', scheduler: 'missing', auditChain: 'unkeyed' },
     });
     await t.app.inject({ method: 'GET', url: '/readyz' });
     expect(f.pings()).toBe(1);

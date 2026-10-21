@@ -63,10 +63,15 @@ export function openOneShot(config: Config, opts: OneShotOptions): OneShot {
   const { log } = opts;
   // `info` as well as `warn`: the outbound executor logs one `microsoft call` line per call at info (D-03a), so a
   // one-shot's calls can be traced by Reference like the API's.
-  const ctx = createContext(config, opts.noStore ? { database: null } : {}, {
-    warn: (obj, msg) => log.warn(obj, msg),
-    info: (obj, msg) => log.info(obj, msg),
-  });
+  // The API alone moves the audit chain to a new key (S-10); a one-shot appends with the key of its newest part.
+  const ctx = createContext(
+    config,
+    { ...(opts.noStore ? { database: null } : {}), prepareAuditChain: false },
+    {
+      warn: (obj, msg) => log.warn(obj, msg),
+      info: (obj, msg) => log.info(obj, msg),
+    },
+  );
   // Scheduled playbook runs are queued for the run worker (the API process); a one-shot never executes them itself.
   const runs = createRunsModule(ctx, { inProcessWorker: false, log });
   const schedules = createSchedulesModule(ctx, runs, {

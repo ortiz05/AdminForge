@@ -198,7 +198,7 @@ Every configuration key is documented in `config/example.env`.
 - **Options:** `--env` (default `dev`), `--dry-run` (show what would be published and whether it would be refused,
   and list published versions stamped with an older content schema version and whether they still pass),
   `--allow-unreviewed`.
-- **Reads:** `DATABASE_PATH`, content, git state and origin (or `BUILD.json`).
+- **Reads:** `DATABASE_PATH`, `AUDIT_CHAIN_KEY` (a keyed audit log), content, git state and origin (or `BUILD.json`).
 - **Changes:** the definitions and audit tables of the file at `DATABASE_PATH` — on a workstation your dev database; a
   deployment's only from inside its pod (`kubectl -n adminforge exec deploy/adminforge -c api -- adminforge
 publish`). **Safe:** only with `--dry-run` (which may still migrate the schema). **Exit 1:** nothing could be
@@ -229,14 +229,18 @@ publish`). **Safe:** only with `--dry-run` (which may still migrate the schema).
 - **Changes:** local files under `tests/fixtures`; reads the tenant only. **Safe:** yes for the tenant — review the
   files before committing. **Exit 1:** a datasource failed or a file was refused.
 
-### `audit verify [--env <name>]`
+### `audit verify [--checkpoint <seq>:<hash>] [--env <name>]`
 
-- **Does:** re-walks the audit log's hash chain in the database file at `DATABASE_PATH`, opened read-only. For a
-  deployment, run it in the pod (`kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify`) and
-  compare its tail with the `audit chain checkpoint` lines in the logs you forward off the cluster. `--env` defaults
-  to `dev`.
-- **Reads:** `DATABASE_PATH`.
-- **Changes:** nothing. **Safe:** yes. **Exit 1:** the chain is broken.
+- **Does:** re-walks the audit log's hash chain in the database file at `DATABASE_PATH`, opened read-only, and says
+  whether it is keyed (HMAC with `AUDIT_CHAIN_KEY`, from which seq, by key id) or unkeyed. For a deployment, run it in
+  the pod (`kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify`), where the key is.
+  `--checkpoint` takes the seq and hash of an `audit chain checkpoint` (or `audit chain cut-over`) line from the logs
+  you forward off the cluster: the event at that seq must still have that hash, which shows a rewrite that was
+  re-hashed. `--env` defaults to `dev`.
+- **Reads:** `DATABASE_PATH`, `AUDIT_CHAIN_KEY`, `AUDIT_CHAIN_PREVIOUS_KEYS`, `AUDIT_CHAIN_KEYED_SINCE`.
+- **Changes:** nothing. **Safe:** yes. **Exit 1:** the chain is broken (or the cut-over `AUDIT_CHAIN_KEYED_SINCE`
+  pins is gone), a keyed part can't be verified (its key isn't configured and wasn't declared lost), or the checkpoint
+  doesn't hold.
 
 ### `db backup <-|file --plaintext> [--env <name>]`
 
@@ -250,11 +254,12 @@ publish`). **Safe:** only with `--dry-run` (which may still migrate the schema).
   history, so it is recorded in it: before the copy leaves, one `database.backup` audit event (account and machine,
   stdout or file — never the path —, plaintext, bytes, the copy's audit tail) goes to the live database; if it can't be
   written, nothing leaves (a file copy takes its name only then). A copy that fails its checks is recorded as a
-  failure.
-- **Reads:** `DATABASE_PATH`.
+  failure. A keyed audit log needs `AUDIT_CHAIN_KEY` to check the copy and record it (run it in the pod); the key is
+  never in the copy, so a keyed copy verifies only with it — keep the key as long as the backups.
+- **Reads:** `DATABASE_PATH`, `AUDIT_CHAIN_KEY`, `AUDIT_CHAIN_PREVIOUS_KEYS`.
 - **Changes:** writes the new file and that audit event. **Safe:** yes. **Exit 1:** a file without `--plaintext`, no
-  database, the copy failed its checks, or the audit event could not be written (the database must be writable for
-  you).
+  database, the copy failed its checks, the audit log is keyed and the key isn't set, or the audit event could not be
+  written (the database must be writable for you).
 
 ### `db sign-out-everyone --yes [--schedule-grants] [--env <name>]`
 
@@ -264,9 +269,10 @@ publish`). **Safe:** only with `--dry-run` (which may still migrate the schema).
   next request — no restart. `--schedule-grants` also deletes the sealed tokens of schedules that run with their
   creator's access (their creators consent again). In the pod:
   `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge db sign-out-everyone --yes`.
-- **Reads:** `DATABASE_PATH`.
+- **Reads:** `DATABASE_PATH`, `AUDIT_CHAIN_KEY`, `AUDIT_CHAIN_PREVIOUS_KEYS` (a keyed audit log: it changes nothing
+  it can't record).
 - **Changes:** the sessions, sign-in round trips and token cache tables; nothing in the tenant. **Safe:** no — it
-  signs everyone out (hence `--yes`). **Exit 1:** no `--yes`, or no database.
+  signs everyone out (hence `--yes`). **Exit 1:** no `--yes`, no database, or a keyed audit log without its key.
 
 ### `db import-postgres [--to <file>] [--from-env <KEY>] [--dry-run] [--env <name>]`
 

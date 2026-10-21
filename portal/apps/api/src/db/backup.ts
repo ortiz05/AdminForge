@@ -3,7 +3,8 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, renameSync, rmSy
 import path from 'node:path';
 import BetterSqlite3 from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { SqliteAuditWriter, type Checkpoint } from '../audit/writer';
+import type { ChainKeyring } from '../audit/keys';
+import { SqliteAuditWriter, VERIFY_BATCH, type Checkpoint } from '../audit/writer';
 import type { Database } from './client';
 import * as schema from './schema';
 
@@ -18,8 +19,11 @@ export const BACKUP_EMPTIED_TABLES = ['sessions', 'preauth', 'token_cache', 'lea
 export interface BackupResult {
   file: string;
   bytes: number;
-  /** The copy's audit chain, re-verified (the same walk as `adminforge audit verify`). */
-  audit: { count: number; tail?: Checkpoint };
+  /**
+   * The copy's audit chain, re-verified (the same walk as `adminforge audit verify`). `keyed`: it has HMAC-keyed events
+   * (AUDIT_CHAIN_KEY), so the copy verifies only with that key — which is in the Secret, never in the copy.
+   */
+  audit: { count: number; tail?: Checkpoint; keyed: boolean };
 }
 
 /**
@@ -27,9 +31,14 @@ export interface BackupResult {
  * of BACKUP_EMPTIED_TABLES, rebuilt by VACUUM so nothing deleted survives in free pages, as a single self-contained
  * file (rollback journal, not WAL), mode 0600. The copy is checked (integrity_check, the audit chain) before it is
  * renamed into place; a failed backup leaves nothing behind. Plaintext: encrypt it before it leaves the cluster
- * (docs/operations.md → Backups).
+ * (docs/operations.md → Backups). `keys` (AUDIT_CHAIN_KEY and the previous keys) check a keyed chain; without them a
+ * keyed copy can't be checked, so it is refused.
  */
-export async function backupDatabase(source: Pick<Database, 'sqlite'>, dest: string): Promise<BackupResult> {
+export async function backupDatabase(
+  source: Pick<Database, 'sqlite'>,
+  dest: string,
+  opts: { keys?: ChainKeyring | null } = {},
+): Promise<BackupResult> {
   const file = path.resolve(dest);
   if (existsSync(file)) throw new Error(`${file} already exists; choose a new file name.`);
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -52,16 +61,25 @@ export async function backupDatabase(source: Pick<Database, 'sqlite'>, dest: str
       const integrity = copy.pragma('integrity_check', { simple: true });
       if (integrity !== 'ok')
         throw new Error(`The copy failed SQLite's integrity check (${String(integrity)}).`);
-      const verified = await new SqliteAuditWriter(
+      const writer = new SqliteAuditWriter(
         drizzle({ client: copy, schema }),
         undefined,
         null,
-      ).verify();
+        VERIFY_BATCH,
+        opts.keys ?? null,
+      );
+      const verified = await writer.verify();
       if (!verified.ok)
         throw new Error(
-          `The audit chain is broken at event #${verified.brokenAt} (seq ${verified.seq}) — in the database itself, not only the copy. Run adminforge audit verify.`,
+          verified.missingKey
+            ? `The audit chain is keyed from event #${verified.brokenAt} (seq ${verified.seq}) with a key this command doesn't have (id ${verified.missingKey}), so the copy can't be checked. Run it where AUDIT_CHAIN_KEY is set: in the pod, kubectl exec deploy/adminforge -c api -- adminforge db backup -.`
+            : `The audit chain is broken at event #${verified.brokenAt} (seq ${verified.seq}) — in the database itself, not only the copy. Run adminforge audit verify.`,
         );
-      audit = { count: verified.count, ...(verified.tail ? { tail: verified.tail } : {}) };
+      audit = {
+        count: verified.count,
+        ...(verified.tail ? { tail: verified.tail } : {}),
+        keyed: writer.chainState().keyed,
+      };
     } finally {
       copy.close();
     }

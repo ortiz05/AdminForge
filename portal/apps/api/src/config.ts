@@ -10,6 +10,7 @@ import {
   type PortalRole,
 } from '@adminforge/schemas';
 import { z } from 'zod';
+import { chainKeyProblems } from './audit/keys';
 import { DEFAULT_TIMEOUT_OVERRIDES, TimeoutOverrideList } from './execution/timeouts';
 import { workspaceRoot } from './paths';
 import type { Keyring } from './security/envelope';
@@ -115,6 +116,17 @@ const Schema = z
      * new blobs are always sealed with TOKEN_CACHE_KEY (security/envelope.ts).
      */
     TOKEN_CACHE_PREVIOUS_KEYS: z.string().optional(),
+    /**
+     * The audit chain's key (S-10): 32 random bytes, base64, from the installation's Secret — never on the database
+     * volume. Set, the audit log is HMAC-SHA256 from a cut-over event on (audit/keys.ts); unset, it stays SHA-256.
+     */
+    AUDIT_CHAIN_KEY: z.string().optional(),
+    /** After a rotation of AUDIT_CHAIN_KEY: the earlier key(s), comma-separated, so the events they keyed still verify. */
+    AUDIT_CHAIN_PREVIOUS_KEYS: z.string().optional(),
+    /** Ids (as the audit log names them) of audit chain keys that are lost: the API may then start a new keyed part. */
+    AUDIT_CHAIN_LOST_KEY_IDS: z.string().optional(),
+    /** The seq of the first audit chain cut-over: it must still be there (verification, and the API's start). */
+    AUDIT_CHAIN_KEYED_SINCE: z.string().optional(),
     /** Retention (days): finished runs with their steps and events, schedule history, probe results, report files. */
     RETENTION_RUN_DAYS: z.coerce.number().int().min(7).max(3650).default(180),
     RETENTION_SCHEDULE_RUN_DAYS: z.coerce.number().int().min(7).max(3650).default(180),
@@ -320,6 +332,15 @@ const Schema = z
         message: 'TOKEN_CACHE_KEY must be 32 random bytes, base64 (openssl rand -base64 32)',
       });
     }
+    // A malformed audit chain key is refused, never ignored: the portal would otherwise run unkeyed unnoticed.
+    for (const { key, message } of chainKeyProblems(env))
+      ctx.addIssue({ code: 'custom', path: [key], message });
+    if (env.AUDIT_CHAIN_KEY && env.AUDIT_CHAIN_KEY === env.TOKEN_CACHE_KEY)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AUDIT_CHAIN_KEY'],
+        message: 'must be a key of its own, not the same as TOKEN_CACHE_KEY',
+      });
     if (Boolean(env.AF_WRITE_CLIENT_ID) !== Boolean(env.AF_WRITE_CLIENT_SECRET)) {
       ctx.addIssue({
         code: 'custom',

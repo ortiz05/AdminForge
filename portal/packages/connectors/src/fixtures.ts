@@ -47,6 +47,9 @@ export interface FixtureKey {
 
 const QUERY_MAX = 100;
 
+/** The error code of the 404 a request without a fixture answers (its message names the file to create). */
+export const FIXTURE_NOT_FOUND = 'FixtureNotFound';
+
 const sanitize = (s: string) => {
   const out = s.toLowerCase().replace(/[^a-z0-9._$@=+,-]/g, '_');
   return out === '.' || out === '..' ? '_' : out;
@@ -219,7 +222,7 @@ export function createFixtureFetch(dir: string, opts: FixtureFetchOptions = {}):
         status: 404,
         body: {
           error: {
-            code: 'FixtureNotFound',
+            code: FIXTURE_NOT_FOUND,
             message: `No fixture for ${method} ${url.href}. Create ${key.candidates.join(' or ')} in the fixtures directory.`,
           },
         },

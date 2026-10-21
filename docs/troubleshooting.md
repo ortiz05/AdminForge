@@ -278,7 +278,7 @@ note), `run_failed` (the scheduled playbook run failed; open the run) and
 | `definition_not_found`                                       | No published definition with that key (or version). Publish it, or fix the reference.                                                              |
 | `tenant_value_in_query`                                      | Query Studio refused to save a query containing tenant values. Use an env key (`${ env.AF_SUBSCRIPTION_ID }`) or a parameter quoted with `$kql()`. |
 | `invalid_scaffold`, `invalid_workspace`                      | The saved YAML wouldn't validate, or the workspace isn't a workspace (customer) id GUID.                                                           |
-| `fixture_missing`, `fixture_invalid`                         | Fixture data for `DATA_MODE=fixtures` is missing or not valid JSON: `pnpm adminforge fixtures record`, or fix the file under `tests/fixtures`.     |
+| `fixture_missing`, `fixture_not_found`, `fixture_invalid`    | Fixture data for `DATA_MODE=fixtures` is missing or not valid JSON (a probe can't evaluate): `pnpm adminforge fixtures record`, or fix the file.   |
 
 ### Saved views and appearance
 

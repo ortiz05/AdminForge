@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { createFixtureFetch } from '@adminforge/connectors';
+import { createFixtureFetch, FIXTURE_NOT_FOUND } from '@adminforge/connectors';
 import { AppError } from '../errors';
 import type { HostLookup } from './addresses';
 import type { DnsResolver, PeerCertificate, TlsInspector } from './checks';
@@ -45,7 +45,11 @@ const segment = (s: string) => {
   return !out || out === '.' || out === '..' ? '_' : out;
 };
 
-const missing = (what: string) =>
+/**
+ * A check without a fixture: the probe could not evaluate (never a crit), and the message names no file. Also used for
+ * Graph, ARM and KQL checks whose request the fixture fetch has no answer for (checks.ts `probeFailure`).
+ */
+export const fixtureNotFound = (what: string) =>
   new AppError(404, 'fixture_not_found', `The synthetic data has no answer for this ${what}.`, {
     hint: 'Add a fixture for it (Testing guide › Fixtures), or turn the probe off.',
   });
@@ -108,9 +112,9 @@ export function createFixtureNetwork(opts: {
         .clone()
         .json()
         .catch(() => null)) as { error?: { code?: string } } | null;
-      if (body?.error?.code === 'FixtureNotFound') {
+      if (body?.error?.code === FIXTURE_NOT_FOUND) {
         await res.body?.cancel().catch(() => undefined);
-        throw missing('HTTP check');
+        throw fixtureNotFound('HTTP check');
       }
     }
     return res;
@@ -128,7 +132,7 @@ export function createFixtureNetwork(opts: {
   const dns: DnsResolver = {
     async resolve(name, type) {
       const answer = await load('dns', name, `${type}.json`);
-      if (answer === undefined) throw missing('DNS check');
+      if (answer === undefined) throw fixtureNotFound('DNS check');
       if (Array.isArray(answer)) return answer.map(String);
       const code = (answer as { error?: unknown } | null)?.error;
       if (typeof code !== 'string' || !/^[A-Z]+$/.test(code)) throw invalid('DNS check');
@@ -149,7 +153,7 @@ export function createFixtureNetwork(opts: {
             issuer?: string;
           }
         | undefined;
-      if (f === undefined) throw missing('certificate check');
+      if (f === undefined) throw fixtureNotFound('certificate check');
       const days = (v: unknown, fallback: number) =>
         v === undefined ? fallback : typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN;
       const expires = days(f?.expiresInDays, 90);

@@ -3,7 +3,7 @@ import type { AuditWriter } from '../audit/writer';
 import { isIP } from 'node:net';
 import tls from 'node:tls';
 import type { Agent } from 'undici';
-import { ApiError, readBodyText } from '@adminforge/connectors';
+import { ApiError, FIXTURE_NOT_FOUND, readBodyText } from '@adminforge/connectors';
 import { ExpressionError, renderString, renderTemplate, type Scope } from '@adminforge/expressions';
 import {
   DEFAULT_LOG_ANALYTICS_WORKSPACE,
@@ -21,6 +21,7 @@ import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 import { newPinnedAgent, pinnedFetch, refusedAtConnect } from '../news/fetch-feed';
 import type { ProbeStatus } from '../schedules/types';
 import { defaultLookup, isNonPublicAddress, type HostLookup } from './addresses';
+import { fixtureNotFound } from './fixture-network';
 import { aggregate, detailRows, runKql } from './kql';
 import { fileRoundTrip, mailFlow, onlineMeeting } from './transactions';
 import { classify, describeThresholds, effectiveThresholds, worst, type Thresholds } from './thresholds';
@@ -30,7 +31,7 @@ import { classify, describeThresholds, effectiveThresholds, worst, type Threshol
  * that talks to Microsoft goes through the outbound executor as the automation identity (ADR-011) in read mode.
  * Statuses: ok / warn / crit from the primary metric and `thresholds` (or a failed expectation → crit, the target
  * being unreachable → crit); `error` = the probe could not evaluate (not configured, missing permission or licence,
- * bad content).
+ * bad content, no fixture for it with DATA_MODE=fixtures).
  */
 
 export interface ProbeOutcome {
@@ -41,7 +42,7 @@ export interface ProbeOutcome {
   unit: string;
   durationMs: number;
   message: string;
-  /** ok | threshold | expectation_failed | unreachable | timeout | not_found | forbidden | licence_required | not_configured | content_error | insufficient_data | error */
+  /** ok | threshold | expectation_failed | unreachable | timeout | not_found | forbidden | licence_required | not_configured | content_error | fixture_not_found | insufficient_data | error */
   code: string;
   /** `{ rows, columns?, totalRows? }` for drill-down, or null. */
   details: ProbeDetails | null;
@@ -376,9 +377,10 @@ async function service(
     status = res.status;
     data = res.data;
   } catch (err) {
-    // An expected non-2xx status (e.g. expect: { status: 404 }) is a pass, not an error.
+    // An expected non-2xx status (e.g. expect: { status: 404 }) is a pass, not an error — but a missing fixture
+    // (DATA_MODE=fixtures) is no answer at all.
     const wanted = c.expect?.status === undefined ? [] : [c.expect.status].flat();
-    if (err instanceof ApiError && wanted.includes(err.status))
+    if (err instanceof ApiError && wanted.includes(err.status) && err.code !== FIXTURE_NOT_FOUND)
       return expectResult(
         c.kind === 'graph' ? 'Microsoft Graph' : 'Azure Resource Manager',
         err.status,
@@ -999,6 +1001,10 @@ export function probeFailure(
   if (timedOut || name === 'TimeoutError')
     return { status: 'crit', code: 'timeout', message: `No result within ${timeoutMs} ms.` };
   if (err instanceof OutboundError || err instanceof ApiError) {
+    // DATA_MODE=fixtures with no fixture for the request: the probe could not evaluate, like the HTTP, DNS and TLS
+    // checks' missing fixtures — never a crit, and never the fixture fetch's message (it names the file to create).
+    if (err.code === FIXTURE_NOT_FOUND)
+      return probeFailure(fixtureNotFound('Microsoft request'), kind, timeoutMs, false);
     const hint = err instanceof OutboundError ? ` ${err.hint}` : '';
     if (err instanceof OutboundError && err.licence)
       return { status: 'error', code: 'licence_required', message: `${err.message}${hint}` };

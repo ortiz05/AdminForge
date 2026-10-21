@@ -28,6 +28,7 @@ const def = (id: string): Def => {
   return found.def;
 };
 
+const navigationSections: string[] = def('portal.navigation').sections.map((s: { key: string }) => s.key);
 const registry = registryFrom(new FsDefinitionSource(CONTENT), 'fs');
 const now = () => new Date(NOW);
 const makeRunner = (env: Record<string, string>) =>
@@ -526,9 +527,11 @@ describe('quick wins', () => {
       'ENTERPRISEPREMIUM',
       'SPE_E3',
     ]);
-    const monitoring = JSON.stringify(def('automation.monitoring'));
-    // The dashboard shows probes by service: the licence probe through its group's panel.
-    expect(monitoring).toContain(`"group":"${def('probes.licence-seats-nearly-full').group}"`);
-    expect(monitoring).not.toContain('probes.licence-seats-spe-');
+    // Synthetic monitoring and the navigation rail show probes by service: the licence probe through its group, a
+    // navigation section; the per-SKU probes it replaced are retired (as is the old Probe dashboard).
+    const group = def('probes.licence-seats-nearly-full').group;
+    expect(navigationSections).toContain(group);
+    for (const id of ['probes.licence-seats-spe-e3', 'probes.licence-seats-spe-e5', 'automation.monitoring'])
+      expect(def(id).status, id).toBe('retired');
   });
 });

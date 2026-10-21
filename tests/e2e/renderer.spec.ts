@@ -320,15 +320,18 @@ test.describe('dashboard', () => {
     });
   }
 
-  test('probe dashboard renders probe results and the markdown guidance', async ({ page }) => {
-    await open(page, '/p/automation.monitoring');
-    await expect(page.getByRole('heading', { level: 1, name: 'Synthetic monitoring' })).toBeVisible();
-    // One panel per service: AdminForge's own checks (its tokens among them) in the AdminForge panel.
-    const platform = page.getByRole('list', { name: 'AdminForge' });
-    await expect(platform).toContainText('Failing');
-    await platform.getByRole('button', { name: /Token acquisition · Exchange Online/ }).click();
-    await expect(platform.getByText(/AADSTS7000215/)).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Exchange Online' })).toContainText('Mail exchanger (MX)');
+  // The content "Probe dashboard" (automation.monitoring) is retired: /monitoring shows every probe by service. A
+  // workload overview still shows its own probes in a probeStatus panel.
+  test('a workload overview renders its probe results', async ({ page }) => {
+    await open(page, '/p/exchange.overview');
+    await expect(page.getByRole('heading', { level: 1, name: 'Exchange Online overview' })).toBeVisible();
+    const checks = page.getByRole('list', { name: 'Synthetic checks' });
+    await expect(checks).toContainText('Mail exchanger (MX)');
+    await expect(checks).toContainText('Degraded');
+    await checks.getByRole('button', { name: /DMARC record/ }).click();
+    await expect(checks.getByText(/p=none/)).toBeVisible();
+    // Only the section's own probes: AdminForge's token checks are on Synthetic monitoring.
+    await expect(checks).not.toContainText('Token acquisition');
   });
 });
 

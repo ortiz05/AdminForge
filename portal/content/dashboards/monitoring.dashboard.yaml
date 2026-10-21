@@ -1,12 +1,15 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: automation.monitoring
-version: 1.2.0
+version: 1.3.0
 title: Synthetic monitoring
 summary: >-
-  Latest result and recent trend of every synthetic probe the scheduler runs as the automation identity, one panel per
-  service — Microsoft 365 workloads (mail flow, SharePoint files, Teams meetings, front doors, incidents, sign-ins),
-  identity, Intune, Azure configuration checks and AdminForge itself (readiness, tokens, certificates, audit chain).
+  Retired — Synthetic monitoring (/monitoring) shows every probe by service, with its history, what it found and what
+  to do, and each navigation section shows its own checks' status. Latest result and recent trend of every synthetic
+  probe the scheduler runs as the automation identity, one panel per service.
+# Retired 2026-10-21 (platform review B-3): it duplicated /monitoring in Automation. To bring it back, set
+# `status: active`, bump `version` and give it a `nav` entry that doesn't repeat Synthetic monitoring.
+status: retired
 owner: portal-admins
 tags: [synthetic, monitoring, automation]
 nav: { section: automation, label: Probe dashboard, icon: heartbeat, order: 35 }

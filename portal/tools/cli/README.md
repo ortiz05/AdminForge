@@ -237,7 +237,8 @@ publish`). **Safe:** only with `--dry-run` (which may still migrate the schema).
   `--checkpoint` takes the seq and hash of an `audit chain checkpoint` (or `audit chain cut-over`) line from the logs
   you forward off the cluster: the event at that seq must still have that hash, which shows a rewrite that was
   re-hashed. `--env` defaults to `dev`.
-- **Reads:** `DATABASE_PATH`, `AUDIT_CHAIN_KEY`, `AUDIT_CHAIN_PREVIOUS_KEYS`, `AUDIT_CHAIN_KEYED_SINCE`.
+- **Reads:** `DATABASE_PATH`, `AUDIT_CHAIN_KEY`, `AUDIT_CHAIN_PREVIOUS_KEYS`, `AUDIT_CHAIN_LOST_KEY_IDS`,
+  `AUDIT_CHAIN_KEYED_SINCE`.
 - **Changes:** nothing. **Safe:** yes. **Exit 1:** the chain is broken (or the cut-over `AUDIT_CHAIN_KEYED_SINCE`
   pins is gone), a keyed part can't be verified (its key isn't configured and wasn't declared lost), or the checkpoint
   doesn't hold.
@@ -257,7 +258,8 @@ publish`). **Safe:** only with `--dry-run` (which may still migrate the schema).
   failure. A keyed audit log needs `AUDIT_CHAIN_KEY` to check the copy and record it (run it in the pod); the key is
   never in the copy, so a keyed copy verifies only with it — keep the key as long as the backups.
 - **Reads:** `DATABASE_PATH`, `AUDIT_CHAIN_KEY`, `AUDIT_CHAIN_PREVIOUS_KEYS`.
-- **Changes:** writes the new file and that audit event. **Safe:** yes. **Exit 1:** a file without `--plaintext`, no
+- **Changes:** writes the new file and that audit event. **Safe:** nothing in the tenant; in the database only that
+  audit event. **Exit 1:** a file without `--plaintext`, no
   database, the copy failed its checks, the audit log is keyed and the key isn't set, or the audit event could not be
   written (the database must be writable for you).
 
@@ -387,7 +389,8 @@ pnpm --filter @adminforge/tests exec vitest run --project unit unit/cli
   `env-command.test.ts` (temporary env files only — never `~/.config`), `redirect-origins.test.ts`,
   `audit-verify.test.ts`, `review-state-image.test.ts`, `describe-failure.test.ts`.
 - **Database commands** run against temporary SQLite files in the `api` project: `tests/api/db-backup-db.test.ts`
-  and `tests/api/import-postgres.test.ts` (the only test that needs a Postgres — `TEST_POSTGRES_URL`, or the
-  `DATABASE_URL` an older env file still has; it skips without one).
+  and `tests/api/import-postgres.test.ts` (the only test that needs a Postgres — a scratch database on the server
+  `TEST_POSTGRES_URL` names, never an env file's `DATABASE_URL`; it skips without one locally and fails under
+  `CI=true`).
 
 No test reaches the network, the tenant or a shared database; fixtures are synthetic (`example.com`, generated GUIDs).

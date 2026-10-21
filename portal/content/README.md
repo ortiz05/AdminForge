@@ -75,14 +75,15 @@ list` shows the result in its section column:
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | page, dashboard, playbook, runbook | `nav.section`; without one (entity pages, most playbooks) the id prefix                                  |
 | report                             | `area` (its Reports catalogue area), else the id prefix. Its `nav.section` is usually `reports`          |
-| probe                              | `group` (a section key, or `platform` for AdminForge itself): its service's "Service checks" list        |
+| probe                              | `group` (a section key, or `platform` for AdminForge itself): the section's row in the navigation        |
 | schedule                           | the section of the report, playbook or probe it runs (`job.ref`); a sweep or housekeeping job: id prefix |
 | connection, feed, navigation       | the id prefix                                                                                            |
 
 ## Probes and schedules
 
-- **Probes** are `probes.<name>`, flat in `probes/`; `group:` says which section's checks list them, and a tag
-  (`sweep-15m`, `sweep-1h`, `sweep-6h`, `config-check`, `synthetic-transaction`) says which sweep runs them.
+- **Probes** are `probes.<name>`, flat in `probes/`; `group:` says which section they belong to (its row in the
+  navigation shows their status), and a tag (`sweep-15m`, `sweep-1h`, `sweep-6h`, `config-check`,
+  `synthetic-transaction`) says which sweep runs them.
   `pnpm adminforge new probe probes/<name>` and Query Studio's _Save as probe_ write them there. (`new probe
   <section>/<name>` makes `probes/<section>/<name>.probe.yaml`, id `<section>.<name>`, which the rule also accepts.)
 - **Schedules** are filed by job, and the job group is the id prefix: `schedules/reports/` holds report deliveries

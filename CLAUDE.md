@@ -53,7 +53,8 @@ extension point — and the reviewer agents in `.claude/agents/`.
    compiled server-side (`${ advanced }`) — never read raw filter params.
 8. **Secrets** are never printed, logged, committed, or kept in run outputs (`secretOutputs` on playbook steps).
 9. **Licences are data, not blockers.** Declare `requires.licences`; the UI gates and explains. Record new findings in
-   `docs/licensing-review.md`; record gaps you can't fix now in `docs/backlog.md`.
+   `docs/licensing-review.md` (the map) and `docs/licensing/findings/`; record gaps you can't fix now in
+   `docs/backlog.md`.
 10. **Errors are written for the person in front of the browser:** `message` says what happened, `hint` what to do
     (which role or group, licence, or action); every error shows a reference. Never raw JSON, stack traces or header
     names in the UI (env keys and CLI commands only in setup errors meant for administrators, e.g.

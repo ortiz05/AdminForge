@@ -44,5 +44,5 @@ schedules have no creator to consent), and its jobs are reports (probes are allo
 portal probe form). "Disabled for good" means deleted, switched to another identity, or the creator lost access — a
 plain disable keeps the grant so turning it back on needs no new sign-in. Runner (PowerShell) jobs can't be scheduled
 yet: the runner can't sign in to Exchange, Teams or SharePoint as the automation identity, so a schedule's `script` job
-fails with `script_not_supported` (`schedules/jobs.ts`; docs/backlog.md › "PowerShell steps for scheduled (automation)
-runs"). `news` and `contentHealth` jobs always run as the automation identity.
+fails with `script_not_supported` (`schedules/jobs.ts`; `docs/backlog.md` (Engine and runs, F-18)). `news` and
+`contentHealth` jobs always run as the automation identity.

@@ -90,12 +90,13 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Deploy to Kubernetes           | Code owners only, when asked: `portal/deploy/kubernetes/README.md` › Upgrade (build and push images, apply, publish, `/readyz`)          |
 | Live smoke (validation tenant) | `pnpm exec tsx tests/live/scripts/verify-api-live.ts` · full sweep: `pnpm test:live` (see `tests/live/README.md`)                        |
 
-Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and never touches a
-database file; `PUBLIC_BASE_URL` has no default and must be set. Against the tenant, `init:local` writes
-`DATABASE_PATH=~/.local/share/adminforge/dev.db` into the env file; the API creates and migrates that file at start and
-is also the run worker and the scheduler — no Docker, nothing else to start. Never point `DATABASE_PATH` at a
-deployment's file. Provisioner and live-test credentials live in `<env>.admin.env` (CLI and live tests only). System
-Chrome is used by Playwright (no browser download).
+Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and fixtures and never
+touches a database file, a tenant or the internet; `PUBLIC_BASE_URL` has no default and must be set (on localhost).
+Against the tenant, `init:local` writes `DATABASE_PATH=~/.local/share/adminforge/dev.db` into the env file; the API
+creates and migrates that file at start and is also the run worker and the scheduler — no Docker, nothing else to
+start. Never point `DATABASE_PATH` at a deployment's file. Env files are mode 600: the API and the CLI refuse one other
+users can read. Provisioner and live-test credentials live in `<env>.admin.env`, read only by `provision …`,
+`validate --scopes` and the live tests. System Chrome is used by Playwright (no browser download).
 
 **Never build or install in a checkout a running service serves.** A service that runs from a checkout uses its
 `dist/` and `node_modules`, so `pnpm build`, `pnpm install` or `pnpm dev` there (anything that writes them) is a

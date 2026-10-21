@@ -92,12 +92,15 @@ bug — say so in the team channel rather than working around it.
 You'll only need this for live validation, and only once a code owner has given you access to the **validation
 tenant** (never production) and a portal role there ([`docs/access.md`](../access.md)).
 
-- Your tenant settings go in `~/.config/adminforge/dev.env` (mode 600). Provisioner and live-test credentials, if
-  you're given any, go in `dev.admin.env` and are used only by the CLI and the live tests. Nothing from either file is
-  ever pasted into chat, issues, commits, prompts or logs.
+- Your tenant settings go in `~/.config/adminforge/dev.env` (mode 600 — the API and the CLI refuse a file other users
+  can read, and print the `chmod`). Provisioner and live-test credentials, if you're given any, go in `dev.admin.env`
+  and are used only by `provision …`, `validate --scopes` and the live tests. Nothing from either file is ever pasted
+  into chat, issues, commits, prompts or logs.
 - `pnpm adminforge provision status` shows what is provisioned. Provisioning itself (`provision entra`) changes the
   tenant — only code owners run it.
 - Against a tenant, `pnpm dev` runs playbooks and schedules itself: the API is also the run worker and the scheduler.
+  It stays on your machine: with Entra sign-in the API refuses to start outside `NODE_ENV=production` when it listens
+  beyond loopback or `PUBLIC_BASE_URL` names another host.
 - **Never** point `DATABASE_PATH` at a deployment's database file; yours is `~/.local/share/adminforge/dev.db`.
 - Live writes happen only on the `AF-Test-*` objects that `pnpm adminforge provision test-identities` created, in the
   order dry run → run → compensating playbook → check `/audit`. See [`tests/live/README.md`](../../tests/live/README.md)
@@ -105,14 +108,15 @@ tenant** (never production) and a portal role there ([`docs/access.md`](../acces
 
 ## When setup fails
 
-| Symptom                                                | Fix                                                                                       |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `pnpm` says the version doesn't match `packageManager` | `corepack enable`, then open a new shell                                                  |
-| Commits go through without the guard tests running     | `git config core.hooksPath .githooks`                                                     |
-| Playwright can't find a browser                        | Install Google Chrome system-wide; Playwright doesn't download one here                   |
-| `env check` says DATABASE_PATH contains `CHANGE_ME`    | Run `pnpm --filter @adminforge/api init:local` again                                      |
-| `env check` names `DATABASE_URL` and other old keys    | Keys of the Postgres releases: nothing reads them — remove them                           |
-| `PUBLIC_BASE_URL` error on `pnpm dev`                  | It has no default — pass it as in the mock-mode one-liner                                 |
-| A blank page or "no synthetic data" in mock mode       | A fixture is missing; the API log names it ([Testing → fixtures](09-testing.md#fixtures)) |
-| No autocomplete in content YAML                        | `pnpm --filter @adminforge/schemas build` (the schemas are generated)                     |
-| Anything else                                          | [`docs/troubleshooting.md`](../troubleshooting.md), then the team channel                 |
+| Symptom                                                | Fix                                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `pnpm` says the version doesn't match `packageManager` | `corepack enable`, then open a new shell                                                               |
+| Commits go through without the guard tests running     | `git config core.hooksPath .githooks`                                                                  |
+| Playwright can't find a browser                        | Install Google Chrome system-wide; Playwright doesn't download one here                                |
+| `env check` says DATABASE_PATH contains `CHANGE_ME`    | Run `pnpm --filter @adminforge/api init:local` again                                                   |
+| `env check` names `DATABASE_URL` and other old keys    | Keys of the Postgres releases: nothing reads them — remove them                                        |
+| An env file "is open to other users of this machine"   | `chmod 600` the file the message names                                                                 |
+| `PUBLIC_BASE_URL` error on `pnpm dev`                  | It has no default — pass it as in the mock-mode one-liner; on your machine it is a `localhost` address |
+| A blank page or "no synthetic data" in mock mode       | A fixture is missing; the API log names it ([Testing → fixtures](09-testing.md#fixtures))              |
+| No autocomplete in content YAML                        | `pnpm --filter @adminforge/schemas build` (the schemas are generated)                                  |
+| Anything else                                          | [`docs/troubleshooting.md`](../troubleshooting.md), then the team channel                              |

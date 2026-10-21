@@ -18,8 +18,9 @@ you apply every day and when to ask for a review. The full model is [`SECURITY.m
 2. Secrets are never printed, logged, committed, put in run outputs (`secretOutputs`), or pasted into chat, issues or
    AI prompts. `pnpm adminforge env check` shows key **names and states** only — that's the only way to inspect a
    config file in front of others.
-3. Real configuration lives in `~/.config/adminforge/` (directory 700, files 600). Don't copy it elsewhere, don't put it
-   in the repository, don't share it. Provisioner credentials (`*.admin.env`) are for the CLI and live tests only.
+3. Real configuration lives in `~/.config/adminforge/` (directory 700, files 600 — the API and the CLI refuse an env
+   file other users can read). Don't copy it elsewhere, don't put it in the repository, don't share it. Provisioner
+   credentials (`*.admin.env`) are read only by `provision …`, `validate --scopes` and the live tests.
 4. When you report on live work (a PR, a chat, a bug), report **counts and statuses**, not names, UPNs or ids.
 
 **Identity and writes**

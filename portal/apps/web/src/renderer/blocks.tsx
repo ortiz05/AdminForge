@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import type { WidgetBlock } from '@adminforge/schemas';
 import { ErrorState, KpiStrip, Panel, ProvenanceFooter, cn, type Provenance } from '@adminforge/ui';
 import {
@@ -76,21 +76,34 @@ function ConfigProblem({
   block: Block;
   problems: Array<{ path: string; message: string }>;
 }) {
+  const authorId = useId();
+  // For the reader: what can't be shown and that the rest works. The details and the CLI command are for whoever
+  // maintains the page, labelled so (rule 10: no tooling advice addressed to the person in front of the browser).
   return (
     <Panel aria-label={`${block.title ?? block.widget} configuration`}>
       <ErrorState
         compact
         title={`The “${block.widget}” widget${block.title ? ` “${block.title}”` : ''} can’t be shown`}
-        message={
-          <ul className="list-disc pl-5 text-left">
-            {problems.slice(0, 5).map((p) => (
-              <li key={p.path + p.message}>
-                <code className="font-mono text-xs">{p.path}</code>: {p.message}
-              </li>
-            ))}
-          </ul>
+        message="Its definition has a mistake, so this part of the page is left out. The rest of the page works."
+        hint={
+          <div
+            role="group"
+            aria-labelledby={`${authorId}-label`}
+            className="flex flex-col gap-1.5 rounded-md border border-line bg-sunken px-3 py-2.5 text-left"
+          >
+            <p id={`${authorId}-label`} className="af-eyebrow">
+              For the content author
+            </p>
+            <ul className="list-disc pl-5">
+              {problems.slice(0, 5).map((p) => (
+                <li key={p.path + p.message}>
+                  <code className="font-mono text-xs">{p.path}</code>: {p.message}
+                </li>
+              ))}
+            </ul>
+            <p>Fix the page definition, then run pnpm adminforge validate.</p>
+          </div>
         }
-        hint="Fix the page definition, then run pnpm adminforge validate."
         code="invalid_widget_config"
       />
     </Panel>

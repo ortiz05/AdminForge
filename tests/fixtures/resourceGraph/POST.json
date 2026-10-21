@@ -7793,7 +7793,7 @@
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
               "location": "westeurope",
               "kind": "StorageV2",
-              "allowBlobPublicAccess": true
+              "allowBlobPublicAccess": 1
             },
             {
               "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Storage/storageAccounts/stexampledev",
@@ -7822,7 +7822,7 @@
               "resourceGroup": "rg-example-dev",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
               "location": "westeurope",
-              "httpsOnly": true,
+              "httpsOnly": 1,
               "minimumTlsVersion": "TLS1_0"
             }
           ]
@@ -7843,8 +7843,8 @@
               "resourceGroup": "rg-example-functions",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
               "location": "westeurope",
-              "softDelete": true,
-              "purgeProtection": false
+              "softDelete": 1,
+              "purgeProtection": 0
             },
             {
               "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-web/providers/Microsoft.KeyVault/vaults/kv-example-certs",
@@ -7852,7 +7852,7 @@
               "resourceGroup": "rg-example-web",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
               "location": "westeurope",
-              "softDelete": true,
+              "softDelete": 1,
               "purgeProtection": null
             }
           ]

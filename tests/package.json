@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run --project unit --project component --project api --project content --project guards && vitest run --project scale",
+    "test": "vitest run --project unit --project component --project api --project content --project guards --project pwsh && vitest run --project scale",
+    "test:pwsh": "vitest run --project pwsh",
     "watch": "vitest",
     "e2e": "playwright test -c e2e/playwright.config.ts",
     "e2e:prod": "playwright test -c e2e/playwright.prod.config.ts",

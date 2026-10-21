@@ -6,24 +6,37 @@ imports a test library. Test files mirror what they test (`unit/<package>/…`, 
 
 ## Projects
 
-The vitest projects are defined in `vitest.config.ts`; each one maps to a folder.
+The vitest projects are defined in `vitest.config.ts`. Most map to a folder; two are chosen by the file name's
+suffix, in any of `unit/`, `content/` and `api/` (which leave those files out):
 
-| Project     | Folder                        | Environment                                    | What it covers                                                                                                                                |
-| ----------- | ----------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unit`      | `unit/<package>/`             | node                                           | Pure logic per package: api, cli, connectors, design-tokens, engine, expressions, runner, scheduler, …                                        |
-| `component` | `component/<area>/`           | jsdom (`component/setup.ts`)                   | React components: `ui` primitives, widgets, web pages, Query Studio; `axe` checks via `component/axe.ts`                                      |
-| `api`       | `api/`                        | node (`api/setup.ts`), files run one at a time | BFF routes through Fastify `inject` with a mock session; DB-backed suites (see below)                                                         |
-| `content`   | `content/`                    | node                                           | Every definition in `portal/content` validates; widget configs; focused tests for content-specific logic                                      |
-| `guards`    | `guards/`                     | node                                           | No secrets or tenant-specific values in committable files; design tokens only in UI code; SQLite-only runtime; Kubernetes manifests           |
-| `live`      | `live/**/*.test.ts` (none)    | node                                           | Reserved; the live suite is Playwright (`live/README.md`)                                                                                     |
-| `scale`     | `SCALE` in `vitest.config.ts` | node                                           | Transforms and native helpers at enterprise size under the 250 ms wall-clock budget — run by `pnpm test` after the others, one file at a time |
-| `perf`      | `perf/**/*.test.ts`           | node                                           | Enterprise-scale budgets against a synthetic 100k-user tenant — `pnpm test:perf` only ([`perf/README.md`](perf/README.md))                    |
+- **`*.scale.test.ts`** — a test that holds a transform or native helper to the API's 250 ms wall-clock budget at
+  enterprise size (`content/content-at-scale-<topic>.scale.test.ts`, `unit/expressions/order-by.scale.test.ts`). It
+  runs in `scale`, after the others and one file at a time, so another file's load can't fail a budget.
+- **`*.pwsh.test.ts`** — a test that starts real PowerShell: the runner's workers (`unit/runner/integration.pwsh.test.ts`)
+  or the Pester suite (`unit/runner/pester.pwsh.test.ts`). It runs in `pwsh` and skips where `pwsh` (or, for some
+  cases, the pinned modules) isn't installed, so `--project unit` needs nothing but Node.
+
+`guards/test-file-names.test.ts` keeps the names honest (a `content-at-scale` test or one that starts `pwsh` without
+its suffix fails).
+
+| Project     | Files                      | Environment                                    | What it covers                                                                                                                        |
+| ----------- | -------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `unit`      | `unit/<package>/`          | node                                           | Pure logic per package: api, cli, connectors, design-tokens, engine, expressions, runner, scheduler, …                                |
+| `component` | `component/<area>/`        | jsdom (`component/setup.ts`)                   | React components: `ui` primitives, widgets, web pages, Query Studio; `axe` checks via `component/axe.ts`                              |
+| `api`       | `api/`                     | node (`api/setup.ts`), files run one at a time | BFF routes through Fastify `inject` with a mock session; DB-backed suites (see below)                                                 |
+| `content`   | `content/`                 | node                                           | Every definition in `portal/content` validates; widget configs; focused tests for content-specific logic                              |
+| `guards`    | `guards/`                  | node                                           | No secrets or tenant data in committable files; design tokens only; SQLite-only runtime; no deep imports; Kubernetes manifests; names |
+| `pwsh`      | `*.pwsh.test.ts`           | node                                           | Real PowerShell: runner workers end to end, worker inputs and settings, the Pester suite — part of `pnpm test`, or `test:pwsh` alone  |
+| `live`      | `live/**/*.test.ts` (none) | node                                           | Reserved; the live suite is Playwright (`live/README.md`)                                                                             |
+| `scale`     | `*.scale.test.ts`          | node, one file at a time                       | Transforms and native helpers at enterprise size under the 250 ms wall-clock budget — run by `pnpm test` after the others             |
+| `perf`      | `perf/**/*.test.ts`        | node                                           | Enterprise-scale budgets against a synthetic 100k-user tenant — `pnpm test:perf` only ([`perf/README.md`](perf/README.md))            |
 
 ```bash
-pnpm test                       # unit, component, api, content, guards; then scale (one file at a time)
+pnpm test                       # unit, component, api, content, guards, pwsh; then scale (one file at a time)
 pnpm guard                      # guards only (also the pre-commit hook)
+pnpm --filter @adminforge/tests test:pwsh   # the pwsh project alone (runner workers, Pester)
 pnpm test:perf                  # enterprise-scale datasource budgets (not part of pnpm test; ~4 min)
-pnpm --filter @adminforge/tests exec vitest run --project <unit|component|api|content|guards|scale> [path filter]
+pnpm --filter @adminforge/tests exec vitest run --project <unit|component|api|content|guards|pwsh|scale> [path filter]
 pnpm --filter @adminforge/tests exec vitest --project component   # watch mode
 ```
 
@@ -130,7 +143,8 @@ transaction functions — the one-time importer excepted); `guards/kubernetes-ma
 shape (one replica, `Recreate`, a ReadWriteOncePod volume, non-root, read-only root file systems, the runner on the
 pod's loopback, nothing installation-specific in the base); `guards/no-deep-imports.test.ts` keeps runtime code in
 `portal/` on other workspace packages' declared entry points (their `exports`: `@adminforge/api/tooling`, never
-`@adminforge/<pkg>/src/…` or a relative path into another package — tests may import internals). They run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` sets `core.hooksPath`, or run
+`@adminforge/<pkg>/src/…` or a relative path into another package — tests may import internals);
+`guards/test-file-names.test.ts` keeps the `*.scale` and `*.pwsh` suffixes honest. They run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` sets `core.hooksPath`, or run
 `git config core.hooksPath .githooks`). Never bypass them with `--no-verify`.
 
 ## Fixtures
@@ -180,6 +194,9 @@ runner's module directory if it is missing:
 ```bash
 pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester/run.ps1
 ```
+
+`pnpm test` runs the same suite through `unit/runner/pester.pwsh.test.ts` (the `pwsh` project) wherever PowerShell is
+installed; `pnpm --filter @adminforge/tests test:pwsh` runs only that project.
 
 ## Content definitions
 

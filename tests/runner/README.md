@@ -1,8 +1,8 @@
 # PowerShell runner tests (Pester)
 
 The PowerShell side of the runner (`portal/apps/runner`): the `AdminForge.Runner` module, the worker, the module
-tooling, and every content script in `portal/content/scripts`. The Node side is in `tests/unit/runner/` (which also runs
-this suite through `pester.test.ts`).
+tooling, and every content script in `portal/content/scripts`. The Node side is in `tests/unit/runner/` (the `pwsh` vitest
+project also runs this suite, through `pester.pwsh.test.ts`).
 
 ```sh
 pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester/run.ps1            # all, detailed

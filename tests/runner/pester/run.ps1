@@ -8,7 +8,7 @@
     then puts that directory first on PSModulePath the way the workers do (so the tests see the same module
     versions as jobs) and runs every *.Tests.ps1 here. The helpers come from
     portal/apps/runner/scripts/RunnerModules.ps1.
-    Prints "PESTER total=… passed=… failed=… skipped=…" (tests/unit/runner/pester.test.ts reads it).
+    Prints "PESTER total=… passed=… failed=… skipped=…" (tests/unit/runner/pester.pwsh.test.ts reads it).
     Exit code = number of failed tests.
 
 .EXAMPLE

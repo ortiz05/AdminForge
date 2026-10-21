@@ -2,21 +2,18 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 /**
- * Tests that hold transforms and native helpers to the API's 250 ms wall-clock budget at enterprise size. They run in
- * the `scale` project — after the others and one file at a time (`pnpm test`) — so another project's files can't take
- * the CPU and fail a budget.
+ * `*.scale.test.ts` (any folder): tests that hold transforms and native helpers to the API's 250 ms wall-clock budget
+ * at enterprise size. They run in the `scale` project — after the others and one file at a time (`pnpm test`) — so
+ * another project's files can't take the CPU and fail a budget.
  */
-const SCALE = [
-  'content/content-at-scale*.test.ts',
-  'unit/expressions/group-by.test.ts',
-  'unit/expressions/order-by.test.ts',
-  'unit/expressions/rows-helpers.test.ts',
-  'unit/expressions/rows-join-helpers.test.ts',
-  'unit/expressions/limits.test.ts',
-  'unit/expressions/native-paths-hardening.test.ts',
-  'unit/expressions/table-rows.test.ts',
-  'unit/api/datasource-scale.test.ts',
-];
+const SCALE = '**/*.scale.test.ts';
+
+/**
+ * `*.pwsh.test.ts` (any folder): tests that start real PowerShell (`pwsh`: the runner's workers, Pester). They run in
+ * the `pwsh` project (`pnpm test` includes it; alone: `pnpm --filter @adminforge/tests test:pwsh`) and skip where pwsh
+ * isn't installed, so `--project unit` stays fast and needs nothing but Node.
+ */
+const PWSH = '**/*.pwsh.test.ts';
 
 /**
  * Per-test limit for the projects that run many files in parallel (unit, component, content). Vitest's 5 s default
@@ -36,7 +33,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['unit/**/*.test.ts'],
-          exclude: SCALE,
+          exclude: [SCALE, PWSH],
           environment: 'node',
           testTimeout: PARALLEL_TEST_TIMEOUT,
         },
@@ -56,6 +53,7 @@ export default defineConfig({
         test: {
           name: 'api',
           include: ['api/**/*.test.ts'],
+          exclude: [SCALE, PWSH],
           environment: 'node',
           setupFiles: ['./api/setup.ts'],
           fileParallelism: false,
@@ -66,7 +64,7 @@ export default defineConfig({
         test: {
           name: 'content',
           include: ['content/**/*.test.ts'],
-          exclude: SCALE,
+          exclude: [SCALE, PWSH],
           environment: 'node',
           testTimeout: PARALLEL_TEST_TIMEOUT,
         },
@@ -75,12 +73,25 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'scale',
-          include: SCALE,
+          include: [SCALE],
           environment: 'node',
           fileParallelism: false,
         },
       },
-      { extends: true, test: { name: 'guards', include: ['guards/**/*.test.ts'], environment: 'node' } },
+      {
+        extends: true,
+        // Each test starts pwsh, which takes seconds on a busy machine; the long ones (Pester) set their own limit.
+        test: { name: 'pwsh', include: [PWSH], environment: 'node', testTimeout: 60_000 },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'guards',
+          include: ['guards/**/*.test.ts'],
+          exclude: [SCALE, PWSH],
+          environment: 'node',
+        },
+      },
       {
         extends: true,
         test: { name: 'live', include: ['live/**/*.test.ts'], environment: 'node', testTimeout: 60_000 },

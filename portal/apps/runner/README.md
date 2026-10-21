@@ -90,7 +90,8 @@ Bump a pin deliberately, re-run the install and the tests below, and check `GET 
 
 ```sh
 pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester/run.ps1   # Pester: module, worker, scripts
-pnpm --filter @adminforge/tests exec vitest run --project unit unit/runner                 # Node host (+ runs Pester)
+pnpm --filter @adminforge/tests exec vitest run --project unit unit/runner                 # Node host
+pnpm --filter @adminforge/tests test:pwsh                                                  # real pwsh workers + Pester
 pnpm exec tsx tests/live/scripts/check-page-datasources.ts m365.mailboxes                   # a real read-only job (live)
 ```
 
@@ -98,8 +99,8 @@ pnpm exec tsx tests/live/scripts/check-page-datasources.ts m365.mailboxes       
   the read-only policy, module layout, `install-modules.ps1` offline, and every content script with stub cmdlets.
   `run.ps1` installs the pinned Pester when missing.
 - `tests/unit/runner/` — signing, sealed tokens, replay, protocol, redaction, pool, server, health probe; a fake worker
-  (`fixtures/fake-worker.mjs`) stands in for pwsh, and `integration.test.ts` runs the real worker when pwsh and the
-  modules are installed.
+  (`fixtures/fake-worker.mjs`) stands in for pwsh; the `*.pwsh.test.ts` files (the `pwsh` project) run the real
+  worker (`integration.pwsh.test.ts`) and the Pester suite when pwsh, and for some cases the modules, are installed.
 - Live: the commands in `tests/live/README.md` against the validation tenant.
 
 ## Layout

@@ -163,9 +163,10 @@ describe('emergency stop reaches the executor', () => {
         headers,
         payload: { target: 'writes', paused: false },
       });
+      // Resumed: the write reaches the connector again (mock mode's fixtures accept an unfixtured write).
       await expect(
         t.app.ctx.outbound.execute({ kind: 'automation', mode: 'write' }, write),
-      ).rejects.not.toMatchObject({ code: 'writes_paused' });
+      ).resolves.toMatchObject({ status: 204 });
     } finally {
       await t.app.close();
     }

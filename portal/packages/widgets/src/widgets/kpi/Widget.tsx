@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Kpi, cn, type KpiDelta } from '@adminforge/ui';
+import { Kpi, cn, safeUrl, type KpiDelta } from '@adminforge/ui';
 import { useTemplate } from '../../lib/expr';
 import { formatValue } from '../../lib/format';
 import { getPath, isRecord } from '../../lib/path';
@@ -92,7 +92,8 @@ export function KpiWidget({ config, data, runtime, variant = 'tile' }: WidgetPro
       )}
     />
   );
-  const target = typeof href.value === 'string' && href.value ? href.value : undefined;
+  // Templated from data: only a safe target makes the figure a link (never javascript:, //host or /\host).
+  const target = typeof href.value === 'string' ? safeUrl(href.value)?.href : undefined;
   if (!target) return kpi;
   const L = runtime.Link;
   return (

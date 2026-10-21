@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CaretRightIcon, Skeleton, StatusPill, useNow } from '@adminforge/ui';
+import { CaretRightIcon, Skeleton, StatusPill, safeUrl, useNow } from '@adminforge/ui';
 import { hasExpression, useRowTemplates } from '../../lib/expr';
 import { formatValue } from '../../lib/format';
 import { asRows, getPath } from '../../lib/path';
@@ -76,7 +76,8 @@ export function ListWidget({ config, data, runtime }: WidgetProps<ListConfig>) {
               : typeof sRaw === 'string' && !config.secondaryFormat
                 ? text(sRaw)
                 : formatValue(sRaw, config.secondaryFormat, now);
-          const href = typeof hrefs?.[i] === 'string' ? (hrefs[i] as string) : undefined;
+          // Templated from data: only safe targets become links (never javascript:, //host or /\host).
+          const href = typeof hrefs?.[i] === 'string' ? safeUrl(hrefs[i] as string)?.href : undefined;
           const content = (
             <>
               <span className="flex min-w-0 flex-1 flex-col leading-tight">

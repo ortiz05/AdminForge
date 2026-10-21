@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { STATUS_SEVERITY, Skeleton, StatusPill, cn } from '@adminforge/ui';
+import { STATUS_SEVERITY, Skeleton, StatusPill, cn, safeUrl } from '@adminforge/ui';
 import { hasExpression, useRowTemplates } from '../../lib/expr';
 import { asRows, getPath } from '../../lib/path';
 import { mapStatus, type StatusEntry, type StatusMap } from '../../lib/status';
@@ -79,7 +79,8 @@ export function StatusGridWidget({ config, data, runtime, variant }: WidgetProps
               : detailTemplated
                 ? details?.[i]
                 : getPath(r.row, config.detail);
-          const href = typeof hrefs?.[i] === 'string' ? (hrefs[i] as string) : undefined;
+          // Templated from data: only safe targets become links (never javascript:, //host or /\host).
+          const href = typeof hrefs?.[i] === 'string' ? safeUrl(hrefs[i] as string)?.href : undefined;
           const inner = (
             <>
               <span className="truncate font-medium text-fg" title={r.label}>

@@ -1,5 +1,8 @@
 # News and changes — implementation plan
 
+> **Status:** done (2026-10-16). Built as planned (`feat(news)`, ff74947); `docs/news.md` describes the feature as it
+> is now, ADR-013 its egress.
+
 **Goal:** a "News and changes" section that shows, in a breaking-news style, the changes Microsoft announces to the
 services AdminForge manages (Entra ID, Exchange Online, Teams, SharePoint/OneDrive, Intune, Defender, Azure, Microsoft
 Graph, the runner's PowerShell modules). Every item cites a first-party source. An hourly schedule keeps it current.

@@ -1,6 +1,7 @@
 # SQLite on a persistent volume, Kubernetes-only deployment — design and implementation plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Status:** done (2026-10-21). All eight tasks landed on `feat/sqlite-on-pvc` (§3 Outcome); ADR-016 and ADR-017
+> record the decisions. What a real cluster still has to show is in `docs/backlog.md`.
 
 **Goal:** AdminForge keeps all of its state in one SQLite file on a Kubernetes PersistentVolumeClaim instead of
 PostgreSQL, and ships as a container image plus Kubernetes manifests (the systemd host deployment is retired).

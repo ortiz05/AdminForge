@@ -1,5 +1,8 @@
 # Microsoft 365 E5: unlock the licence-gated features, and keep the tooling modular
 
+> **Status:** done (2026-10-16). "What changed" below records the outcome; `docs/licensing-review.md` holds the
+> licence findings as they stand now.
+
 Plan, 2026-10-16. Owner decision that started it: the validation tenant now has Microsoft 365 E5, so every feature
 AdminForge gated on Entra ID P1/P2, Intune or Defender for Endpoint should work — accurately, not just unlocked — and
 every utility, script and tool should be organised so it can be maintained on its own.

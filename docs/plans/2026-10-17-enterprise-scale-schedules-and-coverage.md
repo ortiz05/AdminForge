@@ -1,5 +1,8 @@
 # Enterprise scale, schedule identities, plain-English times and coverage
 
+> **Status:** done (2026-10-17). "Progress" below records the outcome (ADR-014 for schedule identities); its Postgres
+> and host work was superseded by ADR-016 and ADR-017 on 2026-10-20.
+
 Owner's goal (2026-10-17): every page that loads data from Microsoft Graph stays fast and correct for a large
 enterprise and for thousands of engineers at once; the Postgres database is set up correctly for what it holds; a
 schedule can run as a user or as an app registration; schedule times read and are entered as plain English; more

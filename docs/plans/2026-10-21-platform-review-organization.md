@@ -1,7 +1,8 @@
 # Platform review 2026-10-21 — Organization: findings and remediation plan
 
-> **Status:** proposed. One of four review plans produced on 2026-10-21 (design, organization, functionality,
-> security). Baseline: `main` @ f243038 plus the uncommitted SharePoint-sharing work, which was not judged.
+> **Status:** in progress — see `2026-10-21-platform-review-implementation.md`. One of four review plans produced
+> on 2026-10-21 (design, organization, functionality, security). Baseline: `main` @ f243038 plus the uncommitted
+> SharePoint-sharing work, which was not judged.
 > Method: a read-only reviewer agent measured the repository (imports, counts, sizes, docs claims) and ran `pnpm lint`,
 > `pnpm format:check` and `pnpm typecheck` (all green; typecheck served from cache). Its highest-leverage claims
 > (O-03, O-08, O-11) were re-verified by hand. Sibling plans: `2026-10-21-platform-review-design.md`,

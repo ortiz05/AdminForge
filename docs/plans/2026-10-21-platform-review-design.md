@@ -1,7 +1,8 @@
 # Platform review 2026-10-21 — Design: findings and remediation plan
 
-> **Status:** proposed. One of four review plans produced on 2026-10-21 (design, organization, functionality,
-> security). Baseline: `main` @ f243038 plus the uncommitted SharePoint-sharing work, which was not judged.
+> **Status:** in progress — see `2026-10-21-platform-review-implementation.md`. One of four review plans produced
+> on 2026-10-21 (design, organization, functionality, security). Baseline: `main` @ f243038 plus the uncommitted
+> SharePoint-sharing work, which was not judged.
 > "Design" covers both the **platform architecture** (Part A) and the **user-facing design** (Part B).
 > Method: a read-only reviewer agent read the ADRs, architecture docs and the code they describe, ran the mock stack
 > (`AUTH_MODE=mock DATA_MODE=fixtures`) and captured 36 screenshots in steel, daylight and contrast at 1280, 1440

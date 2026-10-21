@@ -1,7 +1,8 @@
 # Platform review 2026-10-21 — Security: findings and remediation plan
 
-> **Status:** proposed. One of four review plans produced on 2026-10-21 (design, organization, functionality,
-> security). Baseline: `main` @ f243038 plus the uncommitted SharePoint-sharing work (not assessed).
+> **Status:** in progress — see `2026-10-21-platform-review-implementation.md`. One of four review plans produced
+> on 2026-10-21 (design, organization, functionality, security). Baseline: `main` @ f243038 plus the uncommitted
+> SharePoint-sharing work (not assessed).
 > Scope: the product — code, content engine, provisioning logic, the design of its own app registrations, CI and
 > supply chain, and the deployment artifacts in the repo. Not the tenant's hygiene.
 > Method: a read-only reviewer agent read the API (auth, sessions, request policy, outbound executor, runs and

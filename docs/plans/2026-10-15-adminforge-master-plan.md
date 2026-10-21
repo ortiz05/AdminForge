@@ -1,13 +1,12 @@
 # AdminForge — Master Implementation Plan
 
-> **Historical.** This is the original build plan. Where it differs from what was built — hosting (this host, not
-> Azure Container Apps), provisioning (the `adminforge provision` CLI, not Bicep), the runner (HMAC on loopback, not a
-> "Runner API" app), paths (`portal/…`) and configuration (`~/.config/adminforge/`) — the current sources are
-> `SECURITY.md`, `docs/architecture.md`, `docs/adr/` and `docs/decisions.md`.
-
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-> UI work also uses frontend-design:frontend-design and dataviz — but the visual direction is **already decided in §6**. Follow it; do not re-invent it per page.
-> Steps marked 🔑 need the user's tenant access. Never ask the user to paste passwords or secrets into chat — they sign in interactively (`! az login …`) and secrets go to Key Vault or `.env.local` (git-ignored).
+> **Status:** historical. This is the original build plan (2026-10-15), kept for history; it carries no instructions
+> to follow. Where it differs from what was built — hosting (one Kubernetes pod with all state in a SQLite file on a
+> PersistentVolume, ADR-016/017, not Azure Container Apps and Postgres), provisioning (the `adminforge provision` CLI,
+> not Bicep), the runner (a sidecar signed with HMAC on the pod's loopback, not a "Runner API" app), paths
+> (`portal/…`) and configuration (`~/.config/adminforge/`, a Secret in the cluster) — the current sources are
+> `SECURITY.md`, `docs/architecture.md`, `docs/adr/` and `docs/decisions.md`. Steps marked 🔑 needed the owner's
+> tenant access.
 
 **Goal:** A web portal where enterprise systems engineers sign in with their own Entra ID SSO identity and administer Entra ID, Microsoft 365, and Azure (including Azure Functions) entirely through **delegated** permissions — read-only by default, with explicit, time-boxed write access — and where pages, dashboards, reports, playbooks, and runbooks are declarative content that can be added or changed without redeploying.
 

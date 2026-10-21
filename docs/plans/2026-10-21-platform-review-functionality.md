@@ -1,7 +1,8 @@
 # Platform review 2026-10-21 — Functionality: findings and remediation plan
 
-> **Status:** proposed. One of four review plans produced on 2026-10-21 (design, organization, functionality,
-> security). Baseline: `main` @ f243038 plus the uncommitted SharePoint-sharing work (not implicated in any failure).
+> **Status:** in progress — see `2026-10-21-platform-review-implementation.md`. One of four review plans produced
+> on 2026-10-21 (design, organization, functionality, security). Baseline: `main` @ f243038 plus the uncommitted
+> SharePoint-sharing work (not implicated in any failure).
 > Method: a read-only reviewer agent ran every test suite on the tree as-is, `pnpm adminforge validate|test|env check`,
 > and the API alone in mock mode (`AUTH_MODE=mock DATA_MODE=fixtures`, in-memory stores) to sweep every content
 > datasource and about thirty error paths. No Microsoft API was called; perf and e2e were not run. The High finding

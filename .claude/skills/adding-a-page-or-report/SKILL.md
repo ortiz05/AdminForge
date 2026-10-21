@@ -1,6 +1,6 @@
 ---
 name: adding-a-page-or-report
-description: Use when asked to add or change an AdminForge page, dashboard, entity/detail view, list, or exportable report (anything shown under /p/<key>), including new columns, filters, facets, KPIs, charts, row or bulk actions.
+description: Use when asked to add or change an AdminForge page, dashboard, entity/detail view, list, or exportable report (anything shown under /p/<key>), including new columns, filters, facets, KPIs, charts, row or bulk actions, or a new navigation section for a service.
 ---
 
 # Adding a page or report
@@ -8,228 +8,118 @@ description: Use when asked to add or change an AdminForge page, dashboard, enti
 ## Overview
 
 Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,reports}/<section>/`. The generic renderer
-(`/p/$key`) and datasource executor do the rest. **No React code for a new page.**
+(`/p/$key`) and the datasource executor do the rest: **no React for a new page**. Widget keys are in `docs/widgets.md`;
+the expression helpers, JSONata habits, Microsoft quirks and fixture rules are in `docs/content-recipes.md`.
+
+## When not to use
+
+- A change to the tenant → `adding-a-playbook` (the page only offers it as a row, bulk or bar action).
+- An existing report delivered by e-mail, Teams or file → nothing to build: Operators schedule it in the portal
+  (Reports → the report → Schedule). Anything else unattended → `adding-a-schedule-or-probe`.
+- A screen the renderer can't express (runs, schedules, Query Studio) → `adding-a-coded-screen`; a visualisation the
+  widgets can't → `adding-a-widget`; data only PowerShell returns → `adding-a-runner-script`, then `source: runner`.
 
 ## Steps
 
-1. **Reuse first.** `rg -l "<topic>" portal/content` and `rg "^id:" portal/content/{pages,dashboards,reports}`. If a page
-   already covers it, extend it and bump `version` (minor for additions).
+1. **Reuse first.** `rg -l "<topic>" portal/content` and `rg "^id:" portal/content/{pages,dashboards,reports}`. If a
+   page already covers it, extend it and bump `version` (minor for additions).
 2. **Scaffold:** `pnpm adminforge new page <section>/<name> --template list-detail|dashboard|entity|report`
    (reports: `new report …`). Keep the `$schema` line — VS Code autocompletes from it.
-3. **Datasources:** `source: graph|graphBatch|arm|resourceGraph|logAnalytics|function|runner|static`.
-   - Filter **server-side** (`$filter`, `$select`, `$top`, KQL `where`), not in `transform` — transforms run on the API
-     thread with a 250 ms budget and fail on large tenants.
-   - Tenant-wide questions that would need many Graph calls → **KQL** (`resourceGraph`, `logAnalytics`).
-   - Resource Graph can't start a query with `union a, b`; pipe instead: `resources | where … | union
-(resourcecontainers | where …)` (resource groups and subscriptions live in `resourcecontainers`).
-     `adminforge validate` rejects the leading form.
-   - Resource Graph returns **computed** booleans as `1`/`0` (`tostring()` gives `True`/`False`); raw `properties.*`
-     booleans stay `true`/`false`. Project flags you compare or map as `iff(cond, 'true', 'false')` in the final `project` (keep the boolean for KQL `where`/`order by`), compare with `= 'true'`, show them with `kind: status` (never `kind: boolean`), and make fixtures
-     match what Resource Graph really returns.
+3. **Datasources** — `source: graph|graphBatch|arm|resourceGraph|logAnalytics|function|runner|static`:
+   - Filter and count **at the source** (`$filter`, `$select`, `$top`, `$count`, KQL `where` / `summarize`), not in
+     `transform`: transforms run on the API thread with a 250 ms budget. Tenant-wide questions that would need many
+     Graph calls → KQL. Lists that can reach thousands of rows get no per-row transform and their numbers from a
+     second query (`docs/content-recipes.md` › Big lists, exports and partial data).
+   - **User data** goes through `$encode()` / `$odata()` / `$odataSearch()` / `$kql()` / `$guid()`, placed as
+     `docs/content-recipes.md` › Quoting user data shows; validation follows it through wrappers, lambdas and
+     variables. Advanced filters: declare `filters.advanced.fields` and use `${ advanced }`.
    - **Resource Graph joins** (Azure refuses the rest; `validate` checks it — `resourceGraphJoinProblem` in
-     `portal/packages/schemas/src/datasource.ts`): only `leftouter`/`inner`/`innerunique`; at most three `join` +
-     `union` together; only **one** join to another table, unless every one is `resources` ↔ `resourcecontainers`; a
-     `union` stays in one table or that pair. Use `leftouter` + `where isnull(x)` instead of `leftanti`; every union
-     branch projects the columns used after it. Rows that already join another table (`patchassessmentresources`,
-     `recoveryservicesresources`, `desktopvirtualizationresources`, …) get subscription names from a small
-     `resourcecontainers` datasource (with the page's subscription filter) joined natively:
-     `${ value.value ? $merge([value, { 'value': $attach(value.value, 'subscriptionId', ds.subs, { 'subscriptionName': null }) }]) : value }`
-     (`azure.vms-without-backup` `subs`, `avd.host-pools` `subscriptions`; checked at 50,000 rows in
-     `tests/content/content-at-scale-subscription-names.test.ts`). The trade-off: a collection datasource **without** a
-     transform exports streamed, page by page; with one, the export is collected up to its `maxItems`. Need more than
-     one other table? Split the query (`azure.arc-patching`: `machines` from the assessments, `unassessed` from the
-     servers; `azure.arc-defender-coverage`: the plans per subscription in their own query, passed on as a `$guid()`
-     list).
-   - Results that can reach thousands of rows: a rows datasource without a transform (transforms have a 250 ms budget;
-     the export then streams) plus a second Resource Graph `summarize` query for KPIs; `<ds>.totalRecords` works
-     directly as a KPI. Fold a long tail in KQL (top 5 regions + "Other"), not with a JSONata slice of a variable.
-   - **Scale (100k users / 30k devices).** JSONata costs ~15 µs per operation and row (a filter, a `$merge`); a mapped
-     row with ten fields is ~10 operations (~0.15 ms), so a per-row mapping fits only ~1,500 rows in the 250 ms budget.
-     For big lists: filter and count at the source (`$filter`, `$count` + `ConsistencyLevel: eventual`, summary
-     reports), page lists with `paging: cursor`, and in transforms use the native helpers —
-     `$applyAdvanced(rows, { "join": "and", "clauses": [...] })`, `$withFields(rows, { "state": "x" })` to label rows,
-     `$take(rows, n)` to cap a list — and show Graph's own fields in columns instead of remapping every row (a value
-     inside a list, such as `details[0].x`, isn't exported: flatten those rows in the transform). Measure with
-     `AF_PERF_ONLY=<key> pnpm test:perf` (`tests/perf`).
-   - `$applyAdvanced` rules: ops `eq ne gt ge lt le startsWith contains notContains in notIn isEmpty notEmpty`;
-     `field` (+ `times`, a finite number; or `days` for dates) compares two fields of a row; paths are `.`-separated names and read through
-     lists (`passwordCredentials.endDateTime` matches when any credential does) — no `[n]` indexes and no keys that
-     contain a dot (`@odata.type`). `isEmpty` / `notEmpty` look at plain values (null, `''`, a list without items; an
-     object is never empty). A row without the field matches only the negated operators (`ne`, `notContains`,
-     `notIn`) and `isEmpty`.
-   - **Partial data.** Over a cap, `paging: all` marks the datasource's result `truncated` and the renderer notes it
-     under that datasource's own widgets (also after its transform). A derived datasource (`source: static` built from
-     `ds.X`) doesn't carry it: pass it on (`ds.X.truncated` when X has no transform; otherwise X's transform returns
-     `"partial": value.truncated = true`) and show a markdown note when it is set — never say the counts "include
-     every …" without that check. A table capped at 10,000 rows still exports every
-     row: the list datasource returns the whole sorted list (`export.data: <list>.rows`, `export.maxRows` = its
-     `maxItems`) and the page binds its widgets to a `source: static` view of it —
-     `${ $merge([value, { "rows": $take(value.rows, 10000), "listCapped": $count(value.rows) > 10000 }]) }` — so the
-     browser gets 10,000 rows (`m365.mailbox-storage`: `mailboxList` → `mailboxes`).
-   - JSONata: `$take(arr, n)` or a slice right after a sort (`rows^(x)[[0..9]]`), never `[[a..b]]` on a variable
-     (quadratic); sort before you cap (`$take(rows^(<date), n)`), and never sort on a key that can be empty (split the
-     rows with `isEmpty` / `notEmpty` first); `$sum([0, …])` so empty sums are 0; `$exists(x) = false`, not `$not(x)`;
-     guard comparisons with `$type(x) = 'number'`. The grouping constructor (`rows{ id: … }`) and `^( … )` run natively
-     and scale when their source is a plain path or variable and the keys/values don't use `$$`, `%`, `#` or `@` —
-     otherwise (a function call, a block or a condition as the source) JSONata runs them, ~15 µs a row. `in` over a
-     long list is a set lookup inside `$applyAdvanced` only.
-   - Joins and lists without a JSONata block per row (native, own properties only, never into functions, within the
-     time budget; at most 64 fields or paths a call):
-     - `$pluck(rows, 'a.b')`: every value at a path, lists on the way read item by item (not a list directly inside
-       a list), nulls skipped; `$distinct($pluck(grants, 'principalId'))` lists ids.
-     - `$unnest(rows, 'licenseAssignmentStates', 'st', 'key')`: one row per item under `st`; rows with a missing or
-       empty list are dropped. The new rows leave the list out (a dotted path copies the objects along it without
-       the list; through another list on the way its first field is dropped). The optional `key` field is unique:
-       `<id>:<path>:<n>` (`#<n>` for a numeric id, `@<position>` without one).
-     - `$attach(rows, 'skuId', lookup, defaults?, as?)`: joins a lookup built once per distinct value
-       (`$names := $skus{ skuId: { "sku": skuPartNumber } }`). Merged, the entry's fields overwrite the row's (any
-       key but `_jsonata…`); with `as` it is nested under that name. A list of paths with a list of names joins
-       several ids in one copy. Values are compared as text (1 joins "1"). An entry must be an object: group only
-       rows that have the key (`notEmpty` first); a key that repeats holds a list and the row gets the default, so
-       keep one per key (split on `$withCount(…)` `n eq 1`, group the rest with `{ k: $[0] }`).
-     - `$pick(rows, ['id', 'displayName'])`: top-level fields only (keep joined objects and exports small).
-     - `$withCount(rows, 'appId', 'n')`: each row with how many rows share its value (as text, like `$attach`).
-     - `$idsWhere(rows, 'id', { "publicClient": filter, … })`: the ids (texts, numbers, true/false) each
-       `$applyAdvanced`-style filter matches, all filters in one pass — for many findings over the same rows. Names
-       that share one filter object share its work.
-     - `$flagIn(rows, 'id', { "publicClient": [ids…], … })`: each row copied once with one true/false field per set
-       (then pick severities with boolean filters, no id lists through JSONata).
-     - Several texts in one condition: `containsAny` / `startsWithAny` / `notContainsAny` / `notStartsWithAny` with
-       `"type": "string"` and a list `value` (≤ 256 literal texts of ≤ 256 characters, case ignored; a filter holds
-       ≤ 64 conditions) — one pass over a field (a list path
-       too) instead of one clause per text. Use them over a URI list path rather than `$unnest`-ing every URI; unnest
-       only the few rows that need a per-item check (identity.app-registration-risks).
-   - Each `$withFields` / `$attach` / `$unnest` pass copies every row: classify with `$applyAdvanced` first and label
-     only the subsets you show; build a list in its display order (most severe subset first) rather than sorting tens
-     of thousands of rows. Ages and lifetimes: `"field": "startDateTime", "days": 365` on a date condition shifts the
-     other field (`days` replaces `times` for dates); a row without the other field matches like one without the
-     field, so build "the rest" as a complement by key (`notIn`), not with the opposite operator. A list too big for
-     one transform: a list datasource for the export plus a page view that labels only the first rows it shows
-     (`identity.app-credential-hygiene`: `page` / `exportList`); each datasource has its own budget, but a page view
-     built from a list datasource still runs that list on every page load. Pass the reads' `truncated` on as a
-     `partial` flag with a note: the export can't say it was cut.
-   - Check every new request once against a real tenant, read-only (fixtures can't catch a request Microsoft
-     rejects). Graph checks `$select`/`$expand`/`$filter` before licence checks, so even an unlicensed tenant
-     confirms the syntax.
-   - JSONata: a comparison with a missing field is false — write `$not(isDeleted = true)`, not `isDeleted != true`;
-     never sort on a key that can be `null`. Usage reports may conceal names: detect it by the missing `@` in the UPN.
-   - Graph patterns: resolve names with `POST /directoryObjects/getByIds` (an allowed read, ≤ 1,000 ids) and skip it
-     with `when` when there are no ids (Graph rejects an empty list); wrap id lists in `$append([], …)` because a
-     one-element list becomes a single string; more than 1,000 ids: one datasource per 1,000, each taking its slice
-     with a native sort and slice — `$pluck((ds.x.rows^(<unique field>))[[1000..1999]], 'id')` — and `when` that
-     slice has ids (`m365.shared-mailboxes`: `accounts1`…`accounts5`, merged with `$attach`); read PIM through `graphBatch`; in directory audit events a group's
-     name is only in `modifiedProperties`, so filter with `targetResources/any(t:t/id eq …)`.
-   - Fixtures: long queries get hashed file names (find them with `fixtureKey()`); add POST fixtures as `variants`
-     rather than overwriting a shared file. The **first** matching variant wins: put a specific `af:<id>#<ds>` variant
-     before the generic ones (`tests/fixtures/resourceGraph/POST.json` ends with a catch-all `resourcecontainers`
-     variant), and keep fixture rows exactly what the query projects (drop a column the query no longer returns).
-   - User input: `$odata()`, `$odataSearch()`, `$kql()`, `$encode()` — a quoted literal, never a `$replace` that strips
-     characters (it changes what was searched for); search in KQL as `where name contains ${ $kql(params.q) }`
-     (validation flags user data in a `path`/`url`
-     without `$encode()`, and in `$filter` / `$search` / `$orderby` — query or body — without `$odata()` /
-     `$odataSearch()` / `$guid()`, even inside a quoted literal; `$orderby` takes a literal allow-list). `${ }` values in Markdown text show as plain text; links must be http(s), mailto, `/path` or
-     `#`. `$eval` is unavailable; ranges are capped at 1,000,000 items and built text at 10 M characters. Advanced filters: declare
-     `filters.advanced.fields` and use `${ advanced }`; never read the raw param. Dialect `odata` (Graph) and `kql`
-     (Resource Graph / Log Analytics) compile into the request; for sources with no query language (`runner`,
-     `static`, `function`) use `dialect: rows` and keep the matching rows in the transform with
-     `$applyAdvanced(<rows>, advanced)` (row fields use `.` paths; computed fields work too).
-   - **Out of scope: the Microsoft Defender portal** (owner decision 2026-10-17) — incidents, alerts, advanced
-     hunting, Secure Score and device vulnerabilities (`/security/…`, `source: advancedHunting`, the `defender` /
-     `defenderEndpoint` licences). That content is retired, and `tests/content/retired-content.test.ts` refuses any
-     active definition that reads it. Defender **for Cloud** through Resource Graph (`securityresources`:
-     recommendations, plans — `azure.arc-defender-coverage`, `security.cloud-recommendations`) and Entra ID Protection
-     (risky users) stay in scope.
-   - Every Resource Graph or Log Analytics query starts with a `// af:<page id>#<datasource>` line: fixtures match on
-     it (`bodyIncludes`).
-   - Later datasources may reference earlier ones as `ds.<name>` (declare dependencies above the datasources that use
-     them — `validate` refuses references to later ones and loops; the runtime follows the references, never key
-     order) — in a datasource's `when`, request and runner
-     `parameters` the prefix is required (a bare `group.id` is undefined there, so the datasource is always skipped;
-     `validate` refuses it). Widgets, headers and actions use bare names. A dependency some viewers can't read gets
-     `optional: true`: its dependents then see `null` instead of failing (`dependency_failed`) — e.g. Graph's Teams APIs
-     (`/teams`, team settings, channels) answer delegated calls only for people who hold a Teams licence. Their results
-     carry the failure as `errors["ds.<name>"]`; a scheduled report built on one ends `report_incomplete`. It never
-     hides a missing portal role, `policy_denied`, `licence_required` or a sign-in/arming problem anywhere up the chain.
-   - Azure Cost Management (`POST …/providers/Microsoft.CostManagement/query|forecast` at management-group,
-     subscription, resource-group, billing-account or billing-profile scope — allowed reads): cache for an hour
-     (`cache: { ttl: 3600 }`, it throttles per scope), keep a page to a few queries, default the scope to
-     `AF_COST_MANAGEMENT_GROUP_ID` (else the tenant root group). Rows come back as arrays with `columns` beside them:
-     turn them into objects natively with `$tableRows(value.properties, { "cost": "Cost", "group": "ServiceName" })`,
-     then total, filter, label and sort natively (`$sum($pluck(rows, 'cost'))`, `$applyAdvanced`, `$withFields`,
-     `rows^(>cost)`, `$withShare(rows, 'cost', 'share')`); format dates once per distinct value and join them back
-     with `$attach`; map only the rows the page lists in JSONata, and export the whole list (`exportRows`,
-     `billing.cost-analysis`). Inside a filter (`$list[…]`) a bare name reads the item: take `now` out into a variable
-     first. JSONata's `$exists(null)` is true: leave an optional value undefined (`$d ? x`, no `: null`).
-   - Widget, header and action expressions (`when`, `href`, `text`, `hint`) run **in the browser**, where `env` doesn't
-     exist (only datasources, `params`, `user`, `now`): `env.X` there is always empty. Read configuration in a
-     `source: static` datasource and pass on only the answer (`workspace: { configured: … }` in `avd.connections`;
-     its `when: ${ workspace.configured = false }` shows the "not configured" note). A workload's own Log Analytics
-     workspace falls back to the default: `workspace: "${ env.AF_X ? env.AF_X : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"`
-     with `when: ${ ds.workspace.configured }`.
-   - JSONata `$boolean(undefined)` and `$not(undefined)` are undefined, not false/true, so `$not(params.x)` on a param
-     that wasn't given never counts as true: write `params.x ? false : true` (and `a and (params.x ? false : true)`).
-   - Azure Resource Manager list answers (`value[]` of `{ id, name, properties }`) can go to a table as they come:
-     columns take dotted paths (`properties.sessionState`) and `$applyAdvanced` counts them (`avd.user-sessions`), so
-     thousands of rows need no per-row mapping.
-   - Microsoft 365 usage reports answer 404 `UnknownTenantId` until Microsoft starts them (24–48 h after the tenant's
-     first subscription). With concealed names (`/admin/reportSettings` `displayConcealedNames`) UPNs and owners are
-     hashes (no `@`) and site URLs are empty or hashes: fall back to `siteId`, and only link rows whose URL starts
-     with `https://`.
-4. **Layout:** widgets exactly as in `docs/widgets.md` (kpi, table, chart, list, keyValue, statusGrid, timeline,
-   markdown, actionBar, licenceGate, probeStatus). Tables: `columns` (`kind`, `filter`, `hidden`), `rowActions`,
-   `bulkActions` (playbook + `forEach.inputs`), `inspect` (entity page in the drawer), `export` (reports require it).
-   `rowKey` must be unique per row: a table grouped by several columns gets a composite key in the query
-   (`extend Key = strcat(CodeSymbolic, '|', Source, '|', ActivityType)`, `avd.connections`). KPIs at `span: 2` (six a
-   row) show about 22 characters of label; a `hint` after a status pill is cut off — keep labels short
-   ("Defender gaps", not "Not fully protected by Defender for Servers") and hints short or none (`azure.arc-fleet`).
-5. **Declare** `requires.scopes` (exact Graph/ARM permissions), `requires.licences` (`signInLogs`, `conditionalAccess`,
-   `pim`, `intune`, `exchange`, `defender`, …) and `nav: { section, label, icon (Phosphor kebab-case), order }`.
-   (`defender` / `defenderEndpoint` belong to the retired Defender portal content — see Datasources.)
-   **Reports** keep `nav: { section: reports, icon, … }` but aren't listed one by one in the rail (the Reports section
-   says `listDefinitions: false` and shows "All reports"): they appear in the **Reports catalogue** (`/reports`)
-   automatically. There the area is the report's `area:` if it sets one, else the key's first segment — always a
-   navigation section key (`identity`, `m365`, `exchange`, `sharepoint`, `teams`, `endpoint`, `security`, `azure`,
-   `avd`, `billing`). Put a report under its workload with `area:` (`m365.inbox-rules` says `area: exchange`) rather than
-   renaming its key: schedules, links and saved views use the key. The same goes for pages — move one with
-   `nav.section`, keep its key. Each workload section opens with an Overview dashboard (`exchange.overview`, …) whose
-   `probeStatus` widget takes `group: <section>` to show that service's synthetic checks. `tags` drive the tag filter and search (give every report specific tags), `summary` is its
-   description, `nav.icon` its row icon, `requires` its requirements panel, `export` makes it schedulable, and its
-   params become the schedule form (string/number/boolean/enum params without a picker can be set per schedule; the
-   others run with their default, so give them sensible defaults). Operators schedule reports from the catalogue
-   without YAML (`adding-a-schedule-or-probe` explains when a content schedule is still the right choice).
-   **A new parent section** (as Exchange Online, Azure Billing and Azure Virtual Desktop were added): a section in
-   `portal/content/navigation.yaml` (bump its `version`) with a "Service checks" item `/monitoring?group=<key>`; keys
-   `<key>.*`; an Overview dashboard (`<key>.overview`, `nav.order: 5`) with a `probeStatus` widget `group: <key>` and
-   a markdown block linking its pages, reports and `/monitoring?group=<key>` (`avd.overview`, `exchange.overview`);
-   reports with `area: <key>` (they appear under `/reports?area=<key>`; Billing also links that from the rail);
-   probes with `group: <key>`; a section in `docs/operations.md` and its roles in `docs/access.md`.
-   **Retiring** a page, report, playbook, schedule or probe: `status: retired` + a version bump — never delete (runs
-   and audit keep pointing at it); remove every active link, embed, `type: playbook` step and schedule reference
-   (`tests/content/retired-content.test.ts`); a retired definition still has to validate, so fix it minimally; a
-   retired schedule also gets `enabled: false`; add a `docs/backlog.md` line saying how to bring it back. Generic
-   engine features (a probe kind, a datasource source) stay.
-6. **Fixtures:** every datasource needs a synthetic fixture so mock mode renders — naming scheme at the top of
-   `portal/packages/connectors/src/fixtures.ts`; files under `tests/fixtures/<service>/…`. `Example Org`,
-   `example.com`, generated GUIDs only.
-7. **Tests:** content tests run automatically; add a focused test file under `tests/content/` only for page-specific
-   logic (e.g. a transform), never append to `validate-all.test.ts`. A transform that can see many rows also gets a
-   `tests/content/content-at-scale-<area>.test.ts` (the `scale` project, run one file at a time): one untimed warm-up
-   run, then the real budget on the largest answer the query can return (`content-at-scale-arc.test.ts`,
-   `content-at-scale-subscription-names.test.ts`).
-8. **Check:** `pnpm adminforge validate`, `pnpm --filter @adminforge/tests exec vitest run --project content`,
-   `pnpm guard`, then look at it in mock mode (the one-liner in `CLAUDE.md` › Commands) → `/p/<key>`.
+     `portal/packages/schemas/src/datasource.ts`): no leading `union`; only `leftouter` / `inner` / `innerunique` joins
+     (`leftouter` + `where isnull(x)` instead of `leftanti`); at most three `join` + `union` together; only **one**
+     join to another table, unless every one is `resources` ↔ `resourcecontainers`; a `union` stays in one table or
+     that pair, and every branch projects the columns used after it. Subscription names and split queries:
+     `docs/content-recipes.md` › Resource Graph.
+   - Every Resource Graph or Log Analytics query starts with a `// af:<page id>#<datasource>` line (fixtures match on
+     it).
+   - `ds.<name>` references: declare a dependency above the datasources that use it (`validate` refuses references to
+     later ones and loops). In a datasource's `when`, request and runner `parameters` the `ds.` prefix is required;
+     widgets, headers and actions use bare names. A dependency some viewers can't read gets `optional: true`: its
+     dependents see `null` (and `errors["ds.<name>"]`; a scheduled report ends `report_incomplete`) — it never hides a
+     missing portal role, `policy_denied`, `licence_required` or a sign-in or arming problem.
+   - Widget, header and action expressions (`when`, `href`, `text`, `hint`) run **in the browser**, where `env` is
+     always empty: read configuration in a `source: static` datasource (`docs/content-recipes.md` › Configuration in
+     browser expressions).
+   - **Out of scope: the Microsoft Defender portal** (owner decision 2026-10-17) — incidents, alerts, advanced hunting,
+     Secure Score and device vulnerabilities (`/security/…`, `source: advancedHunting`, the `defender` /
+     `defenderEndpoint` licences). That content is retired and `tests/content/retired-content.test.ts` refuses any
+     active definition that reads it. Defender **for Cloud** through Resource Graph and Entra ID Protection stay.
+4. **Layout** — widgets and their keys exactly as in `docs/widgets.md`. Tables: `columns` (`kind`, `filter`, `hidden`,
+   `wrap: true` for messages), `rowActions`, `bulkActions` (playbook + `forEach.inputs`), `inspect` (an entity page in
+   the drawer), `export` (reports require it).
+   - `kind: status` is for a value that is fine or not (at least one value maps to `ok`, `warn` or `crit`); a plain
+     category — a type, a source, a computed `'true'`/`'false'` flag with no good or bad — is `kind: enum`
+     (`map: { "true": "On", "false": "Off" }`; `tests/content/status-tones.test.ts`).
+   - `rowKey` is unique per row: a table grouped by several columns gets a composite key in the query.
+   - KPI labels: about 22 characters a line, two lines at `span: 2`; a hint after a status pill is cut off — keep it to
+     two or three words or leave it out (`docs/widgets.md` › kpi).
+   - Entity pages declare `entity: user|group|device|app|resource` and take an `id` param; one page per kind, and all
+     five are taken (`tests/unit/api/search-entity-pages.test.ts`). A new entity page gets a sample id in
+     `SAMPLE_PARAMS` (`tests/content/fixtures-complete.test.ts`).
+5. **Declare** `requires.scopes` (exact Graph/ARM permissions), `requires.licences` (`signInLogs`,
+   `conditionalAccess`, `pim`, `intune`, `exchange`, …), `requires.portalRoles` where Readers shouldn't see it,
+   `nav: { section, label, icon (Phosphor kebab-case), order }`, specific `tags` and a `summary`. **Reports** keep
+   `nav.section: reports` and appear in the Reports catalogue (`/reports`) on their own, under their `area:` (else the
+   key's first segment) — always a navigation section key. Move a report with `area:` and a page with `nav.section`,
+   never by renaming its key (schedules, links and saved views use it). `export` makes a report schedulable and its
+   params become the schedule form: give required ones defaults.
+6. **A new navigation section** (as `avd`, `billing`, `exchange` were added): a section in
+   `portal/content/navigation.yaml` (bump its `version`); keys `<key>.*`; an Overview dashboard `<key>.overview`
+   (`nav.order: 5`) with a `probeStatus` widget `group: <key>` and a markdown block linking its pages and reports;
+   reports with `area: <key>`; probes with `group: <key>` — the section's row in the navigation then shows their
+   status and links to `/monitoring?group=<key>` (no "Service checks" item); a section in `docs/operations.md` and its
+   roles in `docs/access.md`. `avd` is the full example; `billing` is reports-only.
+7. **Fixtures:** a synthetic fixture for every datasource (`docs/content-recipes.md` › Fixtures);
+   `tests/content/fixtures-complete.test.ts` renders every active page from them.
+8. **Tests:** content tests run on their own. Add a new file under `tests/content/` only for page-specific logic (a
+   transform) — never append to `validate-all.test.ts`. A transform that can see many rows also gets
+   `tests/content/content-at-scale-<area>.scale.test.ts` (the `scale` project).
+9. **Lifecycle:** bump `version` on every change; `preview: true` while the page is checked only against fixtures;
+   retire with `status: retired`, never delete (`docs/content-recipes.md` › Versions, previews and retiring).
+10. **Check:** `pnpm adminforge validate`, `pnpm --filter @adminforge/tests exec vitest run --project content`,
+    `pnpm guard`; then `/p/<key>` in mock mode (`CLAUDE.md` › Commands) in steel and daylight. Run every new request
+    once against a real tenant, read-only (`validating-against-a-tenant`) — fixtures can't catch a request Microsoft
+    rejects.
+
+## Done when
+
+- [ ] `pnpm adminforge validate`, the content project and `pnpm guard` are clean
+- [ ] The page renders in mock mode from synthetic fixtures and you looked at it in steel and daylight: KPI labels
+      whole, no empty widgets, no alert banners
+- [ ] `version` bumped on every changed definition; `requires`, `nav`, `tags` and `summary` set
+- [ ] Every new request ran once live, read-only — or the page is `preview: true` and `docs/licensing-review.md` /
+      `docs/backlog.md` say what is unchecked
+- [ ] `content-reviewer` ran and its findings are fixed or answered
 
 ## Common mistakes
 
-| Mistake                                           | Fix                                                                            |
-| ------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Fetch everything, filter in `transform`           | Push filters to Graph/KQL; keep transforms tiny                                |
-| Params in `$filter` / `$search` / KQL unquoted    | `$odata()` / `$odataSearch()` / `$kql()`; advanced filters via `${ advanced }` |
-| Hard-coded tenant ids/domains/SKUs                | `${env.X}` with a key in `config/example.env`                                  |
-| Missing fixture → blank page in mock mode         | Add the fixture file for every datasource                                      |
-| `signInActivity` etc. without `requires.licences` | Declare the licence; the renderer gates and explains                           |
-| A report without `tags` or `summary`              | The Reports catalogue filters and searches on them; add both                   |
-| A required report param without a default         | Scheduled runs can't fill pickers or dates: give it a default                  |
-| Two joins to other Resource Graph tables          | One cross-table join per query; names via a `resourcecontainers` + `$attach`   |
-| `env.X` in a widget, header or action expression  | Always empty (browser): read it in a `source: static` datasource               |
-| Deleting content you no longer need               | `status: retired` + version bump; remove active references                     |
+| Mistake                                                    | Fix                                                                            |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Fetch everything, filter in `transform`                    | Push filters to Graph/KQL; keep transforms tiny                                |
+| Params in `$filter` / `$search` / KQL wrapped or unquoted  | `$odata()` / `$odataSearch()` / `$kql()` where the value lands                 |
+| Hard-coded tenant ids, domains or SKUs                     | `${env.X}` with a key in `config/example.env`                                  |
+| Missing fixture → blank page in mock mode                  | A fixture for every datasource; `fixtures-complete.test.ts` names the gap      |
+| `signInActivity` etc. without `requires.licences`          | Declare the licence; the renderer gates and explains                           |
+| A report without `tags` or `summary`                       | The Reports catalogue filters and searches on them; add both                   |
+| A required report param without a default                  | Scheduled runs can't fill pickers or dates: give it a default                  |
+| Two joins to other Resource Graph tables                   | One cross-table join per query; names via a `resourcecontainers` + `$attach`   |
+| `env.X` in a widget, header or action expression           | Always empty (browser): read it in a `source: static` datasource               |
+| A category shown as a neutral status pill                  | `kind: enum`; `status` only when a value is fine or not                        |
+| Shipping a page checked only against fixtures, unannounced | `preview: true` (+ version), removed once it works live                        |
+| Deleting content you no longer need                        | `status: retired` + version bump, a `Retired — …` summary; remove active links |
+
+## See also
+
+- `docs/content-recipes.md` — quoting, helpers, JSONata habits, Graph / Resource Graph / ARM quirks, fixtures,
+  lifecycle
+- `docs/widgets.md` — every widget key; `docs/onboarding/08-content-guide.md` — the content model for people
+- `adding-a-playbook`, `adding-a-schedule-or-probe`, `validating-against-a-tenant`

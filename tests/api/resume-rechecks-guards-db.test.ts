@@ -219,7 +219,7 @@ describe('a run resumed after a restart checks again before it retries its write
     await k.close();
   });
 
-  it('a write in flight at the stop is not sent again when its check now fails', async () => {
+  it('a write in flight at the stop is not sent again when its check now fails: the run ends needs_review', async () => {
     const first = await k.boot({ graceMs: 300 });
     const { runId } = await k.startHeld(first, 'test.restart-checked', 'two');
     await first.app.close(); // SIGTERM: `two` is still in flight after the grace
@@ -238,13 +238,15 @@ describe('a run resumed after a restart checks again before it retries its write
     k.outbound.hold = null;
     const second = await k.boot();
     try {
-      await until(() => k.run(runId).status === 'failed');
+      // The first send may have gone through before the stop: nothing is sent again, and someone checks the target.
+      await until(() => k.run(runId).status === 'needs_review');
       expect(JSON.parse(k.run(runId).error!)).toMatchObject({
-        stepId: 'stillOk',
-        message: 'The target changed.',
+        code: 'needs_review',
+        stepId: 'two',
+        details: { check: { stepId: 'stillOk', message: 'The target changed.' } },
       });
       expect(k.outbound.calls).toEqual(['GET /things/look', 'PATCH /things/two', 'GET /things/look']);
-      expect(k.latest(runId)).toEqual({ look: 'succeeded', stillOk: 'failed', two: 'retried' });
+      expect(k.latest(runId)).toEqual({ look: 'succeeded', stillOk: 'failed', two: 'needs_review' });
     } finally {
       await second.app.close();
     }

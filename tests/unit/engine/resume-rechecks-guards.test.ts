@@ -189,7 +189,7 @@ describe('engine: a resumed run checks again before its next write', () => {
     expect(deletes(h)).toEqual([]);
   });
 
-  it('restart: a write in flight is checked again before it is retried, and not retried when the check fails', async () => {
+  it('restart: a write in flight is checked again before it is retried; when the check fails it ends needs_review', async () => {
     const { holder, respond } = sessionHolder();
     const h = harness(signOut(), { respond });
     const at = new Date('2026-10-15T11:59:00.000Z');
@@ -216,9 +216,19 @@ describe('engine: a resumed run checks again before its next write', () => {
       await h.store.saveStep('run-1', r, { actor: INITIATOR, dryRun: false });
     await h.store.updateRun('run-1', { status: 'running', startedAt: h.clock.now() });
     holder.now = OTHER;
-    expect(await h.exec()).toMatchObject({ status: 'failed', error: { stepId: 'sameUser' } });
+    // The first send may have gone through before the stop (and changed what the check reads): not sent again, and the
+    // run doesn't claim nothing happened.
+    const out = await h.exec();
+    expect(out).toMatchObject({
+      status: 'needs_review',
+      error: { code: 'needs_review', stepId: 'logOff', details: { check: { stepId: 'sameUser' } } },
+    });
+    expect(out.error!.message).toBe(
+      'Step logOff was in flight when the worker stopped, and the check sameUser before it no longer holds, so it was not sent again — check whether it took effect.',
+    );
     expect(h.outbound.calls.map((c) => c.call.method)).toEqual(['GET']);
-    expect(h.record('logOff')).toMatchObject({ status: 'retried', error: { code: 'interrupted' } });
+    expect(h.record('logOff')).toMatchObject({ status: 'needs_review', error: { code: 'needs_review' } });
+    expect(h.record('sameUser')).toMatchObject({ status: 'failed', attempt: 2 });
   });
 
   it('writes already done are never sent again, and the reads before them are not read again', async () => {

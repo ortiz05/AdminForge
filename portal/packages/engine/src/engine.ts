@@ -1265,6 +1265,29 @@ class Execution {
         throw err;
       }
       if (stop) {
+        // In flight when the worker stopped: the first send may have gone through (and changed what the check read), so
+        // the run doesn't claim nothing happened — someone checks the target.
+        if (
+          stop.kind === 'fail' &&
+          a.existing?.status === 'retried' &&
+          a.existing.error?.code === 'interrupted'
+        ) {
+          const error: RunError = {
+            code: 'needs_review',
+            message: `Step ${a.stepId} was in flight when the worker stopped, and ${stop.error.stepId ? `the check ${stop.error.stepId}` : 'a check'} before it no longer holds, so it was not sent again — check whether it took effect.`,
+            stepId: a.stepId,
+            path,
+            details: {
+              check: {
+                stepId: stop.error.stepId ?? null,
+                code: stop.error.code,
+                message: stop.error.message,
+              },
+            },
+          };
+          await this.close(a.existing, frame.actor, { status: 'needs_review', error });
+          return { kind: 'flow', flow: { kind: 'fail', error, policy: 'fail', needsReview: true } };
+        }
         // Never sent: a write that waited for write access or a sign-in stops waiting.
         if (stop.kind === 'fail' && a.existing?.status === 'waiting')
           await this.close(a.existing, frame.actor, { status: 'skipped', error: null });

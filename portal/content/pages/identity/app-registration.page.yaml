@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.app-registration
-version: 1.0.0
+version: 1.1.0
 title: App registration
 summary: One app registration — credentials and expiry, federated credentials, API permissions, redirect URIs, owners and its enterprise app.
 owner: identity-team
 tags: [identity, apps, credentials]
 template: entity
+entity: app
 requires:
   portalRoles: [Portal.Reader]
   scopes:

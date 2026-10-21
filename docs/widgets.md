@@ -272,3 +272,7 @@ everything pages through the server (`paging: cursor`) or counts at the source (
   entity page's widgets (and KPI strips) keep their `span`s and columns once the drawer is at least 56rem wide
   (container query) and stack below that;
 - the playbook drawer: `playbook=<key>&inputs=<base64url JSON>` or, for bulk actions, `&items=<base64url JSON array>` (one inputs object per selected row; see `apps/web/src/playbooks/url.ts`).
+
+An entity page says what it shows with `entity: user|group|device|app|resource|subscription` (and takes the object's
+id as its `id` param): the command palette opens search results of that kind on it (`/p/<key>?id=<object id>`).
+One page per kind; a kind no page declares links to the Microsoft admin centre instead.

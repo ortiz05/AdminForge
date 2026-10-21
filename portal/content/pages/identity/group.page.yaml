@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.group
-version: 1.3.0
+version: 1.4.0
 title: Group
 summary: One group — properties, members (add/remove in bulk), owners, nesting, app assignments and group-based licensing.
 owner: identity-team
 tags: [identity, groups]
 template: entity
+entity: group
 requires:
   portalRoles: [Portal.Reader]
   scopes:

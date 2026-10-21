@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Identifier, NavPlacement, Template, envelopeShape } from './common';
 import { Datasources } from './datasource';
-import { Params } from './params';
+import { EntityKind, Params } from './params';
 import { PageAction, WidgetBlock } from './widgets';
 
 /**
@@ -288,13 +288,31 @@ function checkPage(
     });
 }
 
+/**
+ * A page that declares `entity` is where that kind of object opens: the command palette links a user, group, device,
+ * app or Azure resource it finds to the page declaring that kind, with the object id as the `id` param (design
+ * review D-08; one page per kind — `tests/content` holds it). Without a declaration the palette deep-links to the
+ * Microsoft admin centre.
+ */
+function checkEntity(def: { entity?: EntityKind; params?: Params }, ctx: z.RefinementCtx) {
+  if (def.entity && !def.params?.id)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['entity'],
+      message: `A page that shows a ${def.entity} takes the object's id: declare an \`id\` param (the palette opens it with ?id=…).`,
+    });
+}
+
 export const Page = z
   .strictObject({
     kind: z.literal('page'),
     ...pageShape,
     template: z.enum(['list-detail', 'entity', 'dashboard', 'settings']),
+    /** The kind of object this page shows; the command palette opens that kind's search results here (`?id=`). */
+    entity: EntityKind.optional(),
   })
-  .superRefine(checkPage);
+  .superRefine(checkPage)
+  .superRefine(checkEntity);
 export type Page = z.infer<typeof Page>;
 
 export const Dashboard = z

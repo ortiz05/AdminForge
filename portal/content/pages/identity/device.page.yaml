@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.device
-version: 1.0.0
+version: 1.1.0
 title: Device
 summary: One Microsoft Entra device — properties, owner and users, group memberships, BitLocker key escrow and the matching Intune record.
 owner: identity-team
 tags: [identity, devices]
 template: entity
+entity: device
 requires:
   portalRoles: [Portal.Reader]
   scopes:

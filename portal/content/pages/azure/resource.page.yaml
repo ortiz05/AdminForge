@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.resource
-version: 1.3.0
+version: 1.4.0
 title: Azure resource
 summary: One Azure resource or resource group — properties, tags, who has access and recent activity.
 owner: azure-team
 tags: [azure, inventory, rbac, activity-log]
 template: entity
+entity: resource
 requires:
   portalRoles: [Portal.Reader]
   scopes:

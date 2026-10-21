@@ -4,6 +4,7 @@ version: 1.0.0
 title: User
 owner: identity-team
 template: entity
+entity: user
 params:
   id: { type: guid, required: true, hidden: true }
 datasources:

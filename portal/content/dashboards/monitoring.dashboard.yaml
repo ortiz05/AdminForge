@@ -1,12 +1,13 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: automation.monitoring
-version: 1.3.0
+version: 1.3.1
 title: Synthetic monitoring
 summary: >-
-  Retired — Synthetic monitoring (/monitoring) shows every probe by service, with its history, what it found and what
-  to do, and each navigation section shows its own checks' status. Latest result and recent trend of every synthetic
-  probe the scheduler runs as the automation identity, one panel per service.
+  Retired — replaced by the Synthetic monitoring screen (/monitoring), which shows every probe by service with its
+  history, what it found and what to do; each navigation section shows its own checks' status. This dashboard showed
+  the latest result and recent trend of every synthetic probe the scheduler runs as the automation identity, one panel
+  per service.
 # Retired 2026-10-21 (platform review B-3): it duplicated /monitoring in Automation. To bring it back, set
 # `status: active`, bump `version` and give it a `nav` entry that doesn't repeat Synthetic monitoring.
 status: retired

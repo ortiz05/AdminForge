@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.token-exchange
-version: 1.0.4
+version: 1.0.5
 title: Token acquisition — Exchange Online
 summary: >-
   Acquires an app-only token for Exchange Online as the automation identity (certificate or secret from local
@@ -13,7 +13,7 @@ group: platform
 remedy: >-
   The automation identity couldn't get a token for Exchange Online, so every schedule and probe that uses Exchange
   Online fails until it can. Usually its certificate expired or was replaced, or admin consent was removed. An
-  AdminForge administrator checks the automation identity’s provisioning (its certificate or secret, and admin consent)
+  AdminForge administrator checks the automation identity's provisioning (its certificate or secret, and admin consent)
   and renews what is missing (docs/operations.md › Secret and key rotation).
 check:
   kind: tokenAcquisition

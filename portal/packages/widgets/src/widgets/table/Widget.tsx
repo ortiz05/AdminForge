@@ -8,7 +8,6 @@ import {
   type RowAction,
 } from '@adminforge/schemas';
 import {
-  ArrowSquareOutIcon,
   Button,
   DataTable,
   DotsThreeVerticalIcon,
@@ -29,7 +28,7 @@ import {
   type DataTableView,
   type TableDensity,
 } from '@adminforge/ui';
-import { followHref, isExternal, launchPlaybook, playbookLabel } from '../../lib/actions';
+import { ActionMenuItem, PlaybookButton, followHref, launchPlaybook } from '../../lib/actions';
 import { evaluateTemplate, tryResolveSync, useWhen } from '../../lib/expr';
 import { formatBytes, formatDate, formatPercentValue } from '../../lib/format';
 import { asRows, getPath } from '../../lib/path';
@@ -113,7 +112,8 @@ function LinkCell({ col, row, runtime }: { col: TableColumnConfig; row: Row; run
       </button>
     );
   }
-  if (isExternal(text) && safeUrl(text))
+  // A URL value is a link only when it leaves the portal by the shared rule (in-app targets come from content).
+  if (safeUrl(text)?.external)
     return (
       <a href={text} target="_blank" rel="noreferrer" className={cls}>
         {text}
@@ -264,7 +264,10 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
   }
 }
 
-/** One menu per row: the row's actions whose `when` holds, evaluated when the menu opens. */
+/**
+ * One menu per row: the row's actions whose `when` holds, evaluated when the menu opens. Each item is the shared
+ * `ActionMenuItem` (write lock or ember dot, safe links, "opens in a new tab" from the evaluated target).
+ */
 function RowActionsMenu({
   row,
   actions,
@@ -277,7 +280,8 @@ function RowActionsMenu({
   label: string;
 }) {
   const [visible, setVisible] = useState<RowAction[] | null>(null);
-  const scope = { ...runtime.scope, row };
+  // One scope per row and page scope: the items evaluate their targets against it.
+  const scope = useMemo(() => ({ ...runtime.scope, row }), [runtime.scope, row]);
   const onOpenChange = (open: boolean) => {
     if (!open) return;
     setVisible(null);
@@ -291,13 +295,10 @@ function RowActionsMenu({
       ),
     ).then((flags) => setVisible(actions.filter((_, i) => flags[i])));
   };
-  const run = (a: RowAction) => {
+  const run = (a: RowAction, href: string | undefined) => {
     if (a.playbook) return void launchPlaybook(runtime, a.playbook, a.inputs, scope);
-    if (a.href)
-      void evaluateTemplate<unknown>(a.href, scope).then((href) => {
-        // Templated from the row: only safe targets are followed (never javascript:, //host or /\host).
-        followHref(runtime, href);
-      });
+    // `href` is the evaluated, safe target (ActionMenuItem); followHref checks it again and ignores anything else.
+    if (a.href) followHref(runtime, href);
   };
   return (
     <Menu onOpenChange={onOpenChange}>
@@ -312,21 +313,15 @@ function RowActionsMenu({
         ) : visible.length === 0 ? (
           <MenuItem disabled>No actions apply to this row</MenuItem>
         ) : (
-          visible.map((a, i) => {
-            const external = Boolean(a.href && /^https?:/i.test(a.href));
-            return (
-              <MenuItem
-                key={`${a.playbook ?? a.href}-${i}`}
-                icon={a.icon ? <Icon name={a.icon} size={15} /> : undefined}
-                onSelect={() => run(a)}
-                shortcut={
-                  external ? <ArrowSquareOutIcon size={12} aria-label="Opens in a new tab" /> : undefined
-                }
-              >
-                {a.label ?? (a.playbook ? playbookLabel(a.playbook) : 'Open link')}
-              </MenuItem>
-            );
-          })
+          visible.map((a, i) => (
+            <ActionMenuItem
+              key={`${a.playbook ?? a.href}-${i}`}
+              action={a}
+              scope={scope}
+              runtime={runtime}
+              onRun={(href) => run(a, href)}
+            />
+          ))
         )}
       </MenuContent>
     </Menu>
@@ -373,19 +368,21 @@ function BulkActionButton({
       setBusy(false);
     }
   };
+  // A write playbook shows the write lock or the ember dot like every content action; too many rows wins (inert).
   return (
-    <Button
+    <PlaybookButton
+      runtime={runtime}
+      playbook={action.playbook}
       size="sm"
-      intent="secondary"
+      icon={action.icon && <Icon name={action.icon} size={14} />}
       pending={busy}
       locked={
         tooMany ? `Select at most ${formatNumber(max)} rows for ${action.label.toLowerCase()}.` : undefined
       }
       onClick={() => void launch()}
     >
-      {action.icon && <Icon name={action.icon} size={14} />}
       {action.label}
-    </Button>
+    </PlaybookButton>
   );
 }
 

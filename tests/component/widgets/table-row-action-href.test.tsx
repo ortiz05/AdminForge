@@ -34,7 +34,8 @@ async function openFor(name: string) {
   const { runtime, navigate } = spyRuntime();
   renderWidget(Table, config, ready(ROWS), runtime);
   await user.click(screen.getByRole('button', { name: `Actions for ${name}` }));
-  await user.click(await screen.findByRole('menuitem', { name: 'Open' }));
+  // An external target's item also says it opens a new tab ("Open (opens in a new tab)").
+  await user.click(await screen.findByRole('menuitem', { name: /^Open( \(opens in a new tab\))?$/ }));
   // The href is evaluated asynchronously: let it settle.
   await new Promise((r) => setTimeout(r, 30));
   return { open, navigate };

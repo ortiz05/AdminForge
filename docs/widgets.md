@@ -121,6 +121,11 @@ Table options:
 - `emptyText`: the empty-state title (default "Nothing to show"); a block-level `empty: { title, body }` wins over it.
 - `rowKey` (row id path, default `id`), `rowActions`, `bulkActions` (`forEach.inputs`, `concurrency` 1–10, default 5;
   `maxItems` default 100), `inspect`, plus `sort` and `maxHeight` (see Optional keys below).
+- Row and bulk actions show write access like every content action (see actionBar): a write playbook carries the lock
+  glyph and "Arm write access to run this" while unarmed (still clickable, to preview) and the ember dot once armed. A
+  row action's `href` is judged once evaluated: a safe external address is marked as opening in a new tab, and one
+  that isn't safe is a disabled item that says why. A bulk action over its `maxItems` stays inert and says how many
+  rows it takes.
 
 ## chart
 

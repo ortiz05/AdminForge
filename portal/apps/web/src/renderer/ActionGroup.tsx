@@ -1,28 +1,15 @@
-import { useContext, useEffect, useId, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Playbook, RowAction } from '@adminforge/schemas';
 import type { Scope } from '@adminforge/expressions';
-import {
-  ArrowSquareOutIcon,
-  Button,
-  CaretDownIcon,
-  Icon,
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuTrigger,
-  safeUrl,
-} from '@adminforge/ui';
+import { Button, CaretDownIcon, Menu, MenuContent, MenuTrigger } from '@adminforge/ui';
 import {
   ActionButton,
-  WriteLockGlyph,
+  ActionMenuItem,
+  actionLabel,
   evaluateTemplate,
   followHref,
   launchPlaybook,
-  playbookLabel,
-  UNSAFE_LINK_REASON,
-  usePlaybookWriteState,
-  useTemplate,
   type PlaybookWriteState,
   type WidgetRuntime,
 } from '@adminforge/widgets';
@@ -72,57 +59,6 @@ function useVisibleActions(actions: readonly RowAction[], scope: Scope): RowActi
   return state?.for === key ? state.visible : undefined;
 }
 
-const labelOf = (a: RowAction) => a.label ?? (a.playbook ? playbookLabel(a.playbook) : 'Open link');
-
-/**
- * One action under "More actions". A link whose target isn't safe (javascript:, //host, /\host, …) shows as a
- * disabled item — text that never navigates; a write playbook shows the lock glyph and why while unarmed.
- */
-function MoreItem({
-  action,
-  scope,
-  runtime,
-  onRun,
-}: {
-  action: RowAction;
-  scope: Scope;
-  runtime: WidgetRuntime;
-  onRun: (href: string | undefined) => void;
-}) {
-  const href = useTemplate<string>(action.href, scope, Boolean(action.href));
-  const write = usePlaybookWriteState(runtime, action.playbook);
-  const hintId = useId();
-  const safe = action.href && typeof href.value === 'string' ? safeUrl(href.value) : null;
-  const unsafe = Boolean(action.href) && !safe;
-  const lockHint = write && !write.armed ? write.hint : undefined;
-  const description = lockHint ?? (unsafe ? UNSAFE_LINK_REASON : undefined);
-  return (
-    <MenuItem
-      icon={action.icon ? <Icon name={action.icon} size={15} /> : undefined}
-      disabled={unsafe}
-      title={unsafe ? UNSAFE_LINK_REASON : undefined}
-      aria-describedby={description ? hintId : undefined}
-      shortcut={
-        safe?.external ? (
-          <ArrowSquareOutIcon size={12} aria-label="Opens in a new tab" />
-        ) : lockHint ? (
-          <WriteLockGlyph size={12} />
-        ) : write?.armed ? (
-          <span className="af-armed-dot" aria-hidden />
-        ) : undefined
-      }
-      onSelect={() => onRun(safe?.href)}
-    >
-      {labelOf(action)}
-      {description && (
-        <span id={hintId} hidden>
-          {description}
-        </span>
-      )}
-    </MenuItem>
-  );
-}
-
 /**
  * An entity's actions: the first few as buttons, the rest under "More actions" so a long list never crowds the
  * header (or the 460 px inspector). Playbooks open the playbook drawer; links open in the app or a new tab, and only
@@ -147,7 +83,7 @@ export function ActionGroup({
   const more = visible.slice(shown.length);
   const run = (a: RowAction, href: string | undefined) => {
     if (a.playbook) return void launchPlaybook(runtime, a.playbook, a.inputs, scope);
-    // `href` is the evaluated, safe target (MoreItem); followHref checks it again and ignores anything else.
+    // `href` is the evaluated, safe target (ActionMenuItem); followHref checks it again and ignores anything else.
     if (a.href) followHref(runtime, href);
   };
   return (
@@ -155,7 +91,7 @@ export function ActionGroup({
       {shown.map((a, i) => (
         <ActionButton
           key={`${a.playbook ?? a.href}-${i}`}
-          action={{ ...a, when: undefined, label: labelOf(a) }}
+          action={{ ...a, when: undefined, label: actionLabel(a) }}
           scope={scope}
           runtime={runtime}
           size={size}
@@ -171,7 +107,7 @@ export function ActionGroup({
           </MenuTrigger>
           <MenuContent className="max-h-(--radix-dropdown-menu-content-available-height) min-w-60 overflow-y-auto">
             {more.map((a, i) => (
-              <MoreItem
+              <ActionMenuItem
                 key={`${a.playbook ?? a.href}-${i}`}
                 action={a}
                 scope={scope}

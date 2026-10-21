@@ -21,13 +21,18 @@ export {
 // Building blocks the page renderer shares with widgets.
 export {
   ActionButton,
+  ActionMenuItem,
+  actionLabel,
+  ArmedDot,
   followHref,
   launchPlaybook,
+  PlaybookButton,
   playbookLabel,
-  isExternal,
   usePlaybookWriteState,
+  useWriteLock,
   UNSAFE_LINK_REASON,
   WriteLockGlyph,
+  type WriteLock,
 } from './lib/actions';
 export {
   evaluateTemplate,

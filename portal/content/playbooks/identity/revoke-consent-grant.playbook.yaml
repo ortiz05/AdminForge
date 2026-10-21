@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.revoke-consent-grant
-version: 1.1.0
+version: 1.2.0
 title: Revoke delegated permission grant
 summary: >-
   Deletes one delegated permission grant (OAuth consent) of an enterprise app — a user's own consent or an admin
@@ -16,11 +16,15 @@ requires:
   scopes:
     graph: [DelegatedPermissionGrant.ReadWrite.All, Directory.Read.All, Application.Read.All]
   entraRoles: [Cloud Application Administrator]
+# Typed: high risk (an admin consent stops the app for everyone). The person types the app's name, which they see in
+# the plan, so a revoke never goes to the wrong app on one click.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.client.output.displayName }
   message: >-
     ${ 'Revoke the access of ' & steps.client.output.displayName & ' to ' & steps.resource.output.displayName & ' (' & steps.grant.output.scope & ') for '
-       & (steps.grant.output.consentType = 'AllPrincipals' ? 'every user in the tenant? Features that use these permissions stop working for everyone.' : 'this user?') }
+       & (steps.grant.output.consentType = 'AllPrincipals' ? 'every user in the tenant? Features that use these permissions stop working for everyone.' : 'this user?')
+       & ' Type the app name to confirm.' }
 approval:
   required: false
 
@@ -96,7 +100,6 @@ outputs:
        & ' Existing tokens stay valid until they expire (about an hour).' }
 
 tests:
-  # The AdminForge-app guard reads env (AF_*_CLIENT_ID), which playbook tests can't set yet (docs/backlog.md).
   - name: plans revoking an admin consent for every user
     inputs: { grantId: grant-legacy-all, reason: Retired integration still holds admin consent }
     mocks:
@@ -117,3 +120,17 @@ tests:
       status: succeeded
       plan: [revoke]
       outputs: { summary: PDF Converter Online no longer has Mail.Read offline_access User.Read on Microsoft Graph for that user. Existing tokens stay valid until they expire (about an hour). }
+  - name: refuses a grant of AdminForge's own apps (per-test env stands in for the installation's client ids)
+    inputs: { grantId: grant-adminforge-read, reason: Clean-up of old consent grants }
+    env: { AF_READ_CLIENT_ID: 00000000-0000-4000-8001-00000000040b }
+    mocks:
+      grant: { id: grant-adminforge-read, clientId: 00000000-0000-4000-8000-00000000040b, consentType: AllPrincipals, resourceId: 00000000-0000-4000-8000-000000000409, scope: User.Read Directory.Read.All }
+      client: { id: 00000000-0000-4000-8000-00000000040b, appId: 00000000-0000-4000-8001-00000000040b, displayName: AdminForge Read }
+    expect: { status: failed, failedStep: notPortalApp }
+  - name: refuses a grant of a protected app (AF_PROTECTED_APP_IDS)
+    inputs: { grantId: grant-provisioner, reason: Clean-up of old consent grants }
+    env: { AF_PROTECTED_APP_IDS: "00000000-0000-4000-8001-0000000000ff, 00000000-0000-4000-8001-0000000003ff" }
+    mocks:
+      grant: { id: grant-provisioner, clientId: 00000000-0000-4000-8000-000000000301, consentType: AllPrincipals, resourceId: 00000000-0000-4000-8000-000000000409, scope: Application.Read.All }
+      client: { id: 00000000-0000-4000-8000-000000000301, appId: 00000000-0000-4000-8001-0000000003ff, displayName: Provisioner }
+    expect: { status: failed, failedStep: notPortalApp }

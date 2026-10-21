@@ -9,7 +9,7 @@ import { openOneShot, PROBE_HEADER, probeLine, probeSummary, scheduleRunLines } 
  *   node dist/main.js --once                run every probe once and print statuses (no tenant data is printed)
  *   node dist/main.js --probe <key> …       run the named probes once (one --probe per key)
  *   node dist/main.js --schedule <key>      run one schedule now (as a manual run, audited) and exit
- *   add --no-store to one-shots to skip writing probe_results (no database: no change is made either)
+ *   add --no-store to probe one-shots to skip writing probe_results (no database: no change is made either)
  *
  * A `--schedule` run that starts a playbook queues it; the API's run worker picks it up. The one-shots are
  * `one-shot.ts` (shared with tests/live/scripts/run-schedule-once.ts). API modules come only from

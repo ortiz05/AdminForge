@@ -32,9 +32,11 @@ pnpm --filter @adminforge/scheduler typecheck
 
 Synthetic transactions (ADR-015) are a one-shot's only writes, and they follow the emergency stop: none runs while
 automation is paused (a `--schedule` run is recorded as skipped, as the scheduler records one), changes paused refuses
-their writes, and each one that acted is audited as a write (`probe.run`, or `schedule.run` for a schedule). Without
-the database (`--no-store`) a one-shot can read neither switch nor keep an audit record, so every declared write it
-would send is refused (`database_required`).
+their writes, and each one that acted is audited as a write (`probe.run`, or `schedule.run` for a schedule). Like
+**Run now**, `--schedule` refuses a turned-off schedule that runs them (`schedule_disabled`); `--probe` runs them, to
+check them before a schedule is turned on. Without the database (`--no-store`) a one-shot can read neither switch nor
+keep an audit record: every declared write its probes would send is refused, and `--schedule` runs only on fixture
+data (`database_required`).
 
 In the pod the same flags run the bundle:
 `kubectl -n adminforge exec deploy/adminforge -c api -- node portal/apps/scheduler/dist/main.js --once`.

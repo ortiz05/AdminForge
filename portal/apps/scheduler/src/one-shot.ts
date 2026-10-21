@@ -19,7 +19,7 @@ import {
   type SchedulerOptions,
   type SchedulesModule,
 } from '@adminforge/api/tooling/scheduler';
-import { PROBE_METRICS, TRANSACTION_KINDS, type Probe } from '@adminforge/schemas';
+import { PROBE_METRICS, TRANSACTION_KINDS, type Probe, type Schedule } from '@adminforge/schemas';
 
 /**
  * One-shot runs as the automation identity: one schedule now, or probes now, without the leader lock — and the
@@ -35,8 +35,9 @@ import { PROBE_METRICS, TRANSACTION_KINDS, type Probe } from '@adminforge/schema
  *
  * Synthetic transactions (ADR-015) are the one-shots' only writes. They follow the emergency stop: none runs while
  * automation is paused, and changes paused refuses their writes (the outbound executor). One that acted is audited as a
- * write, as the scheduler audits a run with them. Without the database a one-shot can read neither switch nor keep an
- * audit record, so every declared write it would send is refused (`database_required`, security review L1).
+ * write, as the scheduler audits a run with them, and a schedule turned off doesn't run them. Without the database a
+ * one-shot can read neither switch nor keep an audit record, so every declared write its probes and jobs would send is
+ * refused, and a schedule runs only on fixture data (`database_required`, security review L1).
  */
 
 /** The log the one-shot reports through (the service's JSON log, or the live script's masked stderr). */
@@ -49,8 +50,8 @@ export interface OneShotLog {
 export interface OneShotOptions {
   log: OneShotLog;
   /**
-   * No database: probe results are not stored, schedules run on in-memory state, and no change is made (without the
-   * database the emergency stop can't be read nor an audit record kept).
+   * No database: probe results are not stored and no change is made (without the database the emergency stop can't be
+   * read nor an audit record kept); a schedule runs only on fixture data (in-memory state, nothing delivered for real).
    */
   noStore?: boolean;
   /**
@@ -108,12 +109,22 @@ export function openOneShot(config: Config, opts: OneShotOptions): OneShot {
     ctx,
     runs,
     schedules,
-    runSchedule: (key, requestedBy) =>
-      runScheduleOnce(
+    runSchedule: async (key, requestedBy) => {
+      // Without the database a run, its audit record and the emergency stop exist in this process only: with live data
+      // it would deliver tenant data unrecorded. Fixture data (development, tests) stays offline.
+      if (!ctx.database && ctx.config.DATA_MODE === 'live')
+        throw new AppError(
+          409,
+          'database_required',
+          'A schedule runs with the database: without it this one-shot can’t read the emergency stop or record the run.',
+          { hint: 'Run it without --no-store (it needs DATABASE_PATH).' },
+        );
+      return runScheduleOnce(
         { ctx, schedules, log, automationPaused, ...(delivery ? { delivery } : {}) },
         key,
         requestedBy,
-      ),
+      );
+    },
     runProbes: (keys, requestedBy) =>
       runProbesOnce(
         {
@@ -156,6 +167,7 @@ export async function runScheduleOnce(
   key: string,
   requestedBy: string,
 ): Promise<ScheduleRunRow> {
+  await refuseTurnedOffTransactions(deps, key);
   const scheduler = new Scheduler({
     store: deps.schedules.store,
     definitions: deps.ctx.definitions,
@@ -168,6 +180,37 @@ export async function runScheduleOnce(
     ...(deps.automationPaused ? { automationPaused: deps.automationPaused } : {}),
   });
   return scheduler.runOnce(key, requestedBy);
+}
+
+/**
+ * A schedule turned off doesn't run its synthetic transactions on demand (ADR-015), as **Run now** refuses it: turning
+ * it off — say, because a test mailbox turned out to be in use — means it. A schedule not yet in the store counts as
+ * off unless its content says `enabled: true`. `--probe` still runs them, to check them before turning one on.
+ */
+async function refuseTurnedOffTransactions(deps: ScheduleOnceDeps, key: string): Promise<void> {
+  const row = await deps.schedules.store.getSchedule(key);
+  const def =
+    row?.definition ??
+    ((await deps.ctx.definitions.list('schedule')).find((r) => r.key === key)?.def as Schedule | undefined);
+  const enabled = row ? row.enabled : def?.enabled === true;
+  if (!def || enabled || def.job.kind !== 'probe') return;
+  const job = def.job;
+  const probes = (await deps.ctx.definitions.list('probe')).filter((r) =>
+    job.ref
+      ? r.key === job.ref
+      : job.refs
+        ? job.refs.includes(r.key)
+        : (job.select?.tags ?? []).every((t) => (r.def as Probe).tags?.includes(t)),
+  );
+  if (probes.some((r) => isTransaction(r.def as Probe)))
+    throw new AppError(
+      409,
+      'schedule_disabled',
+      'This schedule runs synthetic transactions, which send, upload or create on test objects, and it is turned off, so it can’t run now.',
+      {
+        hint: 'Turn it on first, once its test objects are set up (docs/operations.md › Synthetic transactions).',
+      },
+    );
 }
 
 export interface ProbesOnceDeps {

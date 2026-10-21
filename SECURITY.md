@@ -291,7 +291,8 @@ the reason.
   write (request policy, emergency stop, protected-object guard), reads stay read-only, and they refuse a person's
   grant. A run in which a transaction acted is audited as a write (`schedule.run`, `mode: write`, each transaction's
   outcome code), and so is each one a scheduler one-shot (`--probe`, `--once`) ran (`probe.run`); one-shots run none
-  while automation is paused, and without the database (`--no-store`) refuse every write, since they can neither read
+  while automation is paused, `--schedule` refuses a turned-off schedule that runs them, and without the database
+  (`--no-store`) a one-shot refuses every write and `--schedule` runs only on fixture data, since it can neither read
   the emergency stop nor keep an audit record. **Run now** is refused while their schedule is turned off. Their reach
   is the administrator's scoping of the identity to the test objects: Exchange RBAC for Applications on the test
   mailbox, Sites.Selected with write on one site, a Teams application access policy for one test user

@@ -154,10 +154,10 @@ describe('openOneShot', () => {
       'probes/mail.probe.yaml',
       'kind: probe\nid: probes.mail\nversion: 1.0.0\ntitle: Mail flow\nowner: test-team\ncheck:\n  kind: mailFlow\n  from: ${ env.AF_MAIL_SENDER }\n  to: ${ env.AF_SYNTHETIC_MAILBOX }\ntimeoutMs: 110000\n',
     );
-    write(
-      'schedules/sweep.schedule.yaml',
-      'kind: schedule\nid: schedules.sweep\nversion: 1.0.0\ntitle: Sweep\nowner: test-team\ncron: "0 * * * *"\nenabled: false\njob:\n  kind: probe\n  ref: probes.mail\n',
-    );
+    const sweep = (id: string, enabled: boolean) =>
+      `kind: schedule\nid: ${id}\nversion: 1.0.0\ntitle: Sweep\nowner: test-team\ncron: "0 * * * *"\nenabled: ${enabled}\njob:\n  kind: probe\n  ref: probes.mail\n`;
+    write('schedules/sweep.schedule.yaml', sweep('schedules.sweep', true));
+    write('schedules/off.schedule.yaml', sweep('schedules.off', false));
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -202,6 +202,53 @@ describe('openOneShot', () => {
       expect(probes.results[0]?.outcome.code).toBe('automation_paused');
       const run = await oneShot.runSchedule('schedules.sweep', 'test:operator');
       expect(run).toMatchObject({ status: 'skipped', error: { code: 'automation_paused' } });
+    } finally {
+      await oneShot.close();
+    }
+  });
+
+  it('like Run now, --schedule refuses a turned-off schedule that runs synthetic transactions', async () => {
+    const oneShot = openOneShot(config({ DATABASE_PATH: await testDatabasePath() }), { log: silent });
+    try {
+      // Not in the store yet: the content's enabled: false counts.
+      await expect(oneShot.runSchedule('schedules.off', 'test:operator')).rejects.toMatchObject({
+        code: 'schedule_disabled',
+      });
+      // Turned off in the store (an administrator's choice), whatever the content says.
+      expect((await oneShot.runSchedule('schedules.sweep', 'test:operator')).status).toBe('succeeded');
+      const row = (await oneShot.schedules.store.getSchedule('schedules.sweep'))!;
+      await oneShot.schedules.store.updateSchedule(row.id, { enabled: false });
+      await expect(oneShot.runSchedule('schedules.sweep', 'test:operator')).rejects.toMatchObject({
+        code: 'schedule_disabled',
+      });
+    } finally {
+      await oneShot.close();
+    }
+  });
+
+  it('without the database, --schedule with live data is refused (no emergency stop, no record)', async () => {
+    const live = loadConfig({
+      NODE_ENV: 'test',
+      PUBLIC_BASE_URL: 'http://localhost:5173',
+      AUTH_MODE: 'entra',
+      DATA_MODE: 'live',
+      DATABASE_PATH: '/nonexistent/adminforge-test-unused.db',
+      TOKEN_CACHE_KEY: Buffer.alloc(32, 7).toString('base64'),
+      AF_TENANT_ID: '11111111-2222-4333-8444-555555555555',
+      AF_READ_CLIENT_ID: '22222222-3333-4444-8555-666666666666',
+      AF_READ_CLIENT_SECRET: 'synthetic-read-secret',
+      AF_WRITE_CLIENT_ID: '33333333-4444-4555-8666-777777777777',
+      AF_WRITE_CLIENT_SECRET: 'synthetic-write-secret',
+      CONTENT_DIR: path.join(dir, 'content'),
+      CONTENT_WATCH: 'false',
+      ADMINFORGE_ARTIFACTS_DIR: path.join(dir, 'artifacts'),
+    });
+    const oneShot = openOneShot(live, { log: silent, noStore: true });
+    try {
+      expect(oneShot.ctx.database).toBeNull();
+      await expect(oneShot.runSchedule('schedules.sweep', 'test:operator')).rejects.toMatchObject({
+        code: 'database_required',
+      });
     } finally {
       await oneShot.close();
     }

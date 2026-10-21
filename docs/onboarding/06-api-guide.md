@@ -70,7 +70,10 @@ api.put('/admin/emergency', async (request) => {
 ### 4. Errors
 
 - `throw new AppError(status, code, message, { hint, detail? })`. The central handler turns it into `ApiErrorBody`
-  with the correlation id; never build error JSON by hand.
+  with the correlation id; never build error JSON by hand. Common codes get a default hint (`DEFAULT_HINTS` in
+  `errors.ts`) when you give none.
+- `parseBody` words zod's issues in plain phrases that name the field ("format must be csv or xlsx"); keep a schema's
+  own message for anything special.
 - Status codes: 200/201 with the resource, 202 when work was queued or needs a second person, 204 for deletes; 400
   invalid input, 401 no session, 403 role/policy/licence, 404 unknown or not visible to this caller, 409 state
   conflict (concurrent change, wrong state, content-owned), 429 limits, 502/504 Microsoft failed or didn't answer,

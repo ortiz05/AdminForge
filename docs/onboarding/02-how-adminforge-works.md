@@ -69,13 +69,15 @@ licences, builds each datasource request from content with safely quoted paramet
 
 **…an engineer changes something.** They arm write access (step-up sign-in to the Write app), open a playbook, see a
 **dry-run preview** of exactly what will change, confirm, and the API enqueues a run. The worker executes the steps
-with the engineer's own tokens; risky playbooks need typed confirmation or a second person's **approval**. Everything
-is audited with the person, the identity and Microsoft's request id. AdminForge's own apps, role groups and
-protected accounts are refused centrally, and an administrator can pause all changes with the **emergency stop**.
+with the engineer's own tokens (a restart doesn't end a run: it stops at a checkpoint and carries on afterwards);
+risky playbooks need typed confirmation or a second person's **approval**. Everything is audited with the person, the
+identity and Microsoft's request id. AdminForge's own apps, role groups and protected accounts are refused centrally,
+and an administrator can pause all changes with the **emergency stop**.
 
-**…a schedule fires.** The scheduler (holding the scheduler lease) runs it as the automation identity: a probe sweep, a
-report export (file, email, Teams), a content-health check, a news collection, or a playbook queued for the worker.
-Report schedules can also be created in the portal by Operators; anything that writes needs a second person's
+**…a schedule fires.** The scheduler (holding the scheduler lease) runs it as the automation identity: a probe sweep,
+a report export (file, email, Teams), a content-health check, a news collection, or a playbook queued for the worker.
+A time missed while AdminForge was down for over an hour is recorded as a skipped run (`schedule_missed`), not run
+late. Report schedules can also be created in the portal by Operators; anything that writes needs a second person's
 approval before it is enabled. Probe results feed **Synthetic monitoring**, grouped by service; a check's detail says
 what it found (the rows, for Operators), what to do and where to act.
 

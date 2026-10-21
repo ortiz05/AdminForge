@@ -28,9 +28,10 @@ answers `ok` for `db`, `worker` and `scheduler`, no new errors in the container 
 
 On your machine the CLI talks to your **dev** database file. The cluster's database is on a volume only the pod can
 mount, so anything aimed at it runs in the pod with `kubectl exec`. `publish` re-runs `validate` and the playbook tests
-and refuses unreviewed content — in the pod, an image `build-images.sh` didn't record as built from a commit merged to
-`origin/main` (as last fetched) with clean content. `--allow-unreviewed` exists for emergencies only; it is audited and must be followed
-by the reviewed change.
+and refuses unreviewed content — on your machine, content not committed and merged to `main` as origin has it now
+(`git ls-remote`); in the pod, an image `build-images.sh` didn't record as built from such a commit (it fetches `main`
+itself) with clean content. `--allow-unreviewed` exists for emergencies only; it is audited and must be followed by the
+reviewed change.
 
 An installation that ran a Postgres release moves its data once with `adminforge db import-postgres`
 ([Kubernetes → Moving the data](../../portal/deploy/kubernetes/README.md#moving-the-data-from-the-postgres-host-once)).
@@ -46,7 +47,9 @@ In the PR's **Risk and rollout** section (and the commit body):
   newer schema);
 - **new configuration keys** and their safe defaults;
 - **new permissions** (Graph/ARM scopes, app roles) and whether provisioning must run;
-- whether content must be **published**, the runner image rebuilt, or the pod restarted;
+- whether content must be **published**, the runner image rebuilt, or the pod restarted — and a bump of
+  `CONTENT_SCHEMA_VERSION`, after which `publish --dry-run` lists the rows published under the older version and they
+  are published again;
 - anything that switches something off by design (e.g. a new version of a playbook a write-capable schedule runs needs
   a second approval again);
 - how to undo it.

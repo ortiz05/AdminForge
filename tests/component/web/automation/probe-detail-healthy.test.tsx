@@ -108,7 +108,7 @@ describe('probe detail while healthy, and with little history', () => {
   it('one result is an empty state that says when the chart starts, not a one-point chart', async () => {
     const drawer = await openDetail(PROBES.healthy.title);
     expect(await within(drawer).findByText('Not enough results to chart yet')).toBeInTheDocument();
-    expect(within(drawer).getByText(/two results/)).toBeInTheDocument();
+    expect(within(drawer).getByText(/two measured results/)).toBeInTheDocument();
     expect(within(drawer).queryByRole('figure')).toBeNull();
   });
 

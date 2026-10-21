@@ -331,20 +331,40 @@ function WhatItChecks({ p, withLink }: { p: ProbeItem; withLink: boolean }) {
 /** Fewer results than this in the window: an empty state says so instead of a one-point chart. */
 const MIN_CHART_POINTS = 2;
 
-/** Why there's no history chart: no results in the window, a pass-or-fail check, or a single result so far. */
-function HistoryEmpty({ points, measured, ran }: { points: number; measured: number; ran: boolean }) {
+/**
+ * Why there's no history chart: no results in the window; a pass-or-fail check (no thresholds); results without a
+ * measurement (a failed run records none); or a single measured result so far.
+ */
+function HistoryEmpty({
+  points,
+  measured,
+  ran,
+  passFail,
+}: {
+  points: number;
+  measured: number;
+  ran: boolean;
+  passFail: boolean;
+}) {
   const [title, body] =
     points === 0
       ? [
           'No results in the last 24 hours',
-          ran ? 'The latest result is older than that.' : 'It hasn’t run yet: its sweep schedule runs it.',
+          ran
+            ? 'The latest result is older than that. Check its schedule under Schedules: it may be switched off.'
+            : 'It runs on its schedule; results appear here after the first run.',
         ]
-      : measured === 0
+      : measured === 0 && passFail
         ? ['Nothing to chart', 'This check passes or fails; it has no measurement to draw.']
-        : [
-            'Not enough results to chart yet',
-            'The chart starts once there are two results in the last 24 hours.',
-          ];
+        : measured === 0
+          ? [
+              'No measurements in the last 24 hours',
+              'Every result failed before it could measure; Recent problems lists them.',
+            ]
+          : [
+              'Not enough results to chart yet',
+              'The chart starts once there are two measured results in the last 24 hours.',
+            ];
   return (
     <EmptyState compact title={title}>
       {body}
@@ -412,23 +432,38 @@ function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; 
             ],
           ]}
         />
-        {q.isError ? (
-          <QueryError compact title="Results didn’t load" error={q.error} onRetry={() => void q.refetch()} />
-        ) : q.isPending && !p.series.length ? (
-          <Skeleton shape="block" className="h-56 w-full" />
-        ) : measured >= MIN_CHART_POINTS ? (
-          <Chart
-            title={`${p.title}, last 24 hours`}
-            kind="line"
-            height={220}
-            categoryLabel="Time (UTC)"
-            categories={points.map((x) => formatTimestamp(x.ts).slice(11, 16))}
-            series={[{ name: unit ? `Result (${unit})` : 'Result', data: points.map((x) => x.metric) }]}
-            valueFormat={(v) => formatMetric(v, unit)}
-          />
-        ) : (
-          <HistoryEmpty points={points.length} measured={measured} ran={!!p.latest} />
-        )}
+        <section aria-labelledby="probe-history" className="flex flex-col gap-2">
+          <h3 id="probe-history" className="af-eyebrow">
+            Last 24 hours
+          </h3>
+          {q.isError ? (
+            <QueryError
+              compact
+              title="Results didn’t load"
+              error={q.error}
+              onRetry={() => void q.refetch()}
+            />
+          ) : q.isPending && !p.series.length ? (
+            <Skeleton shape="block" className="h-56 w-full" />
+          ) : measured >= MIN_CHART_POINTS ? (
+            <Chart
+              title={`${p.title}, last 24 hours`}
+              kind="line"
+              height={220}
+              categoryLabel="Time (UTC)"
+              categories={points.map((x) => formatTimestamp(x.ts).slice(11, 16))}
+              series={[{ name: unit ? `Result (${unit})` : 'Result', data: points.map((x) => x.metric) }]}
+              valueFormat={(v) => formatMetric(v, unit)}
+            />
+          ) : (
+            <HistoryEmpty
+              points={points.length}
+              measured={measured}
+              ran={!!p.latest}
+              passFail={thresholdText(p) === null}
+            />
+          )}
+        </section>
         <section aria-label="Recent problems" className="flex flex-col gap-2">
           <h3 className="af-eyebrow">Recent problems</h3>
           {failures.length === 0 ? (

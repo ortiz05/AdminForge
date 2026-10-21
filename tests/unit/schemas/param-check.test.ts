@@ -93,7 +93,8 @@ describe('page params: one check for the page and the API', () => {
     ['since', 'today'],
     ['when', { from: '2026-10-01', to: '2026-10-02' }],
     ['id', '3f2a8c1e-5b7d-4e19-9a6c-2d8e4f1b9c1d'],
-    ['users', 'a,b'],
+    // Entity params take the ids they name (L3: entity-param-shapes.test.ts).
+    ['users', 'avery@example.com,3f2a8c1e-5b7d-4e19-9a6c-2d8e4f1b9c1d'],
   ])('%s = %j: both accept it', async (name, raw) => {
     // The page splits comma-separated ids from a hand-edited link; it sends the list.
     const sent = coerceParam(PARAMS[name]!, raw, NOW);

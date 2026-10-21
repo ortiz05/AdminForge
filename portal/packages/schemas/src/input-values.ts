@@ -6,6 +6,7 @@ import {
   HOSTNAME_RE,
   ISO_DURATION_RE,
   RELATIVE_DATE_RE,
+  expectedEntityId,
   hasControlChars,
   isoTime,
   resolveDate,
@@ -159,13 +160,8 @@ function checkEntity(p: Extract<Param, { type: EntityParamType }>, v: unknown): 
     if (typeof x !== 'string' || x.trim() === '' || x.length > 2048)
       return { error: `Expected a ${p.type} id.` };
     const s = x.trim();
-    if (p.type === 'subscription' && !GUID_RE.test(s)) return { error: 'Expected a subscription id (GUID).' };
-    if (p.type === 'resource' && !/^\/subscriptions\/[^/]+\//i.test(s))
-      return { error: 'Expected an Azure resource id (/subscriptions/…).' };
-    if ((p.type === 'group' || p.type === 'device' || p.type === 'app') && !GUID_RE.test(s))
-      return { error: `Expected a ${p.type} object id (GUID).` };
-    if (p.type === 'user' && !GUID_RE.test(s) && !EMAIL_RE.test(s))
-      return { error: 'Expected a user object id (GUID) or user principal name.' };
+    const want = expectedEntityId(p.type, s);
+    if (want) return { error: `Expected ${want}.` };
     return { value: GUID_RE.test(s) ? s.toLowerCase() : s };
   };
   if (!p.multiple) return one(v);

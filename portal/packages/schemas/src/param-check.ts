@@ -23,6 +23,24 @@ export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)
 export const RELATIVE_DATE_RE = /^(today|now|([+-])(\d+)([hdwmy]))$/;
 export const ISO_DURATION_RE = /^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/;
 const HTTP_URL_RE = /^https?:\/\/\S+$/;
+/** An Azure resource id: `/subscriptions/<id>/…` (a resource group, a resource, anything under a subscription). */
+const RESOURCE_ID_RE = /^\/subscriptions\/[^/]+\//i;
+
+/**
+ * What the value of an entity param — user, group, device, app, resource, subscription — must be, said after
+ * "Expected" or "must be" (`a group object id (GUID)`); undefined when the trimmed `id` is one. Page params and
+ * playbook inputs share it (security review L3): validation lets a whole request path come from one (S-13).
+ */
+export function expectedEntityId(type: string, id: string): string | undefined {
+  if (type === 'subscription') return GUID_RE.test(id) ? undefined : 'a subscription id (GUID)';
+  if (type === 'resource')
+    return RESOURCE_ID_RE.test(id) ? undefined : 'an Azure resource id (/subscriptions/…)';
+  if (type === 'user')
+    return GUID_RE.test(id) || EMAIL_RE.test(id)
+      ? undefined
+      : 'a user object id (GUID) or user principal name';
+  return GUID_RE.test(id) ? undefined : `${type === 'app' ? 'an' : 'a'} ${type} object id (GUID)`;
+}
 
 /** Longest text a page param takes unless it declares `maxLength`. */
 export const MAX_PARAM_STRING = MAX_PATTERN_INPUT;
@@ -194,14 +212,18 @@ export function checkParam(p: Param, v: unknown, now: Date): ParamCheck {
       if (typeof v !== 'string' || !GUID_RE.test(v.trim())) return { error: 'must be a GUID' };
       return { value: v.trim().toLowerCase() };
     default: {
-      // Entity pickers (user, group, device, app, resource, subscription): object ids or resource ids.
+      // Entity pickers (user, group, device, app, resource, subscription): the object or resource id each names, as
+      // for playbook inputs.
       if (!p.multiple && Array.isArray(v)) return { error: 'must be one value' };
       const list = Array.isArray(v) ? v : [v];
       const max = p.maxItems ?? MAX_PARAM_ITEMS;
       if (list.length > max) return { error: `must have at most ${max} items` };
-      for (const item of list)
+      for (const item of list) {
         if (typeof item !== 'string' || !item.trim() || item.length > 1024 || hasControlChars(item))
           return { error: 'must be an id' };
+        const want = expectedEntityId(p.type, item.trim());
+        if (want) return { error: `must be ${want}` };
+      }
       return { value: p.multiple ? list.map((s) => (s as string).trim()) : (list[0] as string).trim() };
     }
   }

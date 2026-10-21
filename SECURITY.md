@@ -367,8 +367,9 @@ the reason.
   or a literal allow-list; a KQL query without `$kql()`. Encoders count only in their own text and position, and not
   once the value is taken apart. `$orderby` takes a literal allow-list. A `$replace` character allow-list counts
   inside a quoted literal, and in a path or anywhere else only when it leaves nothing but letters, digits, `-` and `_`
-  (in a path) or digits. A whole path may be a guid or entity param as it is; a whole KQL query from a param needs
-  `/* adminforge: user-query */`. Known limits: `user.*` claims are trusted; quote placement is judged from the
+  (in a path) or digits. A whole path may be a guid or entity param as it is — the API checks a page param and a
+  playbook input alike as the id it names (a GUID, a UPN for a user, `/subscriptions/…` for a resource); a whole KQL
+  query from a param needs `/* adminforge: user-query */`. Known limits: `user.*` claims are trusted; quote placement is judged from the
   literal text. `adminforge publish` and the content health check run the same checks, and `publish` refuses on
   errors. Content `pattern:`s are refused at validate time when they can backtrack without bound, always match the
   whole value (`u` flag) and never see values over 4,096 characters. Regular expressions written into an expression

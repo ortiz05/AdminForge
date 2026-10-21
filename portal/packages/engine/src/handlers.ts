@@ -1,5 +1,5 @@
 import { isForbiddenHeader } from '@adminforge/connectors';
-import { encodePathSegment } from '@adminforge/expressions';
+import { encodePathSegment, odataLiteral } from '@adminforge/expressions';
 import type { Compensation, Step } from '@adminforge/schemas';
 import { StepError } from './errors';
 import type {
@@ -476,7 +476,6 @@ export const builtinHandlers: StepHandlerRegistry = {
 
 const html = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Notifier over Microsoft Graph, sent as the step's identity (delegated): email via /me/sendMail, Teams channel
@@ -532,7 +531,8 @@ export function createGraphNotifier(outbound: OutboundPort): Notifier {
           const member = (who: string) => ({
             '@odata.type': '#microsoft.graph.aadUserConversationMember',
             roles: ['owner'],
-            'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${GUID.test(who) ? who : encodeURIComponent(who)}')`,
+            // An OData string literal (`'` doubled, S-31): a UPN can't close it early and append to the reference.
+            'user@odata.bind': `https://graph.microsoft.com/v1.0/users(${odataLiteral(who)})`,
           });
           const chat = await post('/chats', {
             chatType: 'oneOnOne',

@@ -325,7 +325,8 @@ describe('createGraphNotifier', () => {
       ),
     ).toEqual([
       `https://graph.microsoft.com/v1.0/users('${APPROVER.oid}')`,
-      "https://graph.microsoft.com/v1.0/users('b%40example.com')",
+      // An OData string literal (S-31), not percent-encoding.
+      "https://graph.microsoft.com/v1.0/users('b@example.com')",
     ]);
   });
 

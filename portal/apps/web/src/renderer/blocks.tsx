@@ -86,22 +86,25 @@ function ConfigProblem({
   problems: Array<{ path: string; message: string }>;
 }) {
   const authorId = useId();
-  // For the reader: what can't be shown and that the rest works. The details and the CLI command are for whoever
-  // maintains the page, labelled so (rule 10: no tooling advice addressed to the person in front of the browser).
+  // For the reader: what can't be shown and that the rest works. The widget type, the problems and the CLI command
+  // are for whoever maintains the page, labelled so (rule 10: no tooling advice addressed to the reader).
   return (
     <Panel aria-label={`${block.title ?? block.widget} configuration`}>
       <ErrorState
         compact
-        title={`The “${block.widget}” widget${block.title ? ` “${block.title}”` : ''} can’t be shown`}
-        message="Its definition has a mistake, so this part of the page is left out. The rest of the page works."
+        title={block.title ? `“${block.title}” can’t be shown` : 'This part of the page can’t be shown'}
+        message="Its definition has a mistake, so it is left out. The rest of the page works."
         hint={
           <div
             role="group"
             aria-labelledby={`${authorId}-label`}
-            className="flex flex-col gap-1.5 rounded-md border border-line bg-sunken px-3 py-2.5 text-left"
+            className="flex flex-col gap-1.5 rounded-md border border-line px-3 py-2.5 text-left"
           >
             <p id={`${authorId}-label`} className="af-eyebrow">
               For the content author
+            </p>
+            <p>
+              The <code className="font-mono text-xs">{block.widget}</code> widget’s configuration:
             </p>
             <ul className="list-disc pl-5">
               {problems.slice(0, 5).map((p) => (
@@ -110,7 +113,10 @@ function ConfigProblem({
                 </li>
               ))}
             </ul>
-            <p>Fix the page definition, then run pnpm adminforge validate.</p>
+            <p>
+              Fix the page definition, then run{' '}
+              <code className="font-mono text-xs">pnpm adminforge validate</code>.
+            </p>
           </div>
         }
         code="invalid_widget_config"

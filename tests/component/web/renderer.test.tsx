@@ -110,7 +110,9 @@ describe('content renderer (/p/$key)', () => {
     expect(await within(strip).findByText('Needs review')).toBeInTheDocument();
     expect(screen.getAllByText('/users').length).toBeGreaterThan(0);
     // Unknown widget types are a visible configuration problem, not a crash.
-    expect(screen.getByText(/The “nope” widget can’t be shown/)).toBeInTheDocument();
+    const problem = screen.getByRole('region', { name: 'nope configuration' });
+    expect(problem).toHaveTextContent('This part of the page can’t be shown');
+    expect(within(problem).getByRole('group', { name: 'For the content author' })).toHaveTextContent('nope');
     // Filter bar from params; the server search box is bound to `q`.
     const filters = screen.getByRole('search', { name: 'Filters' });
     expect(within(filters).getByRole('button', { name: 'Type' })).toBeInTheDocument();

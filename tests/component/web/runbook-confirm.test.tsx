@@ -40,6 +40,8 @@ describe('runbook: preview, then confirm, then start', () => {
     const preview = await screen.findByRole('region', { name: 'Preview' });
     expect(await within(preview).findByText('Disable sign-in and revoke sessions')).toBeInTheDocument();
     expect(within(preview).getByText('Remove all licences')).toBeInTheDocument();
+    // The checklists were skipped by the dry run: they aren't listed as checks that ran.
+    expect(within(preview).queryByRole('region', { name: 'Checks that ran' })).not.toBeInTheDocument();
     expect(state.runPosts[0]).toEqual({
       playbook: 'identity.offboard-leaver',
       version: '2.1.0',

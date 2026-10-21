@@ -112,8 +112,13 @@ function BulkItems({ flow }: { flow: PlaybookFlow }) {
   );
 }
 
+/** Steps a dry run passes over without running them: what people do (approvals, checklists) and waits. */
+const NOT_A_CHECK = new Set(['approval', 'manual', 'wait']);
+
 function ReadChecks({ detail, index }: { detail: RunDetail; index: StepIndex }) {
-  const reads = latestSteps(detail.steps).filter((s) => s.mode === 'read' && s.status !== 'planned');
+  const reads = latestSteps(detail.steps).filter(
+    (s) => s.mode === 'read' && s.status !== 'planned' && !NOT_A_CHECK.has(s.type),
+  );
   if (reads.length === 0) return null;
   return (
     <section aria-label="Checks that ran" className="flex flex-col gap-2">

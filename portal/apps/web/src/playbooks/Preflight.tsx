@@ -37,7 +37,12 @@ export function RiskBanner({ def, bulkCount }: { def: Playbook | Runbook; bulkCo
       'Each item runs the playbook’s own checks before it changes anything; follow every item on the run page.',
     );
   } else {
-    lines.push('Runs only while write access is armed.');
+    // A runbook starts read-only: its checklists go on, and each step that changes the tenant waits for write access.
+    lines.push(
+      def.kind === 'runbook'
+        ? 'Steps that change the tenant pause until you arm write access; checklists and read steps don’t need it.'
+        : 'Runs only while write access is armed.',
+    );
     lines.push(
       'Preview it first: the dry run reads for real and lists every change before anything happens.',
     );
@@ -48,7 +53,8 @@ export function RiskBanner({ def, bulkCount }: { def: Playbook | Runbook; bulkCo
         ? 'You’ll type the number of items to confirm.'
         : (staticConfirmMessage(def) ?? 'You’ll type a confirmation before it runs.'),
     );
-  else if (def.confirm?.type === 'click') lines.push('You’ll confirm before it runs.');
+  else if (def.confirm?.type === 'click')
+    lines.push(`You’ll confirm before it ${def.kind === 'runbook' ? 'starts' : 'runs'}.`);
   if (def.approval?.required)
     lines.push(
       `A ${def.approval.approvers?.join(' or ') ?? 'Playbook Approver'} must approve before the changes are made${def.approval.expiresIn ? ` (the request expires after ${def.approval.expiresIn})` : ''}.`,

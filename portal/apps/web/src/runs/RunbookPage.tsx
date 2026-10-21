@@ -374,15 +374,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
               title="Start this runbook"
               footer={<PlaybookActions flow={flow} label="Start runbook" />}
             >
-              <div className="flex flex-col gap-5">
-                <PlaybookSections flow={flow} problems={launch.problems} />
-                {def.mode === 'write' && (
-                  <p className="text-sm text-fg-3">
-                    Steps that change the tenant pause until you arm write access; checklists and read steps
-                    don’t need it.
-                  </p>
-                )}
-              </div>
+              <PlaybookSections flow={flow} problems={launch.problems} />
             </Panel>
           )}
           {detail && detail.run.access !== 'full' && <RunDataHidden initiator={detail.run.initiator.upn} />}

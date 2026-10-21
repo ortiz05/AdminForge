@@ -13,6 +13,10 @@ Every block in a page/dashboard/report `layout:` is a widget. Common keys (valid
 | `when`                 | `${ … }` expression; widget is hidden when false                                                         |
 | `empty`                | `{ title, body, action? }` shown when data is empty                                                      |
 
+`empty.action` is an action like an actionBar's — `label` with either `playbook` (and `inputs`) or `href`, optional
+`external`, `icon`, `when` — shown as a button under the empty state of every widget except `table`, whose empty state
+shows only `title` and `body`.
+
 Formats used by several widgets: `number`, `percent`, `bytes`, `duration`, `date`, `datetime`, `relativeTime`, `text`.
 Status values everywhere: `ok`, `warn`, `crit`, `info`, `neutral` (always rendered with icon + label).
 A `map` turns raw values into status + label: `map: { "true": [ok, Enabled], "false": [crit, Disabled] }`. A status

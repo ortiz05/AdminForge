@@ -197,6 +197,12 @@ describe('keyed audit chain with a cut-over (SQLite)', () => {
     await oneShot.database?.close();
     expect(rows().filter((r) => r.action === CHAIN_KEYED_ACTION)).toEqual([]);
     expect(logs).toEqual([]);
+    // Once the API has keyed it, a one-shot without the key doesn't start (it couldn't record what it does).
+    await start({ AUDIT_CHAIN_KEY: newKey() });
+    expect(() =>
+      createContext(mockConfig({ DATABASE_PATH: file }), { now: clock, prepareAuditChain: false }, log),
+    ).toThrow(AuditChainKeyError);
+    logs.length = 0;
     // In memory there is nothing to anchor: no cut-over line.
     const mock = createContext(mockConfig({ AUDIT_CHAIN_KEY: newKey() }), { now: clock }, log);
     expect(mock.database).toBeNull();
@@ -320,7 +326,7 @@ describe('keyed audit chain with a cut-over (SQLite)', () => {
 
     // A process started with the retired key can't take the chain back to it.
     await expect(start({ AUDIT_CHAIN_KEY: first })).rejects.toThrow(
-      /already moved on from: since event seq 4/,
+      /^Since event seq 4 the audit log names key id .*already moved on from/,
     );
   });
 

@@ -44,12 +44,16 @@ export type ChainRow = Record<string, unknown> & { prevHash: string; hash: strin
 export interface ChainPosition {
   hash: string;
   keyId: string | null;
+  /** The key ids of the keyed parts verified so far: no later cut-over may go back to one. */
+  used?: readonly string[];
   /**
-   * Inside a stretch keyed with a key this walk doesn't have: where it started (event index) and the key it names. Its
-   * links are still checked. The next cut-over with a key the walk has must say that key was lost (`previousKeyLost`,
-   * which only the holder of the new key can write); otherwise the stretch stays unverified.
+   * Inside a stretch keyed with a key this walk doesn't have: where it started (event index), the key its first
+   * cut-over names, the verified hash it chains onto (`from`) and how many cut-overs it holds. Its links are still
+   * checked. It counts as lost (links only) only when the cut-over that ends it is verified and declares exactly that:
+   * this key, chained onto this hash, lost — which only the holder of the new key can write. Otherwise it stays
+   * unverified.
    */
-  gap?: { index: number; keyId: string };
+  gap?: { index: number; keyId: string; from: string; cutOvers: number };
 }
 
 export const CHAIN_START: ChainPosition = { hash: GENESIS, keyId: null };
@@ -71,17 +75,25 @@ export interface ChainWalk {
   lost?: ChainGap;
 }
 
-/** Whether a cut-over (verified with a key the walk has) declares the key of the stretch before it lost. */
-const declaresLost = (details: unknown, keyId: string | null) => {
-  const d = details as { previousKeyId?: unknown; previousKeyLost?: unknown } | null | undefined;
-  return d?.previousKeyLost === true && d.previousKeyId === keyId;
-};
+/** What a cut-over records about the part before it (chain.ts walks, writer.ts writes). */
+export interface CutOverDetails {
+  keyId: string;
+  previousKeyId: string | null;
+  /** The previous key was declared lost (AUDIT_CHAIN_LOST_KEY_IDS)… */
+  previousKeyLost?: true;
+  /** …and its part's cut-over chained onto this hash: the declaration covers that stretch and no other. */
+  previousKeyFrom?: string;
+}
+
+const detailsOf = (event: { details?: unknown }) =>
+  (event.details ?? {}) as Partial<Record<keyof CutOverDetails, unknown>>;
 
 /**
  * Re-walks rows in order from `from` (`offset`: the index of the first row in the whole chain). Each event must link
- * to the one before it and re-hash to its hash with the key of its part; the walk stops at the first that doesn't. A
- * stretch keyed with a key it doesn't have is checked for links only and reported (`missing`, or `lost` when the next
- * cut-over declares that key lost); an unfinished one stays in `position.gap` for the caller.
+ * to the one before it and re-hash to its hash with the key of its part, and each verified cut-over must move on from
+ * the part before it to a key not used before; the walk stops at the first that doesn't. A stretch keyed with a key it
+ * doesn't have is checked for links only and reported (`missing`, or `lost` when the cut-over that ends it declares
+ * that very stretch lost); an unfinished one stays in `position.gap` for the caller.
  */
 export function walkChain(
   rows: readonly ChainRow[],
@@ -102,8 +114,9 @@ export function walkChain(
     const index = offset + i;
     const { prevHash, hash, ...event } = row;
     if (prevHash !== at.hash) return result(index);
+    const cut = event.action === CHAIN_KEYED_ACTION;
     let keyId = at.keyId;
-    if (event.action === CHAIN_KEYED_ACTION) {
+    if (cut) {
       const id = cutOverKeyId(event);
       // A cut-over without a key id was not written by AdminForge.
       if (!id) return result(index);
@@ -111,16 +124,33 @@ export function walkChain(
     }
     const key = keyId ? keys?.get(keyId) : null;
     if (keyId && !key) {
-      at = { hash, keyId, gap: at.gap ?? { index, keyId } };
+      at = {
+        hash,
+        keyId,
+        ...(at.used ? { used: at.used } : {}),
+        gap: at.gap
+          ? { ...at.gap, cutOvers: at.gap.cutOvers + (cut ? 1 : 0) }
+          : { index, keyId, from: at.hash, cutOvers: cut ? 1 : 0 },
+      };
       continue;
     }
     if (chainHash(at.hash, event, key) !== hash) return result(index);
-    // Only a cut-over leaves a stretch the walk can't verify (it changes the key).
-    if (at.gap) {
-      if (declaresLost(event.details, at.keyId)) lost ??= at.gap;
-      else missing ??= at.gap;
-    }
-    at = { hash, keyId };
+    if (cut) {
+      const d = detailsOf(event);
+      // It names the part it ends, and never takes the chain back to a key it already left.
+      if ((d.previousKeyId ?? null) !== at.keyId || at.used?.includes(keyId!)) return result(index);
+      if (at.gap) {
+        const declared =
+          d.previousKeyLost === true &&
+          d.previousKeyId === at.gap.keyId &&
+          d.previousKeyFrom === at.gap.from &&
+          at.gap.cutOvers === 1;
+        const gap = { index: at.gap.index, keyId: at.gap.keyId };
+        if (declared) lost ??= gap;
+        else missing ??= gap;
+      }
+      at = { hash, keyId, used: [...(at.used ?? []), keyId!] };
+    } else at = { hash, keyId, ...(at.used ? { used: at.used } : {}) };
   }
   return result();
 }

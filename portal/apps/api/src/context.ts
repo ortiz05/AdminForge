@@ -60,7 +60,8 @@ export type AppDeps = Partial<Omit<AppContext, 'config' | 'broker'>> & {
   databaseName?: string;
   /**
    * Whether this process may append the audit chain's cut-over at start (S-10; default true). Only the API does: a
-   * scheduler one-shot started with another environment must not move the chain to its key.
+   * scheduler one-shot started with another environment must not move the chain to its key. Without it the process
+   * still refuses to start on a chain it couldn't record in.
    */
   prepareAuditChain?: boolean;
 };
@@ -98,16 +99,18 @@ export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogg
       ? new SqliteAuditWriter(db, now, checkpoints, VERIFY_BATCH, chainKeys)
       : new MemoryAuditWriter(now, chainKeys));
   // Before anything else is audited: the cut-over to the configured key, or a refusal of a keyed chain without one.
-  if (!deps.audit && deps.prepareAuditChain !== false && audit.prepareChain) {
-    let prepared: ChainPrepared;
+  // Other processes (scheduler one-shots) don't cut over, but don't start on a chain they couldn't record in either.
+  if (!deps.audit) {
+    let prepared: ChainPrepared | undefined;
     try {
-      prepared = audit.prepareChain();
+      if (deps.prepareAuditChain !== false) prepared = audit.prepareChain?.();
+      else if (db) audit.assertCanAppend?.();
     } catch (err) {
       // The process doesn't start: the connection it opened is closed with it.
       if (deps.database === undefined) void database?.close();
       throw err;
     }
-    if (db) reportChain(prepared, log);
+    if (prepared && db) reportChain(prepared, log);
   }
   const content = createContentServices(
     config,

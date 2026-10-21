@@ -49,9 +49,9 @@ const reopen = (rows: AuditRow[], env: Parameters<typeof chainKeysFrom>[0] = {})
   w.rows.push(...structuredClone(rows));
   return w;
 };
-/** Re-hashes rows from `from` on as SHA-256, keeping their links: all someone without the key can do. */
-const rehash = (rows: AuditRow[], from: number) => {
-  for (let i = from; i < rows.length; i++) {
+/** Re-hashes rows `from`…`to` (default: the end) as SHA-256, keeping their links: all someone without the key can do. */
+const rehash = (rows: AuditRow[], from: number, to = rows.length) => {
+  for (let i = from; i < to; i++) {
     const { seq: _s, prevHash: _p, hash: _h, ...event } = rows[i]!;
     rows[i]!.prevHash = i ? rows[i - 1]!.hash : GENESIS;
     rows[i]!.hash = chainHash(rows[i]!.prevHash, event);
@@ -362,7 +362,7 @@ describe('a keyed chain', () => {
     // …and a process started with the old key can't take the chain back to it.
     const stale = thrown(() => reopen(rotated.rows, { AUDIT_CHAIN_KEY: first }).prepareChain());
     expect(stale.message).toMatch(
-      /^AUDIT_CHAIN_KEY is a key the audit log already moved on from: since event seq 3/,
+      /^Since event seq 3 the audit log names key id .*AUDIT_CHAIN_KEY is a key it already moved on from/,
     );
   });
 
@@ -385,6 +385,7 @@ describe('a keyed chain', () => {
       keyId: chainKeysFrom({ AUDIT_CHAIN_KEY: next })!.current.id,
       previousKeyId: lostId,
       previousKeyLost: true,
+      previousKeyFrom: recovered.rows[1]!.prevHash,
     });
     await recovered.append(input('b'));
     expect(await recovered.verify()).toEqual({
@@ -423,10 +424,102 @@ describe('a keyed chain', () => {
     // Cut short before the pin: also refused.
     const short = reopen(writer.rows.slice(0, 1), { AUDIT_CHAIN_KEY: key, AUDIT_CHAIN_KEYED_SINCE: '2' });
     expect(await short.verify()).toEqual({ ok: false, brokenAt: 1, seq: 2 });
+    // A cut-over at the pinned seq that names an unknown key, or was changed, doesn't pass at start either.
+    const renamed = reopen(writer.rows, { AUDIT_CHAIN_KEY: key, AUDIT_CHAIN_KEYED_SINCE: '2' });
+    renamed.rows[1]!.details = { keyId: 'feedfacecafebeef', previousKeyId: null };
+    expect(thrown(() => renamed.prepareChain())).toMatchObject({
+      reason: 'unverified',
+      keyId: 'feedfacecafebeef',
+    });
+    const edited = reopen(writer.rows, { AUDIT_CHAIN_KEY: key, AUDIT_CHAIN_KEYED_SINCE: '2' });
+    edited.rows[1]!.actorUpn = 'someone@example.com';
+    expect(thrown(() => edited.prepareChain())).toMatchObject({ reason: 'unverified' });
+    expect(() => edited.assertCanAppend()).toThrow(AuditChainPinError);
     // The real chain, pinned: fine, and Settings says so.
     const intact = reopen(writer.rows, { AUDIT_CHAIN_KEY: key, AUDIT_CHAIN_KEYED_SINCE: '2' });
     expect(intact.prepareChain().state).toMatchObject({ keyed: true, since: 2, pinned: true });
     expect(await intact.verify()).toMatchObject({ ok: true, count: 3 });
+  });
+
+  describe('a lost-key declaration covers its own stretch and no other', () => {
+    // seq 1–2 unkeyed · 3 cut-over to P · 4–5 P · 6 cut-over to L · 7 L · 8 cut-over to K declaring L lost.
+    const P = newKey();
+    const L = newKey();
+    const K = newKey();
+    const id = (k: string) => chainKeysFrom({ AUDIT_CHAIN_KEY: k })!.current.id;
+    const env = { AUDIT_CHAIN_KEY: K, AUDIT_CHAIN_PREVIOUS_KEYS: P };
+    const build = async () => {
+      const p = reopen([], { AUDIT_CHAIN_KEY: P });
+      await p.append(input('u', 1));
+      await p.append(input('u', 2));
+      p.prepareChain();
+      await p.append(input('p', 4));
+      await p.append(input('p', 5));
+      const l = reopen(p.rows, { AUDIT_CHAIN_KEY: L, AUDIT_CHAIN_PREVIOUS_KEYS: P });
+      l.prepareChain();
+      await l.append(input('l', 7));
+      const k = reopen(l.rows, { ...env, AUDIT_CHAIN_LOST_KEY_IDS: id(L) });
+      expect(k.prepareChain().cutOver).toMatchObject({ seq: 8, previousKeyLost: true });
+      expect(k.rows[7]!.details).toMatchObject({ previousKeyFrom: k.rows[5]!.prevHash });
+      return k.rows;
+    };
+
+    it('the declared stretch: ok, links only', async () => {
+      expect(await reopen(await build(), env).verify()).toMatchObject({
+        ok: true,
+        lostKey: { seq: 6, keyId: id(L) },
+      });
+    });
+
+    it('stretching it back over the history before (the earlier cut-over renamed to the lost key) is caught', async () => {
+      const rows = await build();
+      // Rewrite the unkeyed events and re-hash just them (SHA-256); seq 3–7 are links-only once seq 3 names L.
+      rows[0]!.details = { i: 666 };
+      rehash(rows, 0, 2);
+      rows[2]!.prevHash = rows[1]!.hash;
+      rows[2]!.details = { keyId: id(L), previousKeyId: null }; // seq 3 now names L
+      rows[3]!.details = { i: 4444 };
+      rows[5]!.action = 'audit.renamed'; // seq 6 is no longer a cut-over
+      expect(await reopen(rows, env).verify()).toMatchObject({ ok: false, seq: 3, missingKey: id(L) });
+    });
+
+    it('a second unknown cut-over inside the verifiable part is not covered either', async () => {
+      const rows = await build();
+      rows[4]!.action = CHAIN_KEYED_ACTION; // seq 5 forged as a cut-over to an unknown key
+      rows[4]!.details = { keyId: 'f1f1f1f1f1f1f1f1', previousKeyId: id(P) };
+      expect(await reopen(rows, env).verify()).toMatchObject({
+        ok: false,
+        seq: 5,
+        missingKey: 'f1f1f1f1f1f1f1f1',
+      });
+    });
+  });
+
+  it('a verified cut-over can only move on: back to a key the chain already left is a break', async () => {
+    const P = newKey();
+    const K = newKey();
+    const p = reopen([], { AUDIT_CHAIN_KEY: P });
+    p.prepareChain();
+    const k = reopen(p.rows, { AUDIT_CHAIN_KEY: K, AUDIT_CHAIN_PREVIOUS_KEYS: P });
+    k.prepareChain();
+    await k.append(input('k'));
+    // Someone holding the old key P (leaked, still in AUDIT_CHAIN_PREVIOUS_KEYS) appends a cut-over back to it.
+    const ring = chainKeysFrom({ AUDIT_CHAIN_KEY: K, AUDIT_CHAIN_PREVIOUS_KEYS: P })!;
+    const pId = chainKeysFrom({ AUDIT_CHAIN_KEY: P })!.current.id;
+    const event = {
+      ...k.rows[0]!,
+      seq: 4,
+      correlationId: 'forged',
+      details: { keyId: pId, previousKeyId: ring.current.id },
+    };
+    const { seq: _s, prevHash: _p, hash: _h, ...hashed } = event;
+    const prevHash = k.rows[2]!.hash;
+    k.rows.push({ ...event, prevHash, hash: chainHash(prevHash, hashed, ring.get(pId)) });
+    expect(await reopen(k.rows, { AUDIT_CHAIN_KEY: K, AUDIT_CHAIN_PREVIOUS_KEYS: P }).verify()).toEqual({
+      ok: false,
+      brokenAt: 3,
+      seq: 4,
+    });
   });
 
   it('an unkeyed chain without a key stays as it is (the portal works as before)', async () => {

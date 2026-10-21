@@ -206,7 +206,7 @@ export function checkEnv(
     AUDIT_CHAIN_KEYED_SINCE: valueOf('AUDIT_CHAIN_KEYED_SINCE'),
   };
   const chainProblems: Array<{ key: string; message: string }> = chainKeyProblems(chainEnv);
-  if (chainEnv.AUDIT_CHAIN_KEY && chainEnv.AUDIT_CHAIN_KEY === valueOf('TOKEN_CACHE_KEY'))
+  if (chainEnv.AUDIT_CHAIN_KEY && chainEnv.AUDIT_CHAIN_KEY.trim() === valueOf('TOKEN_CACHE_KEY')?.trim())
     chainProblems.push({ key: 'AUDIT_CHAIN_KEY', message: 'must be a key of its own, not TOKEN_CACHE_KEY' });
   for (const { key, message } of chainProblems) {
     const r = byKey.get(key);

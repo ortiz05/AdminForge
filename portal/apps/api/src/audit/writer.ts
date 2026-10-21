@@ -12,6 +12,7 @@ import {
   type ChainGap,
   type ChainPosition,
   type ChainRow,
+  type CutOverDetails,
 } from './chain';
 import type { ChainKey, ChainKeyring } from './keys';
 
@@ -164,22 +165,31 @@ export class AuditChainKeyError extends Error {
       reason === 'no_key'
         ? `The audit log is keyed from event seq ${seq} (key id ${keyId}), but AUDIT_CHAIN_KEY is not set, so nothing can be added to it. Set AUDIT_CHAIN_KEY to the installation's key (its Secret). If that key is lost, set a new one and put the lost key's id in AUDIT_CHAIN_LOST_KEY_IDS: the events it keyed then can no longer be verified.`
         : reason === 'not_held'
-          ? `The audit log is keyed from event seq ${seq} with a key (id ${keyId}) that AUDIT_CHAIN_KEY and AUDIT_CHAIN_PREVIOUS_KEYS don't hold, so nothing can be added to it here. Use the installation's keys (its Secret; in the pod: kubectl exec deploy/adminforge -c api -- adminforge …), with the earlier key in AUDIT_CHAIN_PREVIOUS_KEYS after a rotation. If that key is lost, put its id in AUDIT_CHAIN_LOST_KEY_IDS; if no key with that id was ever this installation's, the event was forged.`
-          : `AUDIT_CHAIN_KEY is a key the audit log already moved on from: since event seq ${seq} it is keyed with key id ${keyId}. Use the installation's current key (its Secret).`,
+          ? `The audit log is keyed from event seq ${seq} with a key (id ${keyId}) that AUDIT_CHAIN_KEY and AUDIT_CHAIN_PREVIOUS_KEYS don't hold, so nothing can be added to it here. Use the installation's keys (its Secret; in the pod: kubectl exec deploy/adminforge -c api -- adminforge …), with the earlier key in AUDIT_CHAIN_PREVIOUS_KEYS after a rotation. If that key is lost, put its id in AUDIT_CHAIN_LOST_KEY_IDS — but only if an "audit chain cut-over" line in the shipped log names that id at that seq: otherwise the event was forged, so investigate who had write access to the volume instead.`
+          : `Since event seq ${seq} the audit log names key id ${keyId}, and AUDIT_CHAIN_KEY is a key it already moved on from. Either this process has an old Secret (use the installation's current key), or that event was forged: compare with the "audit chain cut-over" lines in the shipped log.`,
     );
     this.name = 'AuditChainKeyError';
   }
 }
 
 /**
- * AUDIT_CHAIN_KEYED_SINCE pins the first cut-over at `seq`, and the event there isn't one: the keyed events were
- * removed, or the cut-over renamed and what follows re-hashed without the key. The API doesn't start on such a chain.
+ * AUDIT_CHAIN_KEYED_SINCE pins the first cut-over at `seq`, and the event there isn't one (`missing`: the keyed events
+ * were removed, or the cut-over renamed and what follows re-hashed without the key) or doesn't verify (`unverified`: it
+ * names a key that isn't configured and wasn't declared lost, or it was changed). The API doesn't start on such a chain.
  */
 export class AuditChainPinError extends Error {
   readonly code = 'audit_chain_pin_broken';
-  constructor(readonly seq: number) {
+  constructor(
+    readonly seq: number,
+    readonly reason: 'missing' | 'unverified' = 'missing',
+    readonly keyId?: string,
+  ) {
     super(
-      `The audit log should be keyed from event seq ${seq} (AUDIT_CHAIN_KEYED_SINCE), but that event is not the cut-over that keyed it: the keyed events were removed or rewritten. Don't run AdminForge on this database: snapshot the volume as evidence, restore from a backup and investigate who had write access to it (docs/operations.md → Audit chain checkpoints). A backup from before the key was set needs AUDIT_CHAIN_KEYED_SINCE removed.`,
+      `${
+        reason === 'missing'
+          ? `The audit log should be keyed from event seq ${seq} (AUDIT_CHAIN_KEYED_SINCE), but that event is not the cut-over that keyed it: the keyed events were removed or rewritten.`
+          : `The cut-over AUDIT_CHAIN_KEYED_SINCE pins (event seq ${seq}) doesn't verify: it names key id ${keyId ?? 'unknown'}, which isn't configured (put that key in AUDIT_CHAIN_PREVIOUS_KEYS), or it was changed.`
+      } If it was tampered with, don't run AdminForge on this database: snapshot the volume as evidence, restore from a backup and investigate who had write access to it (docs/operations.md → Audit chain checkpoints). A backup from before the key was set needs AUDIT_CHAIN_KEYED_SINCE removed.`,
     );
     this.name = 'AuditChainPinError';
   }
@@ -200,9 +210,14 @@ export interface AuditWriter {
    * At start (the API's createContext only): with a key configured, appends the cut-over event when the chain's newest
    * part isn't keyed with it (the first key, or a new one). Refuses (throws) a chain it can't extend — keyed without a
    * key configured, keyed with a key that isn't held and not declared lost, or by a key it moved on from — and one
-   * whose pinned cut-over (AUDIT_CHAIN_KEYED_SINCE) is gone.
+   * whose pinned cut-over (AUDIT_CHAIN_KEYED_SINCE) is gone or doesn't verify.
    */
   prepareChain?(): ChainPrepared;
+  /**
+   * Throws when an append would (the newest part's key isn't held) or the pinned cut-over is gone: what other processes
+   * (the CLI, scheduler one-shots) check before they change anything.
+   */
+  assertCanAppend?(): void;
 }
 
 export function toAuditEvent(input: AuditInput, now: Date): AuditEvent {
@@ -259,6 +274,28 @@ function partKey(keys: ChainKeyring | null, part: KeyedPart | undefined): ChainK
   return key;
 }
 
+/** An event by seq (the pinned cut-over, the lost part's cut-over). */
+type RowAt = (seq: number) => AuditRow | undefined;
+
+/**
+ * Throws when the cut-over AUDIT_CHAIN_KEYED_SINCE pins is not there, or doesn't verify with a configured key (one row:
+ * it must re-hash onto its own prev hash). A key declared lost can't be checked; the walk reports that stretch.
+ */
+function assertPinned(keys: ChainKeyring | null, rowAt: RowAt): void {
+  const pin = keys?.keyedSince ?? null;
+  if (pin === null) return;
+  const row = rowAt(pin);
+  const id = row && row.action === CHAIN_KEYED_ACTION ? cutOverKeyId(row) : undefined;
+  if (!row || !id) throw new AuditChainPinError(pin);
+  const key = keys!.get(id);
+  if (!key) {
+    if (keys!.lost.has(id)) return;
+    throw new AuditChainPinError(pin, 'unverified', id);
+  }
+  const { seq: _seq, prevHash, hash, ...event } = row;
+  if (chainHash(prevHash, event, key) !== hash) throw new AuditChainPinError(pin, 'unverified', id);
+}
+
 /**
  * What `prepareChain` must append, if anything: the cut-over to the configured key when the newest part isn't keyed
  * with it. Throws for a chain it can't extend (see AuditWriter.prepareChain).
@@ -266,7 +303,7 @@ function partKey(keys: ChainKeyring | null, part: KeyedPart | undefined): ChainK
 function cutOverFor(
   keys: ChainKeyring | null,
   cuts: readonly KeyedPart[],
-  actionAt: (seq: number) => string | undefined,
+  rowAt: RowAt,
   now: Date,
 ): { event: AuditEvent; key: ChainKey; previousKeyLost: boolean } | null {
   const part = cuts.at(-1);
@@ -274,17 +311,24 @@ function cutOverFor(
     if (part) throw new AuditChainKeyError(part.seq, part.keyId, 'no_key');
     return null;
   }
-  if (keys.keyedSince !== null && actionAt(keys.keyedSince) !== CHAIN_KEYED_ACTION)
-    throw new AuditChainPinError(keys.keyedSince);
+  assertPinned(keys, rowAt);
   if (part?.keyId === keys.current.id) return null;
   // A process started with an old key (a stale environment) must not take the chain back to it.
   if (part && cuts.some((c) => c.keyId === keys.current.id))
     throw new AuditChainKeyError(part.seq, part.keyId, 'retired');
   let previousKeyLost = false;
+  let previousKeyFrom: string | undefined;
   if (part && !keys.get(part.keyId)) {
     if (!keys.lost.has(part.keyId)) throw new AuditChainKeyError(part.seq, part.keyId, 'not_held');
     previousKeyLost = true;
+    // The declaration names the stretch it covers by where it starts: no other stretch can borrow it.
+    previousKeyFrom = rowAt(part.seq)!.prevHash;
   }
+  const details: CutOverDetails = {
+    keyId: keys.current.id,
+    previousKeyId: part?.keyId ?? null,
+    ...(previousKeyLost ? { previousKeyLost: true as const, previousKeyFrom: previousKeyFrom! } : {}),
+  };
   return {
     key: keys.current,
     previousKeyLost,
@@ -297,11 +341,7 @@ function cutOverFor(
         targetId: 'chain',
         result: 'success',
         correlationId: randomUUID(),
-        details: {
-          keyId: keys.current.id,
-          previousKeyId: part?.keyId ?? null,
-          ...(previousKeyLost ? { previousKeyLost: true } : {}),
-        },
+        details: { ...details },
       },
       now,
     ),
@@ -336,8 +376,11 @@ function pinBreak(rows: readonly AuditRow[], pin: number): { index?: number; see
 /** Rows per round trip when walking the chain: memory stays flat however long the audit log grows. */
 export const VERIFY_BATCH = 2_000;
 
-/** A verified point to continue from: the tail's seq and hash, the key id of its part and the chain's length up to it. */
-type Verified = Checkpoint & { count: number; keyId: string | null };
+/**
+ * A verified point to continue from: the tail's seq and hash, the key id of its part, the key ids already used and the
+ * chain's length up to it.
+ */
+type Verified = Checkpoint & { count: number; keyId: string | null; used: readonly string[] };
 
 const rowOf = (r: typeof auditEvents.$inferSelect): AuditRow => ({
   ...r,
@@ -365,6 +408,12 @@ const newestCutOver = (q: Db | Tx): KeyedPart | undefined => {
     .limit(1)
     .get();
   return row ? partOf(row) : undefined;
+};
+
+/** One event by seq. */
+const rowAtIn = (q: Db | Tx, seq: number): AuditRow | undefined => {
+  const row = q.select().from(auditEvents).where(eq(auditEvents.seq, seq)).get();
+  return row ? rowOf(row) : undefined;
 };
 
 const tailOf = (q: Db | Tx) =>
@@ -402,20 +451,18 @@ export class SqliteAuditWriter implements AuditWriter {
   }
 
   /**
-   * Throws AuditChainKeyError when an append would: a command checks this before it changes anything, so the change
-   * isn't made without its audit event.
+   * Throws AuditChainKeyError when an append would, AuditChainPinError when the pinned cut-over is gone: a command checks
+   * this before it changes anything, so the change isn't made without its audit event.
    */
   assertCanAppend(): void {
     partKey(this.keys, newestCutOver(this.db));
+    assertPinned(this.keys, (seq) => rowAtIn(this.db, seq));
   }
 
   prepareChain(): ChainPrepared {
     return writeTx(this.db, (tx) => {
       const cuts = cutOversIn(tx);
-      const actionAt = (seq: number) =>
-        tx.select({ action: auditEvents.action }).from(auditEvents).where(eq(auditEvents.seq, seq)).get()
-          ?.action;
-      const cut = cutOverFor(this.keys, cuts, actionAt, this.now());
+      const cut = cutOverFor(this.keys, cuts, (seq) => rowAtIn(tx, seq), this.now());
       const row = cut ? this.chainOnto(tx, cut.event, cut.key) : null;
       const tail = tailOf(tx);
       return {
@@ -479,11 +526,14 @@ export class SqliteAuditWriter implements AuditWriter {
   /** Whether the event at a verified checkpoint is still there with the same hash, and still re-hashes to it. */
   private holds(cp: Verified): boolean {
     if (cp.seq === 0) return true;
-    const row = this.db.select().from(auditEvents).where(eq(auditEvents.seq, cp.seq)).get();
+    const row = rowAtIn(this.db, cp.seq);
     if (!row || row.hash !== cp.hash) return false;
     // Its part's key: a cut-over names its own, any other event is in the part the checkpoint was verified in.
-    const r = walkChain([chainRowOf(rowOf(row))], { hash: row.prevHash, keyId: cp.keyId }, this.keys);
-    return r.brokenAt === undefined && !r.position.gap;
+    const keyId = row.action === CHAIN_KEYED_ACTION ? (cutOverKeyId(row) ?? null) : cp.keyId;
+    const key = keyId ? this.keys?.get(keyId) : null;
+    if (keyId && !key) return false;
+    const { seq: _seq, prevHash, hash, ...event } = row;
+    return chainHash(prevHash, event, key) === hash;
   }
 
   /**
@@ -517,7 +567,7 @@ export class SqliteAuditWriter implements AuditWriter {
   private async walk(from: Verified | null): Promise<VerifyResult & { checked: number }> {
     const generation = this.generation;
     const pin = this.keys?.keyedSince ?? null;
-    let at: ChainPosition = from ? { hash: from.hash, keyId: from.keyId } : CHAIN_START;
+    let at: ChainPosition = from ? { hash: from.hash, keyId: from.keyId, used: from.used } : CHAIN_START;
     let after = from?.seq ?? 0;
     let count = from?.count ?? 0;
     let checked = 0;
@@ -580,7 +630,7 @@ export class SqliteAuditWriter implements AuditWriter {
     if (tail) this.checkpoints?.({ ...tail, count, ts: this.now().toISOString() });
     // Another walk found a break meanwhile: this one's checkpoint must not paper over it.
     if (generation === this.generation) {
-      this.verified = { seq: tail?.seq ?? 0, hash: at.hash, count, keyId: at.keyId };
+      this.verified = { seq: tail?.seq ?? 0, hash: at.hash, count, keyId: at.keyId, used: at.used ?? [] };
       if (!from) this.fullAt = this.now().getTime();
     }
     return {
@@ -606,14 +656,14 @@ export class MemoryAuditWriter implements AuditWriter {
     return structuredClone(this.chainOnto(event, partKey(this.keys, this.cutOvers().at(-1))));
   }
 
+  assertCanAppend(): void {
+    partKey(this.keys, this.cutOvers().at(-1));
+    assertPinned(this.keys, (seq) => this.rows.find((r) => r.seq === seq));
+  }
+
   prepareChain(): ChainPrepared {
     const cuts = this.cutOvers();
-    const cut = cutOverFor(
-      this.keys,
-      cuts,
-      (seq) => this.rows.find((r) => r.seq === seq)?.action,
-      this.now(),
-    );
+    const cut = cutOverFor(this.keys, cuts, (seq) => this.rows.find((r) => r.seq === seq), this.now());
     const row = cut ? this.chainOnto(cut.event, cut.key) : null;
     const last = this.rows.at(-1);
     return {

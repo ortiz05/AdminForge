@@ -578,7 +578,7 @@ describe('identity.tenant-baseline', () => {
 describe('identity.privileged-role-assignments account findings', () => {
   it('flags privileged users synced from AD, guests and blocked accounts', async () => {
     const a = (await run('identity.privileged-role-assignments')).out.assignments;
-    expect(def('identity.privileged-role-assignments').version).toBe('2.1.0');
+    expect(def('identity.privileged-role-assignments').version).toBe('2.1.1');
     expect(a.accountFindings).toBe(1);
     // 2.0: the holder is the expanded principal object; rows are keyed by assignment id.
     const dana = a.rows.find((r: Out) => r.principal.displayName === 'Dana Okafor');

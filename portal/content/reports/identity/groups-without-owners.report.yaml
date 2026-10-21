@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.groups-without-owners
-version: 2.1.1
+version: 2.2.0
 title: Groups without owners
 summary: >-
   Cloud groups that nobody owns — no one to answer access reviews, renew Microsoft 365 groups before they expire or
@@ -165,7 +165,7 @@ layout:
       - { field: groupTypes, label: Group types, kind: tags, filter: facet }
       - { field: securityEnabled, label: Security, kind: boolean, filter: facet }
       - { field: mailEnabled, label: Mail-enabled, kind: boolean, filter: facet }
-      - { field: onPremisesSyncEnabled, label: Synced, kind: enum, map: { "true": Synced, "false": No longer synced }, filter: facet }
+      - { field: onPremisesSyncEnabled, label: Source, kind: enum, map: { "true": Synced from AD, "false": Cloud, "null": Cloud }, filter: facet }
       - { field: isAssignableToRole, label: Role-assignable, kind: boolean }
       - { field: createdDateTime, label: Created, kind: date, filter: date, sortable: true }
       - { field: id, label: Object id, kind: guid, hidden: true }

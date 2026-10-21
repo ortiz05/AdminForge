@@ -347,7 +347,7 @@ tabs:
         rowKey: id
         columns:
           - { field: displayName, label: Owner, kind: identity, secondary: userPrincipalName }
-          - { field: accountEnabled, label: Enabled, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] } }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [crit, Blocked] } }
           - { field: id, label: Object id, kind: guid, hidden: true }
         inspect:
           page: identity.user

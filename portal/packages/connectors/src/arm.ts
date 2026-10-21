@@ -1,5 +1,12 @@
 import { assertSafePath, buildQuery } from './graph';
-import { ApiError, createHttpClient, retryDelay, type HttpClientOptions, type HttpResult } from './http';
+import {
+  abortableSleep,
+  ApiError,
+  createHttpClient,
+  retryDelay,
+  type HttpClientOptions,
+  type HttpResult,
+} from './http';
 import { defaultSleep } from './types';
 
 /** An Azure Resource Manager request. `apiVersion` is required on every call. */
@@ -123,7 +130,13 @@ export function createArmClient(opts: ArmClientOptions) {
           `The Azure operation did not finish within ${Math.round(maxPollMs / 1000)} s.`,
           initial.requestId,
         );
-      await sleep(retryAfter !== null ? retryDelay(retryAfter, 0) : pollIntervalMs);
+      // The caller's abort (a cancelled run, a stopping pod, a schedule's timeout) ends the wait between polls too,
+      // not only the polls themselves (D-23b): the wait can otherwise last up to maxPollMs.
+      await abortableSleep(
+        sleep,
+        retryAfter !== null ? retryDelay(retryAfter, 0) : pollIntervalMs,
+        opts.signal,
+      );
     };
     const provisioning = (d: unknown) =>
       (d as { properties?: { provisioningState?: string } } | undefined)?.properties?.provisioningState;

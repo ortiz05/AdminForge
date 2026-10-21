@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { ComingSoonPage } from '../pages/ComingSoonPage';
+import { NotFoundPage } from '../pages/NotFoundPage';
 
-/** Any path not built yet: explain what the page will do, or say it doesn't exist. */
+/** Any path no route serves: the designed not-found state. */
 export const Route = createFileRoute('/$')({
-  component: ComingSoonPage,
+  component: NotFoundPage,
 });

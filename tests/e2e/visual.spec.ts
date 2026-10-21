@@ -69,10 +69,13 @@ for (const theme of THEMES) {
 test('collapsed navigation · steel', async ({ page }) => {
   await mockApi(page);
   await setPrefs(page, { theme: 'steel', navCollapsed: true });
+  // The test navigation's /identity/users has no route: the not-found page (the "Coming soon" catalogue is gone).
   await page.goto('/identity/users');
-  await expect(page.getByRole('heading', { level: 1, name: 'Users' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'There’s no page at this address' }),
+  ).toBeVisible();
   await settle(page);
-  await expect(page).toHaveScreenshot('coming-soon-collapsed-steel.png');
+  await expect(page).toHaveScreenshot('not-found-collapsed-steel.png');
   await expectNoAxeViolations(page);
 });
 

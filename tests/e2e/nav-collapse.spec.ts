@@ -42,8 +42,11 @@ for (const { name, width, startsCollapsed } of [
 for (const theme of ['steel', 'daylight'] as const) {
   test(`navigation sections start collapsed, open and stay open · ${theme}`, async ({ page }) => {
     await setPrefs(page, { theme });
+    // The test navigation's /identity/users has no route (the not-found page); the rail still marks it as current.
     await page.goto('/identity/users');
-    await expect(page.getByRole('heading', { level: 1, name: 'Users' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'There’s no page at this address' }),
+    ).toBeVisible();
     const nav = page.getByRole('navigation', { name: 'Primary' });
     // Every section starts collapsed; the page you're on stays visible in its section.
     await expect(nav.getByRole('link', { name: 'Users' })).toBeVisible();

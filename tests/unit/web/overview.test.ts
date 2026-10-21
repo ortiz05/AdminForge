@@ -1,4 +1,3 @@
-import { plannedPage } from '@adminforge/web/src/lib/catalog';
 import { healthStatus, OverviewResponse, skuName } from '@adminforge/web/src/lib/overview';
 import { isActive } from '@adminforge/web/src/app/NavRail';
 import { overview, overviewWithoutHealth } from '../../support/web/fixtures/overview';
@@ -38,14 +37,6 @@ describe('OverviewResponse contract', () => {
   });
 });
 
-describe('plannedPage', () => {
-  it('finds a description by nav key, then by the last path segment', () => {
-    expect(plannedPage('users', '/identity/users')?.summary).toMatch(/Every user/);
-    expect(plannedPage('unknown-key', '/azure/arc')?.summary).toMatch(/Azure Arc/);
-    expect(plannedPage(undefined, '/nothing/here')).toBeUndefined();
-  });
-});
-
 describe('isActive', () => {
   it('matches the page and its children, but "/" only exactly', () => {
     expect(isActive('/', '/')).toBe(true);
@@ -53,12 +44,5 @@ describe('isActive', () => {
     expect(isActive('/identity/users', '/identity/users')).toBe(true);
     expect(isActive('/identity/users', '/identity/users/123')).toBe(true);
     expect(isActive('/identity/users', '/identity/users-old')).toBe(false);
-  });
-});
-
-describe('plannedPage with namespaced keys', () => {
-  it('resolves "identity.users" and "/p/m365.teams"', () => {
-    expect(plannedPage('identity.users', '/p/identity.users')?.summary).toMatch(/Every user/);
-    expect(plannedPage(undefined, '/p/m365.teams')?.summary).toMatch(/Teams/);
   });
 });

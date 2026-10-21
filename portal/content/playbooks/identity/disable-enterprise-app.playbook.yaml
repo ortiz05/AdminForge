@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.disable-enterprise-app
-version: 1.1.0
+version: 1.2.0
 title: Disable enterprise app sign-in
 summary: >-
   Blocks every user and workload from signing in to an enterprise application (its service principal), for example a
@@ -16,10 +16,15 @@ requires:
   scopes:
     graph: [Application.ReadWrite.All]
   entraRoles: [Cloud Application Administrator]
+# Typed (high risk): the app's name, or its object id when the name can't be typed (`confirmAs`) — a multi-tenant
+# app's name is chosen by its publisher, and disabling it is how a consent-phishing app is contained.
 confirm:
   type: typed
-  value: ${ steps.sp.output.displayName }
-  message: Nobody can sign in to this app until it is enabled again. Type the app name to confirm.
+  value: ${ steps.confirmAs.output.value }
+  message: >-
+    ${ 'Nobody can sign in to '
+       & (steps.confirmAs.output.byName ? steps.sp.output.displayName : 'the app with object id ' & steps.sp.output.id)
+       & ' until it is enabled again.' }
 approval:
   required: false
 
@@ -54,6 +59,21 @@ steps:
     that: >-
       ${ $not(steps.sp.output.appId in $append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID], $map($split(env.AF_PROTECTED_APP_IDS ? env.AF_PROTECTED_APP_IDS : '', ','), function($v) { $trim($v) }))) }
     message: This is one of AdminForge's own apps; disabling it would lock everyone out of the portal.
+
+  # What the confirmation asks for: the app's name, or its object id when the name has nothing a person can type
+  # (spaces or invisible characters only) or holds a masked value — such a name could never be confirmed, and the app
+  # couldn't be disabled (the class: what the API's comparison drops, control characters, anything outside the BMP).
+  - id: confirmAs
+    type: transform
+    describe: Work out what the confirmation asks for
+    expression: >-
+      ${ (
+        $name := steps.sp.output.displayName;
+        $byName := $type($name) = 'string'
+          and $contains($name, /[^\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\uffa0\ufff0-\ufffb\ud800-\udfff]/)
+          and $not($contains($name, '[redacted]'));
+        { 'value': $byName ? $name : steps.sp.output.id, 'byName': $byName }
+      ) }
 
   - id: disable
     type: graph

@@ -65,6 +65,24 @@ const CASES: Record<string, { steps: (name: string) => Record<string, { output: 
       expired: { output: { secrets: [{ label: 'ci (expired 2020-01-01)' }], certificates: [] } },
     }),
   },
+  'identity.disable-enterprise-app': {
+    id: '00000000-0000-4000-8000-000000000404',
+    steps: (name) => ({
+      sp: { output: { id: '00000000-0000-4000-8000-000000000404', displayName: name } },
+    }),
+  },
+  'endpoint.restart-device': {
+    id: '00000000-0000-4000-8000-000000000601',
+    steps: (name) => ({
+      device: {
+        output: {
+          id: '00000000-0000-4000-8000-000000000601',
+          deviceName: name,
+          userPrincipalName: 'a.lee@example.com',
+        },
+      },
+    }),
+  },
   'identity.remove-group-members': {
     id: '00000000-0000-4000-8000-000000000201',
     steps: (name) => ({
@@ -147,5 +165,27 @@ describe('azure.remove-role-assignment when the role cannot be read', () => {
         '30000000-0000-4000-8000-000000000102 at /subscriptions/00000000-0000-4000-8000-0000000000a1? They lose the ' +
         'access it grants within a few minutes.',
     );
+  });
+});
+
+describe('every confirmAs step', () => {
+  // One check, copied: a playbook that falls back must use exactly this class, and be listed in CASES above so the
+  // tests run against it (a generic `confirm.fallback` in the API would replace the copies: docs/backlog.md).
+  const steps = loaded.definitions
+    .map((d) => d.def as unknown as Def & { status?: string })
+    .filter((d) => d.status !== 'retired' && Array.isArray(d.steps))
+    .flatMap((d) =>
+      d.steps.filter((s) => s.id === 'confirmAs').map((s) => [d.id, s.expression ?? ''] as const),
+    );
+  const classOf = (expression: string) => /\$contains\(\$name, (\/\[\^.*?\]\/)\)/.exec(expression)?.[1];
+
+  it('is tested here', () => {
+    expect(steps.map(([id]) => id).sort()).toEqual(Object.keys(CASES).sort());
+  });
+
+  it('uses the same character class', () => {
+    const classes = new Set(steps.map(([, e]) => classOf(e)));
+    expect(classes.size).toBe(1);
+    expect([...classes][0]).toMatch(/^\/\[\^\\s/);
   });
 });

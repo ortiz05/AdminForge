@@ -56,16 +56,16 @@ Markdown sections, manual steps and executable steps.
    a bulk action (`bulkActions`) confirms by typing from `medium` up too: a bulk run asks for the item count. `click` is
    for low risk, and for medium-risk changes never offered in bulk; low-risk bulk actions may click
    (`tests/content/high-risk-typed-confirm.test.ts` enforces the typing). A name anyone can choose (an app's, a group's)
-   can't always be typed: work out the value in a `confirmAs` step that falls back to the object id
-   (`identity.revoke-consent-grant`). `critical` also needs `approval: { required: true }` (two-person; the approver
-   runs the remaining steps as themselves). A change that **grants access** (a directory or Azure role, membership of a
-   role-assignable group, app ownership) names who it benefits in `approval.excludes` (an expression yielding object
-   ids — the principal, and a group's members when the principal is a group) so they can't approve it, and refuses
-   adding yourself (`notSelf` assert). Approvals expire after 72 hours unless you set `expiresIn`. Don't put
-   `onError: continue` on an approval: `validate` refuses it, and a rejected, expired or unworkable approval always
-   stops the run. After an approval the reads before it run again with the approver's access before the next write,
-   so the approver needs read access to them (otherwise the run stops). A playbook that starts a child with its own
-   confirmation, or a high/critical child, needs a `confirm` block itself.
+   can't always be typed: work out the value in a `confirmAs` step that falls back to the object id (copy it from
+   `identity.revoke-consent-grant` and add the playbook to `tests/content/typed-confirm-fallback.test.ts`). `critical`
+   also needs `approval: { required: true }` (two-person; the approver runs the remaining steps as themselves). A change
+   that **grants access** (a directory or Azure role, membership of a role-assignable group, app ownership) names who it
+   benefits in `approval.excludes` (an expression yielding object ids — the principal, and a group's members when the
+   principal is a group) so they can't approve it, and refuses adding yourself (`notSelf` assert). Approvals expire
+   after 72 hours unless you set `expiresIn`. Don't put `onError: continue` on an approval: `validate` refuses it, and a
+   rejected, expired or unworkable approval always stops the run. After an approval the reads before it run again with
+   the approver's access before the next write, so the approver needs read access to them (otherwise the run stops). A
+   playbook that starts a child with its own confirmation, or a high/critical child, needs a `confirm` block itself.
 6. **Secrets** (passwords, TAPs, client secrets): declare `secretOutputs: [path]` on the step; never copy them to
    `outputs`. Generate passwords with `$secureRandom(n)`. A playbook that changes the caller's own permissions (PIM
    activation) sets `refreshTokens: true` so the new roles apply as soon as it succeeds.

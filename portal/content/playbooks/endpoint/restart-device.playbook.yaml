@@ -17,11 +17,13 @@ requires:
   entraRoles: [Intune Administrator]
   licences: [intune]
 # Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
-# device: its name.
+# device: its name, or its Intune id when the name can't be typed (`confirmAs`; people name their own devices).
 confirm:
   type: typed
-  value: ${ steps.device.output.deviceName }
-  message: ${ 'Restart ' & steps.device.output.deviceName & ' (' & steps.device.output.userPrincipalName & ')? Unsaved work may be lost.' }
+  value: ${ steps.confirmAs.output.value }
+  message: >-
+    ${ 'Restart ' & (steps.confirmAs.output.byName ? steps.device.output.deviceName : 'the device with Intune id ' & steps.device.output.id)
+       & ' (' & steps.device.output.userPrincipalName & ')? Unsaved work may be lost.' }
 approval:
   required: false
 
@@ -39,6 +41,21 @@ steps:
       path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }
       query:
         $select: id,deviceName,operatingSystem,isSupervised,managementState,userPrincipalName
+
+  # What the confirmation asks for: the device's name, or its Intune id when the name has nothing a person can type
+  # (spaces or invisible characters only) or holds a masked value — such a name could never be confirmed (the class:
+  # what the API's comparison drops, control characters, anything outside the BMP).
+  - id: confirmAs
+    type: transform
+    describe: Work out what the confirmation asks for
+    expression: >-
+      ${ (
+        $name := steps.device.output.deviceName;
+        $byName := $type($name) = 'string'
+          and $contains($name, /[^\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\uffa0\ufff0-\ufffb\ud800-\udfff]/)
+          and $not($contains($name, '[redacted]'));
+        { 'value': $byName ? $name : steps.device.output.id, 'byName': $byName }
+      ) }
 
   - id: supported
     type: assert

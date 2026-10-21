@@ -54,8 +54,10 @@ What this design does not do, by design: more than one replica, autoscaling, rol
 
 `build-images.sh` runs `docker build`, which builds for the platform of the machine it runs on: build on an amd64
 machine. The Deployment selects `kubernetes.io/arch: amd64`, so on a cluster with arm64 nodes as well the pod only
-lands on amd64 ones. The PowerShell tag was last rebuilt on 2025-01-30 (PowerShell 7.5.0 and the Ubuntu packages of
-that day); the digest pin keeps it there until someone moves it (`docs/backlog.md`).
+lands on amd64 ones. **The PowerShell tag was last rebuilt on 2025-01-30** (PowerShell 7.5.0 with the .NET runtime
+and Ubuntu packages of that day) and the image installs no updates; because the tag isn't rebuilt, no newer digest
+will ever be offered for it. The runner holds engineers' forwarded Exchange and SharePoint tokens, so moving it to a
+maintained base — the release archive below, on a pinned `ubuntu:24.04` — comes before go-live (`docs/backlog.md`).
 
 What arm64 would take (size M, plus a test on arm64 hardware): a runner base that exists for both
 platforms — PowerShell's release archive (`powershell-7.5.<n>-linux-<arch>.tar.gz`) installed on `ubuntu:24.04` or on
@@ -80,8 +82,9 @@ drop the Deployment's `nodeSelector`, and run the runner's Pester suite and a li
   and the loader pod's once in a while.
 - **RBAC.** Whoever deploys creates the overlay's objects in the namespace. `pods/exec` into the pod is the
   operator's power — `publish`, `db backup`, `audit verify`, `db sign-out-everyone` — and whoever has it can read the
-  database: grant it, and `get` on Secrets, only to the people who operate AdminForge. The pod itself never talks to
-  the Kubernetes API (no service-account token).
+  database. Creating or changing pods or the Deployment in the namespace is as strong (a pod can mount the Secret and
+  the volume), and changing NetworkPolicies can open the pod's egress. Grant these, and `get` on Secrets, only to the
+  people who operate AdminForge. The pod itself never talks to the Kubernetes API (no service-account token).
 - **Secrets encrypted at rest** (etcd encryption or a KMS provider): `adminforge-env` holds `TOKEN_CACHE_KEY` and the
   apps' credentials.
 
@@ -102,7 +105,9 @@ drop the Deployment's `nodeSelector`, and run the runner's Pester suite and a li
 - **`volumeBindingMode: WaitForFirstConsumer`** for zonal or node-local disks (the volume is made where the pod is
   scheduled; afterwards the pod follows the volume — a node-local volume ties AdminForge to that node), and
   **`allowVolumeExpansion: true`**, so the claim can grow without a move.
-- **Encryption at rest** by the storage: the database holds session hashes, sealed tokens and the audit history.
+- **Encryption at rest** by the storage: the database holds session hashes, sealed tokens and the audit history. The
+  nodes' own disks too (AKS: encryption at host): `db backup -` stages a plaintext copy (without sessions and tokens,
+  with runs and probe results) in the api's `/tmp`, on the node's ephemeral disk, while it runs.
 - **Snapshots (optional)**: the CSI snapshot controller and a VolumeSnapshotClass for the driver, if you want
   scheduled snapshots (Velero or your backup tool). Logical copies (Backups) don't need them.
 
@@ -172,8 +177,10 @@ volumes replicated synchronously over a slow link (e.g. Longhorn replicas on dis
   slow Microsoft reads one 120 s attempt, and report exports stream until they are done.
 - **Request bodies ≥ 256 KiB**, the API's own limit (`portal/apps/api/src/app.ts:145`); the example allows 1 MiB.
 - **The client's address**: the controller adds `X-Forwarded-For`, and `TRUST_PROXY` (overlay) names the controller
-  pods' addresses — their pod network, or the nodes' addresses when the controller uses the host network — as
-  narrowly as your network allows; `true` is refused in production. When a load balancer in front of the controller
+  pods' addresses — their pod network — as narrowly as your network allows; `true` is refused in production. Prefer
+  a controller that doesn't use the host network: trusting the nodes' addresses makes every host-network pod and node
+  agent a trusted proxy, and most network plugins let a node reach its pods whatever the policy says — any of them
+  could forge the address the rate limits and the audit log use. When a load balancer in front of the controller
   translates source addresses, the controller sees the balancer's: keep the client's (`externalTrafficPolicy: Local`
   or the PROXY protocol), or every engineer shares one address in the rate limits and the audit log.
 - **Only the controller may connect to the pod**: the overlay names its namespace in the NetworkPolicy's `from`.
@@ -190,17 +197,20 @@ volumes replicated synchronously over a slow link (e.g. Longhorn replicas on dis
 - **DNS only to the cluster's resolver**: the policy allows UDP/TCP 53 to pods labelled `k8s-app: kube-dns` in
   `kube-system` (CoreDNS has that label on most distributions; elsewhere patch the rule). They must resolve public
   names and the Ingress's host name.
-- **Direct HTTPS (TCP 443) to the hosts below**, through NAT or a firewall that allows them by name. **No HTTP proxy**:
-  the API doesn't use `HTTPS_PROXY` (only the runner's PowerShell workers pass it on,
-  `portal/apps/runner/src/config.ts:117`). **No TLS interception**: Node and .NET check Microsoft's certificates
-  against the images' own trust stores. IPv4: the policy allows no IPv6 egress.
-- **Private and reserved addresses are refused** by the base policy (10/8, 172.16/12, 192.168/16, 100.64/10,
-  link-local with the cloud metadata service, Azure's WireServer, 0/8, 192.0.0/24, 198.18/15, 224/3). Name the private addresses you need — the Ingress for the
-  portal-readiness probe, a Private Link endpoint — in `overlays/example/networkpolicy-private-egress.yaml`; through
-  the ingress controller the pod reaches every site that controller serves, so keep internal-only sites on another
-  controller. A network that uses other ranges internally (public addresses used privately) adds them to the base
-  policy's `except` list with a patch in the overlay; `preflight.sh` compares the nodes' pod networks and addresses
-  and the API server's Service address with the refused ranges.
+- **Direct HTTPS (TCP 443) to the hosts below**, best through a firewall that allows them by name (Azure Firewall
+  application rules, Cilium `toFQDNs` or the like): plain NAT lets the pod reach any public address on 443, including
+  services that trust the cluster's outbound address (PaaS firewalls, an API server with authorised IP ranges). **No
+  HTTP proxy**: the API doesn't use `HTTPS_PROXY` (only the runner's PowerShell workers pass it on,
+  `portal/apps/runner/src/config.ts:117`). **No TLS interception**: Node and .NET check Microsoft's certificates against
+  the images' own trust stores. IPv4: the policy allows no IPv6 egress.
+- **Private and reserved addresses are refused** by the base policy (10/8, 172.16/12, 192.168/16, 100.64/10, link-local
+  with the cloud metadata service, Azure's WireServer, 0/8, 192.0.0/24, 198.18/15, 224/3). Name the private addresses
+  you need — the Ingress for the portal-readiness probe, a Private Link endpoint — in
+  `overlays/example/networkpolicy-private-egress.yaml`; through the ingress controller the pod reaches every site that
+  controller serves, so keep internal-only sites on another controller. A network that uses other ranges internally
+  (public addresses used privately) adds them to the base policy's `except` list with a patch in the overlay;
+  `preflight.sh` compares the nodes' pod networks and addresses and the API server's Service address with the refused
+  ranges.
 
 | Host (TCP 443)                                                                                                                                              | What for                                                                                                                     | Where it comes from                                                                                    |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -293,7 +303,7 @@ new `PUBLIC_BASE_URL` (`pnpm adminforge provision entra`).
 - [ ] **No admission policy** that demands CPU limits or injects sidecars; a ResourceQuota, if any, admits 750m CPU /
       2 GiB requests and 5 GiB memory limits.
 - [ ] **Storage class**: CSI, block storage on SSD (never NFS, SMB, CephFS or FUSE), `fsGroupPolicy` not `None`,
-      `WaitForFirstConsumer`, expansion allowed, encrypted at rest. (P)
+      `WaitForFirstConsumer`, expansion allowed, encrypted at rest — the nodes' disks too. (P)
 - [ ] **ReadWriteOncePod** admitted (P: server dry run); the driver supports it (first deploy:
       `kubectl describe pvc adminforge-data`).
 - [ ] **Volume**: 10 GiB (20 GiB on a large tenant), watched; snapshots scheduled if you use them.
@@ -308,7 +318,8 @@ new `PUBLIC_BASE_URL` (`pnpm adminforge provision entra`).
 - [ ] **Clocks** synced on every node (NTP / chrony).
 - [ ] **Registry** the nodes can pull from (P: the pull secret, when named); a build machine (amd64, Docker with
       BuildKit).
-- [ ] **Secrets** encrypted at rest; `get` on Secrets and `pods/exec` only for AdminForge's operators.
+- [ ] **Secrets** encrypted at rest; `get` on Secrets, `pods/exec`, and changing pods, the Deployment or
+      NetworkPolicies in the namespace only for AdminForge's operators.
 - [ ] **Logs** of the api container shipped off the cluster, kept as long as the audit history must be provable.
 - [ ] **Backups**: an operator's machine with `kubectl` and `gpg`, a place off the cluster for the encrypted copies.
 - [ ] **Old host** ready for the one-time import (a checkout of this release, its Postgres reachable from it).
@@ -327,8 +338,10 @@ commit needs `--allow-unreviewed`, which the audit log records. Pin the pushed d
 
 The images the builds start from are pinned by digest too (`name:tag@sha256:…` in each `FROM`, and the `# syntax=`
 frontend; `tests/guards/image-digests.test.ts`), so rebuilding a commit gets the same bases. To move to a newer base,
-change tag and digest together — Dependabot's docker ecosystem does that, or by hand with the index digest from
-`docker buildx imagetools inspect <image>:<tag>` — and rebuild.
+change tag and digest together — Dependabot's docker ecosystem does that for the directories `.github/dependabot.yml`
+watches, or by hand with the index digest from `docker buildx imagetools inspect <image>:<tag>` — and rebuild. A pin
+only moves when someone moves it: a tag that is no longer rebuilt (the runner's, CPU architecture above) never offers
+a newer digest.
 
 ## 2. Secrets
 

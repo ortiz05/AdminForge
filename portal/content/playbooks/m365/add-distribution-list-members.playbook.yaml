@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.add-distribution-list-members
-version: 1.0.0
+version: 1.0.1
 title: Add members to a distribution list
 summary: Adds people (and any other mail recipients by address) to a distribution list or mail-enabled security group. People who are already members are skipped.
 owner: m365-team
@@ -59,7 +59,7 @@ steps:
         {
           "addresses": [$distinct([$append([$users[mail != null].mail], $typed)].$lowercase($))],
           "noMailbox": [$users[$not($exists(mail)) or mail = null].userPrincipalName],
-          "invalid": [$typed[$not($contains($, /^[^\s@]+@[^\s@]+\.[^\s@]+$/))]]
+          "invalid": [$typed[$not($contains($, /^[^\s@]{1,64}@[^\s@.]+(\.[^\s@.]+)+$/))]]
         }
       ) }
 

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.remove-distribution-list-members
-version: 1.0.0
+version: 1.0.1
 title: Remove members from a distribution list
 summary: Removes one or more addresses from a distribution list or mail-enabled security group. Addresses that aren't members are skipped.
 owner: m365-team
@@ -37,7 +37,7 @@ steps:
         $typed := [$split(inputs.members ? inputs.members : '', /[\s,;]+/)[$ != '']];
         {
           "addresses": [$distinct($typed.$lowercase($))],
-          "invalid": [$typed[$not($contains($, /^[^\s@]+@[^\s@]+\.[^\s@]+$/))]]
+          "invalid": [$typed[$not($contains($, /^[^\s@]{1,64}@[^\s@.]+(\.[^\s@.]+)+$/))]]
         }
       ) }
 

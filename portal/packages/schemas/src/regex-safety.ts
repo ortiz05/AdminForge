@@ -61,27 +61,32 @@ interface Frame {
 /** Characters overlap is judged on: ASCII plus a few letters, digits and spaces from elsewhere in Unicode. */
 const SAMPLE = [...Array.from({ length: 128 }, (_, i) => String.fromCharCode(i)), ...'éßΩжא中٣  　'];
 
+/** `u`, plus `i` when the pattern ignores case (a regex literal in an expression: `/…/i`). */
+type Flags = 'u' | 'ui';
+
 const atomRegexes = new Map<string, RegExp | null>();
-function canMatch(atomSrc: string, ch: string): boolean {
-  let re = atomRegexes.get(atomSrc);
+function canMatch(atomSrc: string, ch: string, flags: Flags): boolean {
+  const key = `${flags}:${atomSrc}`;
+  let re = atomRegexes.get(key);
   if (re === undefined) {
     try {
-      re = new RegExp(`^(?:${atomSrc})$`, 'u');
+      re = new RegExp(`^(?:${atomSrc})$`, flags);
     } catch {
       re = null;
     }
     if (atomRegexes.size > 2000) atomRegexes.clear();
-    atomRegexes.set(atomSrc, re);
+    atomRegexes.set(key, re);
   }
   return re ? re.test(ch) : true;
 }
 
-const overlap = (a: Atom, b: Atom) => SAMPLE.some((ch) => canMatch(a.src, ch) && canMatch(b.src, ch));
+const overlap = (a: Atom, b: Atom, flags: Flags) =>
+  SAMPLE.some((ch) => canMatch(a.src, ch, flags) && canMatch(b.src, ch, flags));
 
 const variable = (a: Atom) => !a.group && !a.zeroWidth && a.max > 1 && a.max !== a.min;
 
 /** Two repetitions of the same characters side by side (`\d*\d*`): the engine tries every split between them. */
-function adjacentProblem(atoms: Atom[]): string | undefined {
+function adjacentProblem(atoms: Atom[], flags: Flags): string | undefined {
   let open: Atom | null = null;
   for (const a of atoms) {
     if (a.zeroWidth) continue;
@@ -90,10 +95,10 @@ function adjacentProblem(atoms: Atom[]): string | undefined {
       continue;
     }
     if (variable(a)) {
-      if (open && overlap(open, a))
+      if (open && overlap(open, a, flags))
         return 'puts two repetitions that can match the same characters side by side (like \\d*\\d*)';
       open = a;
-    } else if (a.min > 0 && !(open && overlap(open, a))) open = null;
+    } else if (a.min > 0 && !(open && overlap(open, a, flags))) open = null;
   }
   return undefined;
 }
@@ -103,12 +108,14 @@ function adjacentProblem(atoms: Atom[]): string | undefined {
  * repetitions can match splits a value in exactly one way — `(\.[a-z0-9]+)*`, `([a-z0-9-]{1,63}\.)+` — so repeating
  * it backtracks linearly.
  */
-function separated(atoms: Atom[]): boolean {
+function separated(atoms: Atom[], flags: Flags): boolean {
   if (atoms.some((a) => a.group && a.repeats)) return false;
   const inner = atoms.filter((a) => a.repeats);
   return [atoms[0], atoms[atoms.length - 1]].some(
     (edge) =>
-      edge?.literal !== undefined && !edge.quantified && inner.every((a) => !canMatch(a.src, edge.literal!)),
+      edge?.literal !== undefined &&
+      !edge.quantified &&
+      inner.every((a) => !canMatch(a.src, edge.literal!, flags)),
   );
 }
 
@@ -142,7 +149,7 @@ function escapeAt(source: string, i: number): { atom: Partial<Atom>; end: number
 }
 
 /** A shape in `source` that can backtrack without bound, as a sentence fragment; undefined when there is none. */
-function structureProblem(source: string): string | undefined {
+function structureProblem(source: string, flags: Flags): string | undefined {
   const stack: Frame[] = [{ branches: [[]], lookaround: false }];
   const top = () => stack[stack.length - 1]!;
   const branch = () => top().branches[top().branches.length - 1]!;
@@ -196,7 +203,7 @@ function structureProblem(source: string): string | undefined {
       if (stack.length === 1) continue; // unbalanced: the compile refuses it
       const frame = stack.pop()!;
       for (const b of frame.branches) {
-        const p = adjacentProblem(b);
+        const p = adjacentProblem(b, flags);
         if (p) return p;
       }
       const atoms = frame.branches.flat();
@@ -206,12 +213,13 @@ function structureProblem(source: string): string | undefined {
         group: true,
         zeroWidth: frame.lookaround,
         repeats: atoms.some((a) => a.repeats),
-        separated: !alternation && separated(atoms),
+        separated: !alternation && separated(atoms, flags),
         alternation,
         distinctStarts:
           alternation &&
           starts.every((a) => a?.literal !== undefined && !a.quantified) &&
-          new Set(starts.map((a) => a!.literal)).size === starts.length,
+          new Set(starts.map((a) => (flags === 'ui' ? a!.literal!.toLowerCase() : a!.literal))).size ===
+            starts.length,
       });
       continue;
     }
@@ -263,7 +271,7 @@ function structureProblem(source: string): string | undefined {
     i++;
   }
   for (const b of stack[0]!.branches) {
-    const p = adjacentProblem(b);
+    const p = adjacentProblem(b, flags);
     if (p) return p;
   }
   return undefined;
@@ -271,17 +279,20 @@ function structureProblem(source: string): string | undefined {
 
 /**
  * Why `source` can't be a content pattern, as a sentence for the content author; undefined when it is fine.
- * Used by the param schema, so `adminforge validate` and publishing refuse it.
+ * Used by the param schema, so `adminforge validate` and publishing refuse it — and by the expressions' validation for
+ * regular expressions written into an expression, with `ignoreCase` for an `/…/i` (then `a` and `A` overlap, and
+ * `(?:a|A)+` repeats alternatives that start alike).
  */
-export function patternProblem(source: string): string | undefined {
+export function patternProblem(source: string, opts: { ignoreCase?: boolean } = {}): string | undefined {
+  const flags: Flags = opts.ignoreCase ? 'ui' : 'u';
   if (source.length > MAX_PATTERN_LENGTH)
     return `The pattern is longer than ${MAX_PATTERN_LENGTH} characters; describe the value more simply.`;
   try {
-    new RegExp(anchored(source), 'u');
+    new RegExp(anchored(source), flags);
   } catch (e) {
     return `The pattern is not a valid regular expression (with the u flag): ${(e as Error).message}`;
   }
-  const problem = structureProblem(source);
+  const problem = structureProblem(source, flags);
   return problem
     ? `The pattern ${problem}. Describe each part once: one character class with a length ([a-z0-9.-]{1,253}), repeated parts that start or end with a character they can't otherwise contain (([a-z0-9-]+\\.)+), alternatives that start differently.`
     : undefined;

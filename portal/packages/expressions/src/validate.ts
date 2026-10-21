@@ -115,29 +115,25 @@ function misplacedBind(node: unknown, statement = true): boolean {
 }
 
 /**
- * Why each regular expression handed to `$match` can't be used, by the content `pattern:` rules (`patternProblem` in
- * @adminforge/schemas, S-14): a regex runs synchronously, so no evaluation budget stops one that backtracks without
- * bound (`$match(s, /(a+)+$/)` on 25 characters took 609 ms). Reads calls, `~>` and partial application.
+ * Why each regular expression in an expression can't be used, by the content `pattern:` rules (`patternProblem` in
+ * @adminforge/schemas, S-14), with its `i` flag: a regex runs synchronously, so no evaluation budget stops one that
+ * backtracks without bound (`$match(s, /(a+)+$/)` on 25 characters took 609 ms). Every regex literal is checked,
+ * wherever it is used — `$match`, `$contains`, `$replace`, `$split`, called directly, kept in a variable — since a
+ * regex can only come from a literal in published content (data can't carry one, and `$eval` is off).
  */
-function matchPatternProblems(node: unknown, out: string[] = []): string[] {
+function regexProblems(node: unknown, out: string[] = []): string[] {
   if (!node || typeof node !== 'object') return out;
   if (Array.isArray(node)) {
-    for (const x of node) matchPatternProblems(x, out);
+    for (const x of node) regexProblems(x, out);
     return out;
   }
-  const n = node as { type?: string; procedure?: { type?: string; value?: unknown }; arguments?: unknown };
-  if (
-    (n.type === 'function' || n.type === 'partial') &&
-    n.procedure?.type === 'variable' &&
-    n.procedure.value === 'match' &&
-    Array.isArray(n.arguments)
-  )
-    for (const arg of n.arguments as Array<{ type?: string; value?: unknown }>) {
-      const problem =
-        arg?.type === 'regex' && arg.value instanceof RegExp ? patternProblem(arg.value.source) : undefined;
-      if (problem) out.push(`$match: ${problem}`);
-    }
-  for (const v of Object.values(node)) if (v && typeof v === 'object') matchPatternProblems(v, out);
+  const n = node as { type?: string; value?: unknown };
+  if (n.type === 'regex' && n.value instanceof RegExp) {
+    const problem = patternProblem(n.value.source, { ignoreCase: n.value.flags.includes('i') });
+    if (problem) out.push(`The regular expression /${n.value.source}/: ${problem}`);
+  }
+  for (const v of Object.values(node))
+    if (v && typeof v === 'object' && !(v instanceof RegExp)) regexProblems(v, out);
   return out;
 }
 
@@ -173,7 +169,7 @@ export function validateExpressions(def: unknown, opts: WalkOptions = {}): Expre
                 message:
                   'Assign variables ($x := …) only as a statement of a block ( … ; … ), the whole expression or a function body — not inside a condition, an operand or an argument.',
               });
-            for (const message of matchPatternProblems(ast))
+            for (const message of new Set(regexProblems(ast)))
               issues.push({ ...at, expression: seg.source, message });
           } catch (err) {
             const e = err as ExpressionError;

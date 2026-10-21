@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.create-distribution-list
-version: 1.0.0
+version: 1.0.1
 title: Create a distribution list
 summary: >-
   Creates a distribution list in an accepted domain with its owners and members; by default it only accepts mail from
@@ -111,7 +111,7 @@ steps:
           "guestOwners": [$owners[$contains(userPrincipalName, '#EXT#') or userType = 'Guest'].userPrincipalName],
           "memberAddresses": [$distinct([$append([$members[mail != null].mail], $typed)].$lowercase($))],
           "membersWithoutMail": [$members[$not($exists(mail)) or mail = null].userPrincipalName],
-          "invalid": [$typed[$not($contains($, /^[^\s@*]+@[^\s@*]+\.[^\s@*]+$/))]],
+          "invalid": [$typed[$not($contains($, /^[^\s@*]{1,64}@[^\s@.*]+(\.[^\s@.*]+)+$/))]],
           "meHasMailbox": $exists($me.mail) and $me.mail != null
         }
       ) }

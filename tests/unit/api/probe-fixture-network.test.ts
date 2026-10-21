@@ -87,6 +87,18 @@ describe('HTTP', () => {
     }
   });
 
+  it('reports a broken A fixture behind an HTTP probe as could-not-evaluate, not unreachable', async () => {
+    put('dns/flaky.example.com/A.json', '[1.2');
+    put('hosts/flaky.example.com/GET.json', { status: 'ok' });
+    const out = await runProbe(
+      'probes.x',
+      probe({ kind: 'http', url: 'https://flaky.example.com/' }),
+      deps(),
+    );
+    expect(out).toMatchObject({ status: 'error', code: 'fixture_invalid' });
+    expect(out.message).not.toMatch(/\.json|dns\//);
+  });
+
   it('keeps the SSRF guard: a host whose A fixture is private is refused before the fetch', async () => {
     put('dns/intranet.example.com/A.json', ['10.0.0.5']);
     put('hosts/intranet.example.com/GET.json', { status: 'ok' });
@@ -136,9 +148,19 @@ describe('DNS', () => {
     });
   });
 
-  it('reports a missing or broken fixture as could-not-evaluate, naming no file', async () => {
+  it('reports a missing, broken or wrongly shaped fixture as could-not-evaluate, naming no file', async () => {
     put('dns/broken.example.com/TXT.json', '[');
-    for (const name of ['missing.example.com', 'broken.example.com']) {
+    put('dns/null.example.com/TXT.json', 'null');
+    put('dns/shape.example.com/TXT.json', { answers: ['v=spf1'] });
+    put('dns/notadir.example.com', 'a file where the folder should be');
+    for (const name of [
+      'missing.example.com',
+      'broken.example.com',
+      'null.example.com',
+      'shape.example.com',
+      'notadir.example.com',
+      `${'x'.repeat(300)}.example.com`,
+    ]) {
       const out = await runProbe('probes.x', dns(name), deps());
       expect(out.status, name).toBe('error');
       expect(out.message).not.toMatch(/\.json|dns\//);
@@ -170,9 +192,16 @@ describe('TLS', () => {
     expect(soon).toMatchObject({ status: 'crit', metric: 5 });
   });
 
-  it('reports a missing or broken fixture as could-not-evaluate, naming no file', async () => {
+  it('reports a missing, broken or wrongly shaped fixture as could-not-evaluate, naming no file', async () => {
     put('tls/broken.example.com/443.json', 'nope');
-    for (const host of ['missing.example.com', 'broken.example.com']) {
+    put('tls/soon.example.com/443.json', { expiresInDays: 'soon' });
+    put('tls/list.example.com/443.json', [1, 2]);
+    for (const host of [
+      'missing.example.com',
+      'broken.example.com',
+      'soon.example.com',
+      'list.example.com',
+    ]) {
       const out = await runProbe('probes.x', cert(host), deps());
       expect(out.status, host).toBe('error');
       expect(out.code).toMatch(/^fixture_(not_found|invalid)$/);

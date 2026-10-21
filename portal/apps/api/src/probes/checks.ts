@@ -264,6 +264,7 @@ async function assertProbeTarget(url: URL, x: CheckContext): Promise<boolean> {
   try {
     addresses = isIP(host) ? [host] : await (x.deps.lookup ?? defaultLookup)(host);
   } catch (err) {
+    if (err instanceof AppError) throw err; // the lookup could not evaluate (e.g. a broken fixture), not a DNS answer
     const code = (err as { code?: string }).code;
     throw Object.assign(new TypeError('fetch failed'), { cause: { code: code ?? 'ENOTFOUND' } });
   }

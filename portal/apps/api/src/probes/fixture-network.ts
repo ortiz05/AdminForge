@@ -81,8 +81,10 @@ export function createFixtureNetwork(opts: {
       text = await readFile(file, 'utf8');
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT' || code === 'EISDIR') return undefined;
-      throw err;
+      // Nothing there (a file where the folder should be, a name too long for one): no fixture.
+      if (code === 'ENOENT' || code === 'EISDIR' || code === 'ENOTDIR' || code === 'ENAMETOOLONG')
+        return undefined;
+      throw invalid(kind === 'dns' ? 'DNS check' : 'certificate check');
     }
     try {
       return JSON.parse(text);
@@ -128,10 +130,9 @@ export function createFixtureNetwork(opts: {
       const answer = await load('dns', name, `${type}.json`);
       if (answer === undefined) throw missing('DNS check');
       if (Array.isArray(answer)) return answer.map(String);
-      const code = (answer as { error?: unknown }).error;
-      throw Object.assign(new Error(`Fixture answer for ${type} ${name}: ${String(code)}`), {
-        code: typeof code === 'string' ? code : 'ESERVFAIL',
-      });
+      const code = (answer as { error?: unknown } | null)?.error;
+      if (typeof code !== 'string' || !/^[A-Z]+$/.test(code)) throw invalid('DNS check');
+      throw Object.assign(new Error(`The synthetic DNS answers ${code}.`), { code });
     },
   };
 
@@ -148,11 +149,17 @@ export function createFixtureNetwork(opts: {
             issuer?: string;
           }
         | undefined;
-      if (!f || typeof f !== 'object') throw missing('certificate check');
+      if (f === undefined) throw missing('certificate check');
+      const days = (v: unknown, fallback: number) =>
+        v === undefined ? fallback : typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN;
+      const expires = days(f?.expiresInDays, 90);
+      const issued = days(f?.issuedDaysAgo, 30);
+      if (!f || typeof f !== 'object' || Array.isArray(f) || Number.isNaN(expires) || Number.isNaN(issued))
+        throw invalid('certificate check');
       const now = opts.now().getTime();
       const cert: PeerCertificate = {
-        validFrom: new Date(now - (f.issuedDaysAgo ?? 30) * DAY_MS),
-        validTo: new Date(now + (f.expiresInDays ?? 90) * DAY_MS),
+        validFrom: new Date(now - issued * DAY_MS),
+        validTo: new Date(now + expires * DAY_MS),
         authorized: f.authorized ?? true,
         ...(f.authorizationError ? { authorizationError: f.authorizationError } : {}),
         ...(f.subject ? { subject: f.subject } : {}),

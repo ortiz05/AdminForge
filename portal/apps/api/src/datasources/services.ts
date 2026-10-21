@@ -208,15 +208,15 @@ export function fixtureFetch(
       const subs = (body?.responses ?? []) as Array<{ id?: string; status?: number; body?: unknown }>;
       if (!subs.some((r) => isFixtureMissing(r.body))) return res;
       // The sub-requests, to tell a write (accepted) from a read (the mock message) by id.
-      const sent = new Map(
-        (
-          (
-            JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as {
-              requests?: Array<{ id: string; method?: string; url: string }>;
-            }
-          ).requests ?? []
-        ).map((r) => [r.id, r]),
-      );
+      let requests: Array<{ id: string; method?: string; url: string }> = [];
+      try {
+        requests =
+          (JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as { requests?: typeof requests })
+            .requests ?? [];
+      } catch {
+        // Not a body this can read: every sub-request counts as a read (the mock message, nothing accepted).
+      }
+      const sent = new Map(requests.map((r) => [String(r.id), r]));
       const version = url.pathname.split('/').filter(Boolean)[0] ?? 'v1.0';
       for (const r of subs) {
         if (!isFixtureMissing(r.body)) continue;

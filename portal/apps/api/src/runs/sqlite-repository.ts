@@ -131,6 +131,8 @@ export class SqliteRunRepository implements RunRepository {
       dryRun: run.dryRun,
       trigger: run.trigger,
       identity: run.identity,
+      // ADR-014: the app identity a scheduled run (and its children) executes as.
+      identityName: run.identityName ?? null,
       initiatorOid: run.initiatorOid,
       initiatorUpn: run.initiatorUpn,
       sessionHash: run.sessionHash,

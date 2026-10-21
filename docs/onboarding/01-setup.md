@@ -92,10 +92,11 @@ bug — say so in the team channel rather than working around it.
 You'll only need this for live validation, and only once a code owner has given you access to the **validation
 tenant** (never production) and a portal role there ([`docs/access.md`](../access.md)).
 
-- Your tenant settings go in `~/.config/adminforge/dev.env` (mode 600 — the API and the CLI refuse a file other users
-  can read, and print the `chmod`). Provisioner and live-test credentials, if you're given any, go in `dev.admin.env`
-  and are used only by `provision …`, `validate --scopes` and the live tests. Nothing from either file is ever pasted
-  into chat, issues, commits, prompts or logs.
+- Your tenant settings go in `~/.config/adminforge/dev.env` (mode 600 — the API and the CLI's commands refuse a file
+  other users can read, and print the `chmod`; `env check` doesn't check modes yet). Provisioner and live-test
+  credentials, if you're given any, go in `dev.admin.env` and are used only by `provision …`, `validate --scopes`,
+  `env check` (key states only) and the live tests. Nothing from either file is ever pasted into chat, issues,
+  commits, prompts or logs.
 - `pnpm adminforge provision status` shows what is provisioned. Provisioning itself (`provision entra`) changes the
   tenant — only code owners run it.
 - Against a tenant, `pnpm dev` runs playbooks and schedules itself: the API is also the run worker and the scheduler.
@@ -114,7 +115,7 @@ tenant** (never production) and a portal role there ([`docs/access.md`](../acces
 | Commits go through without the guard tests running     | `git config core.hooksPath .githooks`                                                                  |
 | Playwright can't find a browser                        | Install Google Chrome system-wide; Playwright doesn't download one here                                |
 | `env check` says DATABASE_PATH contains `CHANGE_ME`    | Run `pnpm --filter @adminforge/api init:local` again                                                   |
-| `env check` names `DATABASE_URL` and other old keys    | Keys of the Postgres releases: nothing reads them — remove them                                        |
+| `env check` names `DATABASE_URL` and other old keys    | Keys of the Postgres releases: remove them once the one-time `db import-postgres` has run              |
 | An env file "is open to other users of this machine"   | `chmod 600` the file the message names                                                                 |
 | `PUBLIC_BASE_URL` error on `pnpm dev`                  | It has no default — pass it as in the mock-mode one-liner; on your machine it is a `localhost` address |
 | A blank page or "no synthetic data" in mock mode       | A fixture is missing; the API log names it ([Testing → fixtures](09-testing.md#fixtures))              |

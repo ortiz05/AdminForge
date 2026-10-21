@@ -19,7 +19,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | `portal/apps/runner`       | PowerShell runner (Exchange/Teams/SharePoint), the pod's sidecar — pinned scripts, delegated tokens   |
 | `portal/packages/*`        | `design-tokens`, `ui`, `widgets`, `schemas`, `expressions`, `connectors`, `engine`, `config`          |
 | `portal/content`           | Pages, dashboards, reports, playbooks, runbooks, schedules, probes, connections, feeds, scripts, nav  |
-| `portal/tools/cli`         | `adminforge` CLI (env check, provision, new, validate, test, publish, audit, db, fixtures)            |
+| `portal/tools/cli`         | `adminforge` CLI (env check, provision, list, new, validate, test, publish, audit, db, fixtures)      |
 | `portal/deploy/kubernetes` | Images (`build-images.sh`), kustomize base and example overlay, the deployment runbook (`README.md`)  |
 | `tests/`                   | **All** tests and test-only deps (unit, component, api, content, e2e, live, guards, fixtures)         |
 | `docs/`                    | Every doc, indexed in `docs/README.md`: architecture, API, operations, ADRs, extending, backlog       |
@@ -82,7 +82,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Database migrations            | `pnpm --filter @adminforge/api db:migrate` (optional: the API migrates its database file at start)                                       |
 | Dev against the tenant         | `pnpm --filter @adminforge/api init:local` once, then `pnpm dev` (config from the env file; see below)                                   |
 | Find content                   | `pnpm adminforge list [--kind k] [--section s] [--status s] [--search text] [--json]`                                                    |
-| Scaffold content               | `pnpm adminforge new <kind> <section>/<name> [--template list-detail\|dashboard\|report\|entity]`                                        |
+| Scaffold content               | `pnpm adminforge new <kind> <prefix>/<name> [--template list-detail\|dashboard\|report\|entity]`                                         |
 | Validate content               | `pnpm adminforge validate` (add `--scopes` to compare with the app registrations)                                                        |
 | Playbook/runbook tests         | `pnpm adminforge test [pattern]`                                                                                                         |
 | All tests                      | `pnpm test` · e2e: `pnpm test:e2e` · production build: `pnpm build && pnpm test:e2e:prod` · guards: `pnpm guard`                         |
@@ -94,13 +94,14 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Deploy to Kubernetes           | Code owners only, when asked: `portal/deploy/kubernetes/README.md` › Upgrade (build and push images, apply, publish, `/readyz`)          |
 | Live smoke (validation tenant) | `pnpm exec tsx tests/live/scripts/verify-api-live.ts` · full sweep: `pnpm test:live` (see `tests/live/README.md`)                        |
 
-Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and fixtures and never
-touches a database file, a tenant or the internet; `PUBLIC_BASE_URL` has no default and must be set (on localhost).
-Against the tenant, `init:local` writes `DATABASE_PATH=~/.local/share/adminforge/dev.db` into the env file; the API
-creates and migrates that file at start and is also the run worker and the scheduler — no Docker, nothing else to
-start. Never point `DATABASE_PATH` at a deployment's file. Env files are mode 600: the API and the CLI refuse one other
-users can read. Provisioner and live-test credentials live in `<env>.admin.env`, read only by `provision …`,
-`validate --scopes` and the live tests. System Chrome is used by Playwright (no browser download).
+Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and fixtures and
+never touches a database file, a tenant or the internet; `PUBLIC_BASE_URL` has no default and must be set (on
+localhost). Against the tenant, `init:local` writes `DATABASE_PATH=~/.local/share/adminforge/dev.db` into the env
+file; the API creates and migrates that file at start and is also the run worker and the scheduler — no Docker,
+nothing else to start. Never point `DATABASE_PATH` at a deployment's file. Env files are mode 600: the API and the
+CLI refuse one other users can read. Provisioner and live-test credentials live in `<env>.admin.env`, read only by
+`provision …`, `validate --scopes`, `env check` (key states) and the live tests. System Chrome is used by Playwright
+(no browser download).
 
 **Never build or install in a checkout a running service serves.** A service that runs from a checkout uses its
 `dist/` and `node_modules`, so `pnpm build`, `pnpm install` or `pnpm dev` there (anything that writes them) is a

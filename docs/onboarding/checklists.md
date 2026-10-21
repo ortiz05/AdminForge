@@ -52,7 +52,8 @@ Copy what you need into your PR or your notes. Each item links to where it's exp
 - [ ] Checks: probes with `group: <key>` (the section's row shows their status and links to
       `/monitoring?group=<key>`), `probeStatus` with `group: <key>` on the overview
 - [ ] Screenshots of the overview and a list in steel and daylight — KPI labels fit, no alert banners
-- [ ] Retiring: `status: retired` + version bump on every related definition (schedules also `enabled: false`); no
+- [ ] Retiring: `status: retired` + version bump + a `Retired — <why>.` summary on every related definition
+      (schedules also `enabled: false`); no
       active links left (`tests/content/retired-content.test.ts`); `publish --dry-run` shows `− retire`; backlog says
       how to bring it back
 

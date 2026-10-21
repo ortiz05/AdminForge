@@ -27,9 +27,9 @@ Two delegated apps; write requires a step-up sign-in to the Write app (assignmen
 
 ## Consequences
 
-- Two consent sets to manage, both created and kept in step by `adminforge provision entra`; `adminforge validate
---scopes` compares the scopes content declares with what each app holds. Privileged write scopes need an explicit
-  installation opt-in (`AF_ALLOW_PRIVILEGED_WRITE_SCOPES`).
+- Two consent sets to manage, both created and kept in step by `adminforge provision entra`;
+  `adminforge validate --scopes` compares the scopes content declares with what each app holds. Privileged write
+  scopes need an explicit installation opt-in (`AF_ALLOW_PRIVILEGED_WRITE_SCOPES`).
 - Read sessions never hold a Write-app token. Arming is a fresh interactive sign-in to the Write app (`prompt=login`,
   proven by `auth_time`), plus a Conditional Access authentication context when `WRITE_AUTH_CONTEXT` is set (Entra ID
   P1); it is time-boxed (`WRITE_SESSION_MAX_MINUTES`) and audited, and shown in ember everywhere.

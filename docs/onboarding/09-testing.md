@@ -9,20 +9,20 @@ What to test, where the test goes, and how to keep the suite fast and trustworth
 imports a test library. Add a **new** test file for new behaviour rather than appending to shared suites such as
 `content/validate-all.test.ts` — small files make ownership and review obvious.
 
-| You changed…                                         | Test in                                                                        | Runs with                      |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------ |
-| Pure logic in a package or app                       | `tests/unit/<package>/<topic>.test.ts`                                         | vitest `unit`                  |
-| An API route or service                              | `tests/api/<area>.test.ts` (`app.inject`, memory stores)                       | vitest `api`                   |
-| Database behaviour (transactions, triggers, queries) | `tests/api/<area>-db.test.ts` (a temporary SQLite file)                        | vitest `api`                   |
-| A React component or coded page                      | `tests/component/<area>/<Component>.test.tsx` (jsdom, axe)                     | vitest `component`             |
-| Content logic (a transform, a rule)                  | `tests/content/<topic>.test.ts`                                                | vitest `content`               |
-| A transform at enterprise size (the 250 ms budget)   | `tests/content/content-at-scale-<topic>.scale.test.ts` (any `*.scale.test.ts`) | vitest `scale`                 |
-| A playbook or runbook                                | its own `tests:` block                                                         | `pnpm adminforge test`         |
-| A user journey or a visible change                   | `tests/e2e/<feature>.spec.ts` + screenshots                                    | Playwright                     |
-| What only the production bundle shows (CSP, chunks)  | `tests/e2e/prod/<topic>.spec.ts`                                               | `pnpm test:e2e:prod`           |
-| Code that starts real PowerShell (runner workers)    | `tests/unit/runner/<topic>.pwsh.test.ts`                                       | vitest `pwsh`                  |
-| A PowerShell script or the runner module             | `tests/runner/pester/` (stub cmdlets)                                          | Pester (through vitest `pwsh`) |
-| Behaviour only a real tenant can show                | `tests/live/` (never in CI)                                                    | Playwright (live)              |
+| You changed…                                         | Test in                                                    | Runs with                      |
+| ---------------------------------------------------- | ---------------------------------------------------------- | ------------------------------ |
+| Pure logic in a package or app                       | `tests/unit/<package>/<topic>.test.ts`                     | vitest `unit`                  |
+| An API route or service                              | `tests/api/<area>.test.ts` (`app.inject`, memory stores)   | vitest `api`                   |
+| Database behaviour (transactions, triggers, queries) | `tests/api/<area>-db.test.ts` (a temporary SQLite file)    | vitest `api`                   |
+| A React component or coded page                      | `tests/component/<area>/<Component>.test.tsx` (jsdom, axe) | vitest `component`             |
+| Content logic (a transform, a rule)                  | `tests/content/<topic>.test.ts`                            | vitest `content`               |
+| A transform at enterprise size (the 250 ms budget)   | `tests/content/content-at-scale-<topic>.scale.test.ts`     | vitest `scale`                 |
+| A playbook or runbook                                | its own `tests:` block                                     | `pnpm adminforge test`         |
+| A user journey or a visible change                   | `tests/e2e/<feature>.spec.ts` + screenshots                | Playwright                     |
+| What only the production bundle shows (CSP, chunks)  | `tests/e2e/prod/<topic>.spec.ts`                           | `pnpm test:e2e:prod`           |
+| Code that starts real PowerShell (runner workers)    | `tests/unit/runner/<topic>.pwsh.test.ts`                   | vitest `pwsh`                  |
+| A PowerShell script or the runner module             | `tests/runner/pester/` (stub cmdlets)                      | Pester (through vitest `pwsh`) |
+| Behaviour only a real tenant can show                | `tests/live/` (never in CI)                                | Playwright (live)              |
 
 ## Commands
 
@@ -82,8 +82,9 @@ they cover:
 - `tests/content/retired-content.test.ts` — nothing active links to, embeds, runs or schedules a retired definition.
 - `tests/unit/schemas/resource-graph-joins.test.ts` — the Resource Graph join/union lint `validate` applies.
 - `tests/content/content-at-scale-*.scale.test.ts` — each big-list transform at its largest size under the real
-  budget. Files named `*.scale.test.ts` run in the `scale` project, after the others and one file at a time; a busy
-  machine (another suite, background agents) can push one over — rerun that file alone before suspecting a regression.
+  budget. Files named `*.scale.test.ts` (in `unit/`, `content/` or `api/`) run in the `scale` project, after the
+  others and one file at a time; a busy machine (another suite, background agents) can push one over — rerun that
+  file alone before suspecting a regression.
 - `tests/content/fixtures-complete.test.ts` — every active page, dashboard and report datasource renders from the
   fixtures (entity pages through its `SAMPLE_PARAMS`; add one for a new entity page), and every Resource Graph or Log
   Analytics datasource and KQL probe names an `af:` variant the fixtures have.
@@ -94,8 +95,8 @@ they cover:
   volume, a locked-down pod and the runner on the pod's loopback.
 - `tests/guards/no-deep-imports.test.ts` — runtime code reaches other packages only through their declared `exports`,
   never `@adminforge/<pkg>/src/…`. Tests may import internals.
-- `tests/guards/test-file-names.test.ts` — the `*.scale` and `*.pwsh` suffixes: a scale test or one that starts
-  `pwsh` without its suffix fails.
+- `tests/guards/test-file-names.test.ts` — keeps the names honest: a `content-at-scale` test or one that starts `pwsh`
+  without its suffix fails, and `*.scale` / `*.pwsh` files live in `unit/`, `content/` or `api/`.
 - `tests/unit/docs/` — every backticked path, link and heading reference (a doc's name, then › and a heading) in
   CLAUDE.md, `.claude/`, the onboarding guides and the docs index resolves; every document has a row in
   `docs/README.md`; every plan has a status line.

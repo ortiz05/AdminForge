@@ -51,13 +51,13 @@ New to AdminForge? Start with the [engineer onboarding guide](onboarding/README.
 
 ## Why it is this way, and what is next
 
-| Doc                                               | Owns                                                                                     | Audience               | Update when                                                                       |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
-| [`docs/adr/`](adr/)                               | Architecture decisions (ADR-001 onwards); an accepted ADR is superseded, never rewritten | Engineers, code owners | A decision shapes the architecture or the security model                          |
-| [`docs/decisions.md`](decisions.md)               | Smaller decisions, dated, with who decided                                               | Engineers, code owners | A choice someone could undo by accident                                           |
-| [`docs/backlog.md`](backlog.md)                   | Known gaps and deferred work                                                             | Engineers, code owners | You leave something out on purpose, or close an item                              |
-| [`docs/licensing-review.md`](licensing-review.md) | Licence and permission findings per feature, and what was checked only against fixtures  | Code owners, engineers | A feature needs a licence or permission, or a request is unchecked live           |
-| [`docs/plans/`](plans/)                           | Plans and reviews, each with a status line; finished ones are history, not instructions  | Engineers, code owners | A plan is written, or its status changes (`tests/unit/docs/plans-status.test.ts`) |
+| Doc                                               | Owns                                                                                                            | Audience               | Update when                                                                       |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| [`docs/adr/`](adr/)                               | Architecture decisions (ADR-001 onwards); an accepted ADR's decision is never edited; a later ADR supersedes it | Engineers, code owners | A decision shapes the architecture or the security model                          |
+| [`docs/decisions.md`](decisions.md)               | Smaller decisions, dated, with who decided                                                                      | Engineers, code owners | A choice someone could undo by accident                                           |
+| [`docs/backlog.md`](backlog.md)                   | Known gaps and deferred work                                                                                    | Engineers, code owners | You leave something out on purpose, or close an item                              |
+| [`docs/licensing-review.md`](licensing-review.md) | Licence and permission findings per feature, and what was checked only against fixtures                         | Code owners, engineers | A feature needs a licence or permission, or a request is unchecked live           |
+| [`docs/plans/`](plans/)                           | Plans and reviews, each with a status line; finished ones are history, not instructions                         | Engineers, code owners | A plan is written, or its status changes (`tests/unit/docs/plans-status.test.ts`) |
 
 ## Onboarding
 

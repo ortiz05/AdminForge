@@ -27,7 +27,8 @@ updates:
     groups:
       actions:
         patterns: ['*']
-  # Base images of the runner and app images (a digest-pinned `FROM` gets tag and digest bumped together).
+  # Base images of the runner and app images. Dependabot reads literal `FROM image:tag[@sha256:…]` lines only: an
+  # image named through an ARG (`FROM ${NODE_IMAGE}`) gets no pull requests, so the pins must stay literal.
   - package-ecosystem: docker
     directory: /portal/apps/runner
     schedule: { interval: weekly, day: monday }

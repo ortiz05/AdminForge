@@ -29,3 +29,7 @@
 /.claude/                           @ortiz05
 /.githooks/                         @ortiz05
 /tooling/                           @ortiz05
+# Supply chain: release-age floor, overrides and build-script allow-list; the resolved versions; what git keeps out.
+/pnpm-workspace.yaml                @ortiz05
+/pnpm-lock.yaml                     @ortiz05
+/.gitignore                         @ortiz05

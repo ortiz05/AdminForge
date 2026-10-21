@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parse } from 'yaml';
+import { isSeq, parse, parseDocument, type Scalar } from 'yaml';
 import { repoRoot } from '../../lib/repo';
 
 // Dependencies wait seven days before they can enter the lockfile (S-04): a compromised upstream release is usually
@@ -26,6 +26,27 @@ describe('pnpm: minimum release age', () => {
   it('a too-young version fails the install instead of being added to the excludes silently', () => {
     // pnpm defaults to strict once minimumReleaseAge is set; non-strict mode adds immature picks to the excludes.
     expect(workspace.minimumReleaseAgeStrict).toBe(true);
+  });
+
+  it('a version without a publish time fails the check instead of skipping it', () => {
+    // pnpm 11 defaults minimumReleaseAgeIgnoreMissingTime to true: a mirror without `time` would turn the floor off.
+    expect(workspace.minimumReleaseAgeIgnoreMissingTime).toBe(false);
+  });
+
+  it('every exclude carries a comment saying why and when it goes', () => {
+    const doc = parseDocument(read('pnpm-workspace.yaml'));
+    const seq = doc.get('minimumReleaseAgeExclude', true);
+    if (seq === undefined) return;
+    expect(isSeq(seq)).toBe(true);
+    if (!isSeq(seq)) return;
+    seq.items.forEach((item, i) => {
+      const node = item as Scalar;
+      // yaml attaches the comment above the first item to the sequence itself.
+      const comment = [node.commentBefore, node.comment, i === 0 ? seq.commentBefore : undefined]
+        .join('')
+        .trim();
+      expect(comment, String(node.value)).not.toBe('');
+    });
   });
 
   it('excludes name one exact version each (an urgent fix), never a package or a name pattern', () => {

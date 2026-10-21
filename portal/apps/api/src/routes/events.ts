@@ -40,7 +40,7 @@ export function eventRoutes(
   // S-08: when a session's id is rotated (arming), its streams end without `session.ended` (which would read as
   // signed out): the browser reconnects with the new cookie, and a stream opened with the old id doesn't follow it.
   ctx.sessions.onRotate({
-    sessionMoved: (from) => {
+    sessionMoved: ({ from }) => {
       for (const [end, idHash] of [...open]) if (idHash === from) end();
     },
   });
@@ -137,8 +137,9 @@ export function eventRoutes(
       request.raw.on('close', end);
       raw.on('error', end);
       open.set(end, idHash);
-      // Gone before the listeners were attached: release its slot now.
-      if (raw.destroyed) end();
+      // Gone before the listeners were attached: release its slot now. Rotated (S-08) after this request's session was
+      // read: end quietly too — the browser reconnects with the new cookie.
+      if (raw.destroyed || ctx.sessions.rotatedAway(idHash, ctx.now())) end();
     },
   );
 }

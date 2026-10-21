@@ -24,6 +24,9 @@ import {
   orgResponse,
   setCookieHeader,
 } from './helpers';
+import { RoleCheck } from '@adminforge/api/src/auth/session-plugin';
+import { MemorySessionStore, type SessionRecord } from '@adminforge/api/src/auth/session-store';
+import { ReauthRequired } from '@adminforge/api/src/auth/types';
 import type { MemoryRunRepository } from '@adminforge/api/src/runs';
 import { AVERY, BLAKE, FakeExecutor, runsApp } from './runs-helpers';
 
@@ -181,7 +184,7 @@ describe('arming rotates the session id (memory stores)', () => {
 });
 
 describe('what the session acts through moves with it (runs, approvals, show-once secrets, streams)', () => {
-  it('an in-flight run keeps working: its next step acts through the new id', async () => {
+  it('an in-flight run keeps working: its next reads act through the new id', async () => {
     const first = gate();
     const outbound = new FakeExecutor(respond({ '/users/first': first.opened }));
     const t = await runsApp({ config: mockConfig(), definitions: rotationDefinitions(), outbound });
@@ -192,7 +195,10 @@ describe('what the session acts through moves with it (runs, approvals, show-onc
     await waitFor(() => outbound.calls.length === 1);
 
     const armed = await armMock(t.app, avery.headers);
-    expect((t.repository as MemoryRunRepository).runs.get(runId)!.sessionHash).toBe(hashOf(armed.cookie));
+    // Bound while the session was read-only: it reads on, and would ask before writing (prearm).
+    expect((t.repository as MemoryRunRepository).runs.get(runId)!.sessionHash).toBe(
+      `prearm:${hashOf(armed.cookie)}`,
+    );
     first.open();
     await t.drain();
 
@@ -203,6 +209,46 @@ describe('what the session acts through moves with it (runs, approvals, show-onc
       ['/groups/second', AVERY.upn],
     ]);
     expect((await avery.get(`/api/runs/${runId}`)).statusCode).toBe(401);
+    await t.close();
+  });
+
+  it('a run started while read-only reads on after the arm, but writes only once its person resumes it', async () => {
+    const first = gate();
+    const outbound = new FakeExecutor(respond({ '/users/first': first.opened }));
+    const t = await runsApp({ config: mockConfig(), definitions: rotationDefinitions(), outbound });
+    // Started with the read-only id — by the person, or by whoever copied the id before they armed.
+    const avery = await t.login(AVERY, OPERATOR);
+    const { runId } = (
+      await avery.post('/api/runs', { playbook: 'test.read-then-write', inputs: { userId: USER } })
+    ).json();
+    await waitFor(() => outbound.calls.length === 1);
+    const armed = await armMock(t.app, avery.headers);
+    first.open();
+    await t.drain();
+
+    const parked = (
+      await t.app.inject({ method: 'GET', url: `/api/runs/${runId}`, headers: armed.headers })
+    ).json();
+    expect(parked.run).toMatchObject({ status: 'awaiting_arm', waiting: { kind: 'arm', stepId: 'disable' } });
+    expect(outbound.calls.map((c) => c.call.method)).toEqual(['GET']);
+    // The old id can't let it go on; the person, armed, resumes it — and only then does it write.
+    expect((await avery.post(`/api/runs/${runId}/resume`)).statusCode).toBe(401);
+    const resumed = await t.app.inject({
+      method: 'POST',
+      url: `/api/runs/${runId}/resume`,
+      headers: armed.headers,
+    });
+    expect(resumed.statusCode).toBe(202);
+    await t.drain();
+    const done = (
+      await t.app.inject({ method: 'GET', url: `/api/runs/${runId}`, headers: armed.headers })
+    ).json();
+    expect(done.run.status).toBe('succeeded');
+    expect(outbound.calls.map((c) => [c.call.method, c.user])).toEqual([
+      ['GET', AVERY.upn],
+      ['PATCH', AVERY.upn],
+    ]);
+    expect((t.repository as MemoryRunRepository).runs.get(runId)!.sessionHash).toBe(hashOf(armed.cookie));
     await t.close();
   });
 
@@ -307,5 +353,141 @@ describe('what the session acts through moves with it (runs, approvals, show-onc
     });
     expect(got.json().values).toEqual({ temporaryAccessPass: TAP });
     await t.close();
+  });
+});
+
+/** Signs in through the fake Entra flow and starts arming: the callback's state and the cookies the browser sends. */
+async function entraArmStart(
+  t: Awaited<ReturnType<typeof makeApp>>,
+  beforeArm: (cookie: string) => Promise<void> = async () => undefined,
+) {
+  const login = await t.app.inject({ method: 'GET', url: '/auth/login?returnTo=%2F' });
+  const signedIn = await t.app.inject({
+    method: 'GET',
+    url: `/auth/callback?code=good-code&state=${new URL(login.headers.location as string).searchParams.get('state')}`,
+    headers: { cookie: bindingCookie(login)! },
+  });
+  const cookie = cookieFrom(signedIn) ?? cookieFrom(signedIn, '__Host-adminforge')!;
+  await beforeArm(cookie);
+  const csrf = (await getMe(t.app, cookie)).me!.csrf;
+  const started = await t.app.inject({
+    method: 'POST',
+    url: '/auth/arm',
+    headers: { cookie, 'x-adminforge-csrf': csrf },
+    payload: { minutes: 30, reason: 'Disable a test user' },
+  });
+  const state = new URL(started.json().redirect).searchParams.get('state');
+  return {
+    cookie,
+    callback: () =>
+      t.app.inject({
+        method: 'GET',
+        url: `/auth/arm/callback?code=write-code&state=${state}`,
+        headers: { cookie: `${cookie}; ${bindingCookie(started)}` },
+      }),
+  };
+}
+
+describe('around the rotation', () => {
+  it('in production the new cookie is __Host-, Secure, HttpOnly, SameSite=Lax, and ends with the session', async () => {
+    const auth = new FakeAuthClient();
+    const t = await makeApp(
+      entraConfig({
+        NODE_ENV: 'production',
+        PUBLIC_BASE_URL: 'https://adminforge.example.com',
+        LOG_LEVEL: 'silent',
+      }),
+      { auth, fetch: async () => orgResponse() },
+    );
+    // Two hours of work (never idle for an hour) before arming.
+    const { callback } = await entraArmStart(t, async (cookie) => {
+      for (let i = 0; i < 4; i++) {
+        t.clock.advance(30 * MINUTE);
+        expect((await getMe(t.app, cookie)).res.statusCode).toBe(200);
+      }
+    });
+    const cb = await callback();
+    expect(cb.statusCode).toBe(302);
+    const set = setCookieHeader(cb, '__Host-adminforge')!;
+    expect(set).toMatch(/^__Host-adminforge=[A-Za-z0-9_-]{43};/);
+    for (const flag of [/Secure/, /HttpOnly/, /SameSite=Lax/, /Path=\//]) expect(set).toMatch(flag);
+    expect(set).not.toMatch(/Domain=/);
+    // 12-hour sessions, signed in two hours ago: the cookie lasts as long as the session does, not 12 more hours.
+    expect(set).toMatch(/Max-Age=36000(;|$)/);
+    await t.app.close();
+  });
+
+  it('signed out while verifying: nothing is armed, the Write tokens just redeemed go, the failure is audited', async () => {
+    const auth = new FakeAuthClient();
+    const t = await makeApp(entraConfig(), { auth, fetch: async () => orgResponse() });
+    const { cookie, callback } = await entraArmStart(t);
+    // Sign-out in another tab lands while Microsoft redeems the Write app's code.
+    const redeem = auth.redeem.bind(auth);
+    auth.redeem = async (input) => {
+      const result = await redeem(input);
+      if (input.kind === 'write') await t.sessions.delete(hashOf(cookie));
+      return result;
+    };
+    const cb = await callback();
+    expect(cb.statusCode).toBe(401);
+    expect(cb.json().error.code).toBe('unauthenticated');
+    expect(cookieFrom(cb)).toBeUndefined();
+    expect(auth.forgets).toContainEqual({ kind: 'write', partitionKey: auth.redeems.at(-1)!.partitionKey });
+    expect([...t.tokenBlobs.rows.keys()].filter((k) => k.startsWith('write:'))).toEqual([]);
+    expect(t.sessions.rows.size).toBe(0);
+    expect(t.audit.rows.at(-1)).toMatchObject({
+      action: 'session.armed',
+      result: 'failure',
+      details: { error: 'unauthenticated' },
+    });
+    await t.app.close();
+  });
+
+  it('a role re-check that lost its session to the rotation ends nothing and audits no revocation', async () => {
+    const auth = new FakeAuthClient();
+    const t = await makeApp(entraConfig(), { auth, fetch: async () => orgResponse() });
+    const { cookie, callback } = await entraArmStart(t);
+    const before: SessionRecord = structuredClone(t.sessions.rows.get(hashOf(cookie))!);
+    const next = cookieFrom(await callback())!;
+    // A request (or run step) that read the old record re-checks its roles after the commit: the old id's token
+    // partition moved, so Entra looks like it refused.
+    t.clock.advance(6 * MINUTE);
+    auth.refreshImpl = async () => {
+      throw new ReauthRequired('read');
+    };
+    const check = new RoleCheck(t.app.ctx);
+    expect(await check.check(before, t.clock.now(), { correlationId: 'c-1' })).toBeNull();
+    expect(t.audit.rows.some((r) => r.action === 'session.access_revoked')).toBe(false);
+    expect(t.sessions.rows.has(hashOf(next))).toBe(true);
+    await t.app.close();
+  });
+
+  it('a mover that is not synchronous is refused: it would write outside the transaction', async () => {
+    const sessions = new MemorySessionStore();
+    const now = new Date('2026-10-15T12:00:00.000Z');
+    await sessions.create({
+      idHash: 'old',
+      userOid: AVERY.oid,
+      upn: AVERY.upn,
+      displayName: AVERY.upn,
+      tenantId: 't',
+      tenantName: 'Example Org',
+      tenantDomain: 'example.com',
+      roles: OPERATOR,
+      csrf: 'c',
+      readAccountId: null,
+      writeAccountId: null,
+      writeExpiresAt: null,
+      writeExtended: false,
+      writeReason: null,
+      createdAt: now,
+      lastSeenAt: now,
+      expiresAt: new Date(now.getTime() + 3_600_000),
+      ip: null,
+      userAgent: null,
+    });
+    sessions.onRotate({ moveSessionTx: (async () => undefined) as never });
+    await expect(sessions.rotate({ from: 'old', to: 'new', patch: {}, now })).rejects.toThrow(/synchronous/);
+    expect([...sessions.rows.keys()]).toEqual(['old']);
   });
 });

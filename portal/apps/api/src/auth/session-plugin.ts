@@ -175,7 +175,7 @@ export function registerSessions(app: FastifyInstance, ctx: AppContext) {
   // S-08: a session's Microsoft token partitions (sealed again: the partition key is the AAD) and the round trips it
   // started move with it when its id is rotated.
   ctx.sessions.onRotate({
-    moveSessionTx: (from, to, tx) => {
+    moveSessionTx: ({ from, to }, tx) => {
       for (const kind of ['read', 'write'] as const)
         ctx.tokenCache.movePartitionTx(partitionKey(kind, from), partitionKey(kind, to), tx);
       ctx.preauth.moveSessionTx(from, to, tx);
@@ -271,7 +271,7 @@ export class RoleCheck {
     this.startedAt = ctx.now().getTime();
     // S-08: a session whose id was rotated keeps its back-off (a check in progress for the old id ends with it).
     ctx.sessions.onRotate({
-      sessionMoved: (from, to) => {
+      sessionMoved: ({ from, to }) => {
         const at = this.retryAt.get(from);
         if (at === undefined) return;
         this.retryAt.delete(from);
@@ -343,6 +343,9 @@ export class RoleCheck {
     // Unchanged: record the confirmation (null when the session was ended meanwhile, e.g. signed out).
     if (same) return ctx.sessions.update(session.idHash, { rolesCheckedAt: now });
     if (roles.length === 0) {
+      // Gone meanwhile — signed out, or its id rotated (S-08: the old id's token partition moved, so Entra looked
+      // "refused" from here): nothing to end, and nothing was revoked.
+      if (!(await ctx.sessions.get(session.idHash))) return null;
       await endSession(ctx, session);
       await ctx.audit.append({
         ...actor(session),

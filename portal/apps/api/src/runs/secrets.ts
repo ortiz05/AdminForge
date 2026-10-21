@@ -1,8 +1,8 @@
 import type { SecretDelivery, SecretSink } from '@adminforge/engine';
 import type { AuditWriter } from '../audit/writer';
-import type { SessionMover } from '../auth/session-store';
+import type { SessionMove, SessionMover } from '../auth/session-store';
 import { rootOf } from './run-worker';
-import type { RunRepository } from './types';
+import { sessionBinding, type RunRepository } from './types';
 
 /**
  * Show-once secrets on the API side. The engine masks secret outputs and hands the values to `sink()`; they never
@@ -63,9 +63,14 @@ const message = (h: Held): SecretMessage => ({
   producedAt: h.producedAt,
 });
 
+/** How many rotated session ids the broker remembers (old → new), to place a secret produced during a rotation. */
+const MOVED_REMEMBERED = 1_000;
+
 export class SecretBroker implements SessionMover {
   private readonly held = new Map<string, { secret: Held; timer: NodeJS.Timeout }>();
   private readonly streams = new Set<SecretStream>();
+  /** Old session id hash → the one it was rotated to (S-08), oldest first. */
+  private readonly movedTo = new Map<string, string>();
 
   constructor(
     private readonly deps: {
@@ -101,7 +106,9 @@ export class SecretBroker implements SessionMover {
         const row = await this.deps.repo.getRun(run.id);
         if (!row) return { status: 'discarded', reason: 'The run no longer exists.' };
         const root = await rootOf(this.deps.repo, row);
-        if (root.identity !== 'delegated' || !root.sessionHash)
+        // A run bound before its session gained write access (S-08) is still that person's: they receive it.
+        const sessionHash = sessionBinding(root.sessionHash).hash;
+        if (root.identity !== 'delegated' || !sessionHash)
           return { status: 'discarded', reason: 'Nobody is signed in to receive it (scheduled run).' };
         const held: Held = {
           runId: row.id,
@@ -110,7 +117,7 @@ export class SecretBroker implements SessionMover {
           stepPath: s.stepPath,
           values: s.values,
           hints: s.hints,
-          sessionHash: root.sessionHash,
+          sessionHash,
           initiatorOid: root.initiatorOid,
           initiatorUpn: root.initiatorUpn,
           correlationId: row.correlationId,
@@ -126,18 +133,33 @@ export class SecretBroker implements SessionMover {
    * fetch it — and the run streams opened with the old id end without a word: the browser reconnects with the new
    * cookie (resuming from Last-Event-ID), while a stream on the old id would otherwise keep watching for 10 seconds.
    */
-  sessionMoved(from: string, to: string): void {
+  sessionMoved({ from, to }: SessionMove): void {
+    this.movedTo.delete(from);
+    this.movedTo.set(from, to);
+    if (this.movedTo.size > MOVED_REMEMBERED) this.movedTo.delete(this.movedTo.keys().next().value!);
     for (const { secret } of this.held.values()) if (secret.sessionHash === from) secret.sessionHash = to;
-    for (const stream of [...this.streams]) {
-      if (stream.sessionHash !== from) continue;
-      this.streams.delete(stream);
-      stream.close?.();
-    }
+    for (const stream of [...this.streams]) if (stream.sessionHash === from) this.end(stream);
   }
 
-  /** Registers a live stream (SSE) of a session watching a run; returns the detach function. */
+  /** The id hash a session has now, following its rotations. */
+  private current(sessionHash: string): string {
+    let hash = sessionHash;
+    for (let i = 0; i < 10 && this.movedTo.has(hash); i++) hash = this.movedTo.get(hash)!;
+    return hash;
+  }
+
+  private end(stream: SecretStream) {
+    this.streams.delete(stream);
+    stream.close?.();
+  }
+
+  /**
+   * Registers a live stream (SSE) of a session watching a run; returns the detach function. A stream whose session id
+   * was rotated while it was being opened ends at once (as sessionMoved would have ended it).
+   */
   attach(stream: SecretStream): () => void {
     this.streams.add(stream);
+    if (this.current(stream.sessionHash) !== stream.sessionHash) this.end(stream);
     return () => this.streams.delete(stream);
   }
 
@@ -146,12 +168,19 @@ export class SecretBroker implements SessionMover {
    * idle) since it opened doesn't count: the secret is held instead, and only that session could fetch it.
    */
   async handoff(h: Held): Promise<'delivered' | 'held'> {
+    h.sessionHash = this.current(h.sessionHash);
     let targets = [...this.streams].filter(
       (s) => s.sessionHash === h.sessionHash && (s.runId === h.runId || s.runId === h.rootRunId),
     );
     if (targets.length && this.deps.sessionLive) {
       const live = await this.deps.sessionLive(h.sessionHash).catch(() => false);
       if (!live) targets = [];
+    }
+    // Rotated while that was checked (S-08): its streams ended with the old id; hold it for the new one instead.
+    const now = this.current(h.sessionHash);
+    if (now !== h.sessionHash) {
+      h.sessionHash = now;
+      targets = [];
     }
     let sent = 0;
     for (const t of targets) {

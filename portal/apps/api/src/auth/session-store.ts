@@ -34,6 +34,17 @@ export interface SessionRecord {
 export type SessionPatch = Partial<Omit<SessionRecord, 'idHash' | 'createdAt'>>;
 
 /**
+ * One id rotation as the movers see it: the old and the new id hash, and whether the session gains write access with
+ * it (arming a read-only session — an id that existed while it was read-only must not carry the new write access, not
+ * even through runs bound to it: they read on, and ask before their next write).
+ */
+export interface SessionMove {
+  from: string;
+  to: string;
+  gainsWrite: boolean;
+}
+
+/**
  * Something else kept under a session's id hash that moves with the session when its id is rotated (S-08: arming).
  * `moveSessionTx` runs inside the rotation's immediate transaction — on SQLite `tx` is that transaction (synchronous:
  * never `await` in it; `withTx`), for the memory stores null — so the move commits with the new session row or not at
@@ -41,8 +52,8 @@ export type SessionPatch = Partial<Omit<SessionRecord, 'idHash' | 'createdAt'>>;
  * streams, back-offs).
  */
 export interface SessionMover {
-  moveSessionTx?(from: string, to: string, tx: Tx | null): void;
-  sessionMoved?(from: string, to: string): void;
+  moveSessionTx?(move: SessionMove, tx: Tx | null): void;
+  sessionMoved?(move: SessionMove): void;
 }
 
 /** A session id rotation (SessionStore.rotate). */
@@ -110,19 +121,33 @@ class Rotations {
     return () => void this.movers.delete(mover);
   }
 
+  /** What the movers are told: `before` and `after` are the row under its old and its new id. */
+  static move(before: SessionRecord, after: SessionRecord, now: Date): SessionMove {
+    return {
+      from: before.idHash,
+      to: after.idHash,
+      gainsWrite: isArmed(after, now) && !isArmed(before, now),
+    };
+  }
+
   /** Inside the transaction: a mover that throws rolls the whole rotation back. */
-  moveTx(from: string, to: string, tx: Tx | null) {
-    for (const m of this.movers) m.moveSessionTx?.(from, to, tx);
+  moveTx(move: SessionMove, tx: Tx | null) {
+    for (const m of this.movers) {
+      const result: unknown = m.moveSessionTx?.(move, tx);
+      // An async mover would write after the commit, outside the transaction: refuse it loudly.
+      if (result && typeof (result as { then?: unknown }).then === 'function')
+        throw new Error('A session mover must be synchronous');
+    }
   }
 
   /** After the commit: in-memory state follows. A mover that fails is logged; the rotation already happened. */
-  moved({ from, to, now, log }: SessionRotation) {
+  moved(move: SessionMove, { now, log }: Pick<SessionRotation, 'now' | 'log'>) {
     const t = now.getTime();
     if (this.away.size > 10_000) for (const [h, until] of this.away) if (until <= t) this.away.delete(h);
-    this.away.set(from, t + ROTATED_GRACE_MS);
+    this.away.set(move.from, t + ROTATED_GRACE_MS);
     for (const m of this.movers) {
       try {
-        m.sessionMoved?.(from, to);
+        m.sessionMoved?.(move);
       } catch (err) {
         log?.warn({ err: { name: (err as Error).name } }, 'in-memory state did not follow a rotated session');
       }
@@ -146,22 +171,24 @@ export class SqliteSessionStore implements SessionStore {
   constructor(private readonly db: Db) {}
 
   async rotate(rotation: SessionRotation): Promise<SessionRecord | null> {
-    const { from, to, patch } = rotation;
+    const { from, to, patch, now } = rotation;
     // BEGIN IMMEDIATE: the row and everything keyed by its hash move together, or nothing does.
-    const next = writeTx(this.db, (tx) => {
+    const done = writeTx(this.db, (tx) => {
       const row = tx.select().from(sessions).where(eq(sessions.idHash, from)).get();
       if (!row) return null;
       tx.delete(sessions).where(eq(sessions.idHash, from)).run();
-      const moved = tx
+      const next = tx
         .insert(sessions)
         .values({ ...row, ...defined(patch), idHash: to })
         .returning()
         .get();
-      this.rotations.moveTx(from, to, tx);
-      return moved;
+      const move = Rotations.move(row, next, now);
+      this.rotations.moveTx(move, tx);
+      return { next, move };
     });
-    if (next) this.rotations.moved(rotation);
-    return next;
+    if (!done) return null;
+    this.rotations.moved(done.move, rotation);
+    return done.next;
   }
 
   onRotate(mover: SessionMover): () => void {
@@ -274,22 +301,24 @@ export class MemorySessionStore implements SessionStore {
   private readonly rotations = new Rotations();
 
   async rotate(rotation: SessionRotation): Promise<SessionRecord | null> {
-    const { from, to, patch } = rotation;
+    const { from, to, patch, now } = rotation;
     const row = this.rows.get(from);
     if (!row) return null;
     if (this.rows.has(to)) throw new Error('duplicate session');
     const next: SessionRecord = { ...row, ...structuredClone(defined(patch)), idHash: to };
+    const move = Rotations.move(row, next, now);
     this.rows.delete(from);
     this.rows.set(to, next);
     try {
-      this.rotations.moveTx(from, to, null);
+      this.rotations.moveTx(move, null);
     } catch (err) {
-      // As the database's rollback would: the session stays under its old id.
+      // As the database's rollback would: the session stays under its old id (movers that ran are not undone — the
+      // memory stores serve tests and DB-less mock mode only).
       this.rows.delete(to);
       this.rows.set(from, row);
       throw err;
     }
-    this.rotations.moved(rotation);
+    this.rotations.moved(move, rotation);
     return structuredClone(next);
   }
 

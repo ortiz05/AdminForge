@@ -8,6 +8,7 @@ import type {
   RunStatus,
   StepRecord,
 } from '@adminforge/engine';
+import type { SessionMove } from '../auth/session-store';
 import type { Tx } from '../db/client';
 import type { ConfirmView } from './confirm';
 
@@ -31,7 +32,10 @@ export interface RunRow {
   identityName: string | null;
   initiatorOid: string | null;
   initiatorUpn: string | null;
-  /** Session the initiator's steps run with (sha256 of the session id; never sent to clients). */
+  /**
+   * Session the initiator's steps run with (sha256 of the session id; never sent to clients), or `prearm:<hash>` for a
+   * run bound to it before it gained write access (sessionBinding).
+   */
   sessionHash: string | null;
   scheduleId: string | null;
   parentRunId: string | null;
@@ -124,6 +128,33 @@ export interface TaskFilter {
 }
 
 /**
+ * S-08: a run bound to a session before the session gained write access — arming, which rotates its id — is stored as
+ * `prearm:<new hash>`. It keeps reading through that session, but its next write step parks (`awaiting_arm`: "Write
+ * access is on. Resume to continue") until the person resumes it, which rebinds it to their session as it is now:
+ * whoever held the id while it was read-only can't start a run that later writes with the write access the real person
+ * turns on. Approval decisions need no mark: one followed by writes is refused unless its approver is armed, and the
+ * database lets a decision be rebound only to a session of its decider (`approvals_rebind_own_session`).
+ */
+export const PREARM = 'prearm:';
+
+/** The session hash a stored binding names, and whether it was bound before the session gained write access. */
+export function sessionBinding(stored: string | null | undefined): { hash: string | null; prearm: boolean } {
+  if (stored?.startsWith(PREARM)) return { hash: stored.slice(PREARM.length), prearm: true };
+  return { hash: stored ?? null, prearm: false };
+}
+
+/** A run's stored binding after `move` (unchanged unless it names `move.from`): the repositories' one rule. */
+export function rebound(stored: string | null, move: SessionMove): string | null {
+  const b = sessionBinding(stored);
+  if (b.hash !== move.from) return stored;
+  return b.prearm || move.gainsWrite ? `${PREARM}${move.to}` : move.to;
+}
+
+/** An approval decision's session after `move`: plainly the new id (see PREARM). */
+export const reboundDecision = (stored: string | null | undefined, move: SessionMove) =>
+  stored === move.from ? move.to : stored;
+
+/**
  * F-08: the run statuses that count towards a person's open runs. Runs parked on a person (`awaiting_*`) and finished
  * runs don't count.
  */
@@ -184,9 +215,10 @@ export interface RunRepository {
   /**
    * S-08 (a SessionMover): the session's id was rotated (arming). Its unfinished runs and its decisions on their tasks
    * move to the new hash inside the rotation's transaction (`tx`; null for the memory repository), so the steps still
-   * to come act through the new id (identity.ts). Finished runs keep the hash they ran under: they never act again.
+   * to come act through the new id (identity.ts) — runs as `prearm:` bindings when the session only now gained write
+   * access (PREARM). Finished runs keep the hash they ran under: they never act again.
    */
-  moveSessionTx(from: string, to: string, tx: Tx | null): void;
+  moveSessionTx(move: SessionMove, tx: Tx | null): void;
 }
 
 /**

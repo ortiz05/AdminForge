@@ -178,8 +178,9 @@ describe('arming rotates the session id (SQLite)', () => {
     expect(rows('select id_hash from sessions')).toEqual([{ id_hash: to }]);
     const hashOfRun = (id: string) =>
       rows<{ session_hash: string }>('select session_hash from runs where id = ?', id)[0]!.session_hash;
+    // The session was read-only: a run bound to it reads on through the new id, but asks before writing (prearm).
     expect([hashOfRun(open.id), hashOfRun(done.id), hashOfRun(others.id)]).toEqual([
-      to,
+      `prearm:${to}`,
       from,
       'someone-else',
     ]);
@@ -194,6 +195,13 @@ describe('arming rotates the session id (SQLite)', () => {
 
     expect((await getMe(t.app, avery.headers.cookie)).res.statusCode).toBe(401);
     expect((await getMe(t.app, armed.cookie)).me!.mode).toBe('armed');
+
+    // Arming again while armed gains nothing new: a run bound to the armed id moves as it is, a prearm one stays so.
+    const later = await t.repository.insertRun(newRun(to, 'running'));
+    const again = await armMock(t.app, armed.headers);
+    const third = hashOf(again.cookie);
+    expect([hashOfRun(open.id), hashOfRun(later.id)]).toEqual([`prearm:${third}`, third]);
+    expect(decidedBy(open.id)).toBe(third);
     await t.app.close();
   });
 
@@ -299,6 +307,49 @@ describe('arming rotates the session id (SQLite)', () => {
     expect(rows('select id_hash from sessions')).toEqual([{ id_hash: to }]);
     expect((await getMe(t.app, cookie)).res.statusCode).toBe(401);
     expect((await getMe(t.app, cookieFrom(cb)!)).me!.mode).toBe('armed');
+    await t.app.close();
+  });
+
+  it('Entra: a rotation that fails drops the Write tokens just redeemed, is audited and leaves the session read-only', async () => {
+    const auth = new FakeAuthClient();
+    const t = await dbApp({ config: entraConfig({ DATABASE_PATH: file }), auth });
+    const login = await t.app.inject({ method: 'GET', url: '/auth/login?returnTo=%2F' });
+    const state = new URL(login.headers.location as string).searchParams.get('state');
+    const signedIn = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=good-code&state=${state}`,
+      headers: { cookie: bindingCookie(login)! },
+    });
+    const cookie = cookieFrom(signedIn)!;
+    const from = hashOf(cookie);
+    const csrf = (await getMe(t.app, cookie)).me!.csrf;
+    const started = await t.app.inject({
+      method: 'POST',
+      url: '/auth/arm',
+      headers: { cookie, 'x-adminforge-csrf': csrf },
+      payload: { minutes: 30, reason: 'Disable a test user' },
+    });
+    t.sessions.onRotate({
+      moveSessionTx: () => {
+        throw new Error('database is locked');
+      },
+    });
+    const cb = await t.app.inject({
+      method: 'GET',
+      url: `/auth/arm/callback?code=write-code&state=${new URL(started.json().redirect).searchParams.get('state')}`,
+      headers: { cookie: `${cookie}; ${bindingCookie(started)}`, accept: 'application/json' },
+    });
+    expect(cb.statusCode).toBe(500);
+    expect(cb.json().error).toMatchObject({ code: 'arm_failed', hint: expect.stringContaining('read-only') });
+    expect(cookieFrom(cb)).toBeUndefined();
+    const redeemed = auth.redeems.at(-1)!.partitionKey;
+    expect(auth.forgets).toContainEqual({ kind: 'write', partitionKey: redeemed });
+    expect(rows('select partition_key from token_cache')).toEqual([{ partition_key: `read:${from}` }]);
+    expect(rows('select id_hash from sessions')).toEqual([{ id_hash: from }]);
+    expect((await getMe(t.app, cookie)).me!.mode).toBe('read');
+    expect(
+      t.audit.rows.filter((r) => r.action === 'session.armed').map((r) => [r.result, r.details]),
+    ).toEqual([['failure', expect.objectContaining({ error: 'arm_failed' })]]);
     await t.app.close();
   });
 });

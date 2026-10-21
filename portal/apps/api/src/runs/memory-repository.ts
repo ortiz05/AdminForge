@@ -6,7 +6,10 @@ import {
   type RunStatus,
   type StepRecord,
 } from '@adminforge/engine';
+import type { SessionMove } from '../auth/session-store';
 import {
+  rebound,
+  reboundDecision,
   RUN_STATUS_OPEN,
   type EventRow,
   type NewRun,
@@ -231,17 +234,19 @@ export class MemoryRunRepository implements RunRepository {
       .map(clone);
   }
 
-  moveSessionTx(from: string, to: string): void {
+  moveSessionTx(move: SessionMove): void {
     const unfinished = new Set<string>();
     for (const [id, r] of this.runs) {
       if (isTerminal(r.status)) continue;
       unfinished.add(id);
-      if (r.sessionHash === from) this.runs.set(id, { ...r, sessionHash: to });
+      const sessionHash = rebound(r.sessionHash, move);
+      if (sessionHash !== r.sessionHash) this.runs.set(id, { ...r, sessionHash });
     }
     for (const [k, t] of this.tasks) {
-      if (!unfinished.has(t.subjectId) || !t.decisions.some((d) => d.sessionHash === from)) continue;
-      const decisions = t.decisions.map((d) => (d.sessionHash === from ? { ...d, sessionHash: to } : d));
-      this.tasks.set(k, { ...t, decisions });
+      if (!unfinished.has(t.subjectId)) continue;
+      const decisions = t.decisions.map((d) => ({ ...d, sessionHash: reboundDecision(d.sessionHash, move) }));
+      if (decisions.some((d, i) => d.sessionHash !== t.decisions[i]!.sessionHash))
+        this.tasks.set(k, { ...t, decisions });
     }
   }
 

@@ -10,13 +10,14 @@ import type { Mode } from '@adminforge/connectors';
 import type { RoleCheck } from '../auth/session-plugin';
 import { isArmed, type SessionRecord, type SessionStore } from '../auth/session-store';
 import type { ExecutionIdentity } from '../execution/types';
-import type { RunRepository } from './types';
+import { sessionBinding, type RunRepository } from './types';
 
 /**
  * ADR-010/011 for the engine: a delegated run acts through the session bound to the actor — the initiator's session
  * (`runs.session_hash`), or after an approval the approver's (`approvals.decisions[].sessionHash`). A missing,
  * expired or idle session parks the run in `awaiting_reauth`; a write step without an armed session parks it in
- * `awaiting_arm`. `POST /api/runs/:id/resume` rebinds the caller's current session. Automation runs use the
+ * `awaiting_arm` — as does one bound before its session gained write access (`prearm:`, S-08) until it is resumed.
+ * `POST /api/runs/:id/resume` rebinds the caller's current session. Automation runs use the
  * automation identity.
  *
  * The session's roles are re-confirmed with Entra (the API's RoleCheck, every 5 minutes) before it is used, so a run
@@ -58,10 +59,11 @@ export class SessionIdentityResolver implements IdentityResolver {
    * or on their approval decision) only ever acts as that person, whatever the stored row says.
    */
   async liveSession(
-    hash: string | null,
+    binding: string | null,
     origin: { correlationId?: string; runId?: string } = {},
     expectOid?: string | null,
   ): Promise<SessionRecord | null> {
+    const { hash } = sessionBinding(binding);
     if (!hash) return null;
     const s = await this.sessions.get(hash);
     const at = this.now();
@@ -104,8 +106,9 @@ export class SessionIdentityResolver implements IdentityResolver {
         } satisfies ExecutionIdentity,
       };
     const who = actor.upn ?? 'The engineer running this';
+    const binding = await this.sessionFor(run.id, actor);
     const session = await this.liveSession(
-      await this.sessionFor(run.id, actor),
+      binding,
       { correlationId: run.correlationId, runId: run.id },
       actor.oid ?? null,
     );
@@ -113,6 +116,12 @@ export class SessionIdentityResolver implements IdentityResolver {
       throw new IdentityUnavailable('reauth', `${who} needs to sign in again, then resume the run.`);
     if (mode === 'write' && !isArmed(session, this.now()))
       throw new IdentityUnavailable('not_armed', `${who} needs to arm write access, then resume the run.`);
+    // S-08: bound before the session gained write access — it reads on, but writes only once the person resumes it.
+    if (mode === 'write' && sessionBinding(binding).prearm)
+      throw new IdentityUnavailable(
+        'not_armed',
+        `${who} turned on write access after this run started. Resume it to let it make changes.`,
+      );
     return { actor, mode, handle: { kind: 'delegated', session, mode } satisfies ExecutionIdentity };
   }
 }

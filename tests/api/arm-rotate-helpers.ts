@@ -73,9 +73,9 @@ export async function openStream(url: string, cookie: string) {
 }
 
 /**
- * `test.two-reads` reads twice as its initiator (the first call can be held open with a gate); `test.tap-approved`
- * waits for an approval, reads as the approver, then issues a Temporary Access Pass (a show-once secret for the
- * initiator); `test.tap` issues one straight away.
+ * `test.two-reads` reads twice as its initiator (the first call can be held open with a gate); `test.read-then-write`
+ * reads, then changes something; `test.tap-approved` waits for an approval, reads as the approver, then issues a
+ * Temporary Access Pass (a show-once secret for the initiator); `test.tap` issues one straight away.
  */
 export function rotationDefinitions() {
   const create = {
@@ -103,6 +103,24 @@ export function rotationDefinitions() {
       steps: [
         { id: 'first', type: 'graph', mode: 'read', request: { method: 'GET', path: '/users/first' } },
         { id: 'second', type: 'graph', mode: 'read', request: { method: 'GET', path: '/groups/second' } },
+      ],
+    } as never)
+    .add({
+      kind: 'playbook',
+      id: 'test.read-then-write',
+      title: 'Read, then write',
+      ...base,
+      mode: 'write',
+      inputs,
+      steps: [
+        { id: 'first', type: 'graph', mode: 'read', request: { method: 'GET', path: '/users/first' } },
+        {
+          id: 'disable',
+          type: 'graph',
+          mode: 'write',
+          describe: 'Disable sign-in',
+          request: { method: 'PATCH', path: '/users/disable', body: { accountEnabled: false } },
+        },
       ],
     } as never)
     .add({

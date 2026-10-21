@@ -20,7 +20,7 @@ import { SecretBroker } from './secrets';
 import { RunService } from './service';
 import { RUN_STREAM_POLL_MS, sessionLive } from './sse';
 import { RepositoryRunStore } from './store';
-import type { RunNotification, RunRepository } from './types';
+import { sessionBinding, type RunNotification, type RunRepository } from './types';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -210,8 +210,9 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     // New Entra roles (PIM activation) only reach Microsoft in fresh tokens: refresh Graph and ARM for that session.
     refreshTokens:
       opts.refreshTokens ??
-      (async (hash) => {
-        const session = await ctx.sessions.get(hash);
+      (async (binding) => {
+        const { hash } = sessionBinding(binding);
+        const session = hash ? await ctx.sessions.get(hash) : null;
         if (!session || !ctx.broker) return;
         const modes = isArmed(session, ctx.now()) ? (['read', 'write'] as const) : (['read'] as const);
         for (const mode of modes)

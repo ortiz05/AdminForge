@@ -41,7 +41,8 @@ codes, keys, permissions). Code owners turn `Unreleased` into a version when the
 
 - **ADR** (`docs/adr/NNN-<slug>.md`, next free number, [template](templates/adr.md)) for decisions that shape the
   architecture or security model: identities, trust boundaries, storage, a new class of outbound traffic. Status,
-  context, decision, consequences. ADRs are not edited after acceptance; a later ADR supersedes one.
+  context, options considered, decision, consequences. An accepted ADR's decision is never edited; a later ADR
+  supersedes it. Context and consequences may be added later in a dated note (ADR-001, for one).
 - **Decisions log** (`docs/decisions.md`) for smaller choices, with a date — and who decided, when that matters
   ("report schedules can be created in the portal — 2026-10-16, product owner").
 - Link the decision from the code that depends on it (`// ADR-011`) so the next person finds the why.

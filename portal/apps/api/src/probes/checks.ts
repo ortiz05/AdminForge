@@ -91,7 +91,7 @@ export interface ProbeDeps {
   dns?: DnsResolver;
   tls?: TlsInspector;
   /** The portal's audit chain (`auditChain` checks); absent → the check reports not configured. */
-  audit?: Pick<AuditWriter, 'verify'>;
+  audit?: Pick<AuditWriter, 'verify' | 'verifyIncremental'>;
   /** Host → addresses for the HTTP probe SSRF guard (tests); default: the system resolver. */
   lookup?: HostLookup;
   /** Waits between polls in synthetic transactions (tests); default a timer that stops on abort. */
@@ -775,12 +775,20 @@ async function auditChain(
       code: 'not_configured',
       message: 'No audit log in this process.',
     };
-  const r = await x.deps.audit.verify();
+  // Hourly from the last verified checkpoint, the whole chain at start and daily (D-05); a writer without
+  // checkpoints (memory) walks it all every time.
+  const audit = x.deps.audit;
+  const r = audit.verifyIncremental
+    ? await audit.verifyIncremental()
+    : { ...(await audit.verify()), scope: 'full' as const };
   return r.ok
     ? {
         metric: r.count,
         status: 'ok',
-        message: `${r.count} audit events verified; every hash links to the one before it.`,
+        message:
+          r.scope === 'incremental'
+            ? `${r.checked} new audit event${r.checked === 1 ? '' : 's'} verified since the last check (${r.count} in all); the whole chain is re-walked daily.`
+            : `${r.count} audit event${r.count === 1 ? '' : 's'} verified (the whole chain); every hash links to the one before it.`,
       }
     : {
         metric: r.brokenAt,

@@ -1,5 +1,5 @@
-import { asc, desc, gt } from 'drizzle-orm';
-import { writeTx, type Db } from '../db/client';
+import { asc, desc, eq, gt } from 'drizzle-orm';
+import { writeTx, yieldToLoop, type Db } from '../db/client';
 import { auditEvents } from '../db/schema';
 import { chainHash, GENESIS, verifyChain } from './chain';
 
@@ -60,6 +60,17 @@ export interface Checkpoint {
   hash: string;
 }
 
+/** What the audit-chain check found (`verifyIncremental`). */
+export type ChainCheck = VerifyResult & {
+  /** `full`: the whole chain was walked; `incremental`: only the events after the last verified checkpoint. */
+  scope: 'full' | 'incremental';
+  /** Events read and re-hashed in this check (the chain's length is `count`). */
+  checked: number;
+};
+
+/** The audit-chain check walks the whole chain again once its last full walk is this old (D-05: daily). */
+export const FULL_VERIFY_EVERY_MS = 86_400_000;
+
 /**
  * Where a verified tail is recorded outside the database (the external anchor): by default one JSON line on stdout —
  * the api container's log, which the cluster's log shipping keeps off the volume. Someone who rewrites the table can
@@ -73,8 +84,13 @@ export const stdoutCheckpoints: CheckpointSink = (cp) => {
 
 export interface AuditWriter {
   append(input: AuditInput): Promise<AuditRow>;
-  /** Re-walks the whole chain (the Audit page, `adminforge audit verify`, and the probes.audit-chain check). */
+  /** Re-walks the whole chain (the Audit page, `adminforge audit verify`, backups, the daily audit-chain check). */
   verify(): Promise<VerifyResult>;
+  /**
+   * The hourly probes.audit-chain check: only the events after the last verified checkpoint, or the whole chain when
+   * there is none yet or the last full walk is `fullEveryMs` old. Absent: the check calls `verify`.
+   */
+  verifyIncremental?(fullEveryMs?: number): Promise<ChainCheck>;
 }
 
 export function toAuditEvent(input: AuditInput, now: Date): AuditEvent {
@@ -110,10 +126,23 @@ function verifyRows(rows: AuditRow[], genesis = GENESIS, offset = 0): VerifyResu
 /** Rows per round trip when walking the chain: memory stays flat however long the audit log grows. */
 export const VERIFY_BATCH = 2_000;
 
-/** Pause between verify batches so a long chain never holds the event loop for long (better-sqlite3 is synchronous). */
-const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+/** A verified point to continue from: the tail's seq and hash and the chain's length up to it. */
+type Verified = Checkpoint & { count: number };
+
+const rowOf = (r: typeof auditEvents.$inferSelect): AuditRow => ({
+  ...r,
+  ts: r.ts.toISOString(),
+  details: (r.details as Record<string, unknown> | null) ?? null,
+});
 
 export class SqliteAuditWriter implements AuditWriter {
+  /**
+   * The last verified tail and when the whole chain was last walked, in this process's memory (D-05). Lost at a
+   * restart, so the first check after one walks the whole chain; the checkpoints shipped to the log stay the anchor.
+   */
+  private verified: Verified | null = null;
+  private fullAt: number | null = null;
+
   constructor(
     private readonly db: Db,
     private readonly now: () => Date = () => new Date(),
@@ -143,31 +172,54 @@ export class SqliteAuditWriter implements AuditWriter {
     });
   }
 
-  /** Walks the chain in seq order, `batch` rows at a time (keyset paging), then records the verified tail. */
+  /** Walks the whole chain in seq order, `batch` rows at a time (keyset paging), then records the verified tail. */
   async verify(): Promise<VerifyResult> {
-    let prev = GENESIS;
-    let after = 0;
-    let count = 0;
-    let tail: Checkpoint | undefined;
+    const { checked: _checked, ...r } = await this.walk(null);
+    return r;
+  }
+
+  async verifyIncremental(fullEveryMs = FULL_VERIFY_EVERY_MS): Promise<ChainCheck> {
+    const from = this.verified;
+    if (!from || this.fullAt === null || this.now().getTime() - this.fullAt >= fullEveryMs)
+      return { ...(await this.walk(null)), scope: 'full' };
+    // The checkpoint event must still be there, unchanged: removing or rewriting the tail can't hide behind it.
+    if (from.seq > 0) {
+      const row = this.db.select().from(auditEvents).where(eq(auditEvents.seq, from.seq)).get();
+      const ok = !!row && row.hash === from.hash && verifyRows([rowOf(row)], row.prevHash).ok;
+      if (!ok) {
+        this.verified = null;
+        return { ok: false, brokenAt: from.count - 1, seq: from.seq, scope: 'incremental', checked: 1 };
+      }
+    }
+    return { ...(await this.walk(from)), scope: 'incremental' };
+  }
+
+  /**
+   * Re-hashes the events after `from` (the whole chain when null), `batch` rows per round trip with the event loop let
+   * in between, ships the verified tail as a checkpoint and remembers it for the next incremental check.
+   */
+  private async walk(from: Verified | null): Promise<VerifyResult & { checked: number }> {
+    let prev = from?.hash ?? GENESIS;
+    let after = from?.seq ?? 0;
+    let count = from?.count ?? 0;
+    let checked = 0;
+    let tail: Checkpoint | undefined = from && from.seq > 0 ? { seq: from.seq, hash: from.hash } : undefined;
     for (;;) {
-      const rows = await this.db
+      const rows = this.db
         .select()
         .from(auditEvents)
         .where(gt(auditEvents.seq, after))
         .orderBy(asc(auditEvents.seq))
-        .limit(this.batch);
+        .limit(this.batch)
+        .all();
       if (!rows.length) break;
-      const res = verifyRows(
-        rows.map((r) => ({
-          ...r,
-          ts: r.ts.toISOString(),
-          details: (r.details as Record<string, unknown> | null) ?? null,
-        })),
-        prev,
-        count,
-      );
-      if (!res.ok) return res;
+      const res = verifyRows(rows.map(rowOf), prev, count);
+      if (!res.ok) {
+        this.verified = null;
+        return { ...res, checked: checked + res.brokenAt - count + 1 };
+      }
       count += res.count;
+      checked += res.count;
       tail = res.tail;
       prev = tail!.hash;
       after = tail!.seq;
@@ -175,7 +227,9 @@ export class SqliteAuditWriter implements AuditWriter {
       await yieldToLoop();
     }
     if (tail) this.checkpoints?.({ ...tail, count, ts: this.now().toISOString() });
-    return { ok: true, count, ...(tail ? { tail } : {}) };
+    this.verified = { seq: tail?.seq ?? 0, hash: tail?.hash ?? GENESIS, count };
+    if (!from) this.fullAt = this.now().getTime();
+    return { ok: true, count, checked, ...(tail ? { tail } : {}) };
   }
 }
 

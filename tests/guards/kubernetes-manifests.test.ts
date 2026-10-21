@@ -99,6 +99,18 @@ describe('Kubernetes manifests', () => {
     expect(dns?.to?.[0]?.podSelector?.matchLabels).toEqual({ 'k8s-app': 'kube-dns' });
   });
 
+  it('the pod lands where its images run, and is ready as soon as both containers answer', () => {
+    // The runner image is amd64 only — its PowerShell base is (README.md → Requirements › CPU architecture): on a
+    // cluster with arm64 nodes too the pod must not be scheduled there.
+    expect(pod.nodeSelector).toEqual({ 'kubernetes.io/arch': 'amd64' });
+    // The runner's first readiness check runs before it listens and the next one 30 s later: a startup probe that
+    // checks every few seconds keeps that wait out of every deploy's outage (Recreate).
+    const startup = container('runner').startupProbe;
+    expect(startup?.exec?.command).toEqual(container('runner').readinessProbe.exec.command);
+    expect(startup.periodSeconds).toBeLessThanOrEqual(2);
+    expect(startup.periodSeconds * startup.failureThreshold).toBeGreaterThanOrEqual(60);
+  });
+
   it('the base names no installation: no registry, tag, host name or namespace', () => {
     const images = kind('Deployment').flatMap((d) =>
       d.spec.template.spec.containers.map((c: Doc) => c.image),

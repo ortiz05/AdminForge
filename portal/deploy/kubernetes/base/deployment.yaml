@@ -26,6 +26,10 @@ spec:
       enableServiceLinks: false
       # Long enough for running playbook steps to reach a checkpoint (the API gives them 10 s, then 5 s more).
       terminationGracePeriodSeconds: 60
+      # The runner image is built for linux/amd64 only (its PowerShell base is published for amd64 only; README.md →
+      # Requirements › CPU architecture): on a cluster with arm64 nodes as well, never schedule the pod there.
+      nodeSelector:
+        kubernetes.io/arch: amd64
       securityContext:
         runAsNonRoot: true
         fsGroup: 10001
@@ -83,10 +87,15 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
+          # Measured (README.md → Requirements › Node size): ~0.2 GB idle; 1.1–1.5 GB at 50–200 engineers on the
+          # 100k-user synthetic tenant, about 0.6 GB of it the load test's own copy of the tenant
+          # (docs/performance.md); `adminforge publish` / `validate` exec'd into this container add ~0.35–0.45 GB.
+          # One process with one busy thread: it needs about one core under load, never a CPU limit (throttling
+          # stalls everyone's requests).
           resources:
             requests:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 500m
+              memory: 1Gi
             limits:
               memory: 2Gi
         - name: runner
@@ -116,17 +125,29 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
+          # Every 2 s until the runner answers (up to 2 minutes), then every 30 s: without it the first readiness
+          # check runs before the runner listens and the pod waits 30 s for the next one on every deploy.
+          startupProbe:
+            exec:
+              command: [node, dist/healthcheck.js]
+            periodSeconds: 2
+            timeoutSeconds: 10
+            failureThreshold: 60
           readinessProbe:
             exec:
               command: [node, dist/healthcheck.js]
             periodSeconds: 30
             timeoutSeconds: 10
+          # Measured on the interim host: the supervisor ~0.04–0.08 GB and each warm PowerShell worker (the five
+          # modules loaded) ~0.23 GB of its own plus ~0.12 GB shared by all. With the defaults (RUNNER_POOL_SIZE 2,
+          # RUNNER_MAX_JOBS 4) up to six workers run at once: ~1.6 GB before the jobs' own data, so 2 GiB left about
+          # 0.1 GB per running job. Importing the modules takes a few CPU-seconds per worker.
           resources:
             requests:
-              cpu: 100m
-              memory: 512Mi
+              cpu: 250m
+              memory: 1Gi
             limits:
-              memory: 2Gi
+              memory: 3Gi
       volumes:
         - name: data
           persistentVolumeClaim:

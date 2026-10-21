@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.user
-version: 1.3.2
+version: 1.3.3
 title: User
 summary: One user account — profile, groups, roles, devices, authentication methods, sign-ins, licences and audit history.
 owner: identity-team
 tags: [identity, users]
 template: entity
+entity: user
 requires:
   portalRoles: [Portal.Reader]
   scopes:
@@ -371,11 +372,11 @@ tabs:
           - { field: displayName, label: Group, kind: identity, secondary: mail }
           - field: kind
             label: Type
-            kind: status
-            map: { Microsoft 365: [info, Microsoft 365], Security: [neutral, Security], Mail-enabled security: [neutral, Mail-enabled security], Distribution: [neutral, Distribution] }
+            kind: enum
+            map: { Microsoft 365: Microsoft 365, Security: Security, Mail-enabled security: Mail-enabled security, Distribution: Distribution }
             filter: facet
-          - { field: membership, label: Membership, kind: status, map: { Assigned: [neutral, Assigned], Dynamic: [info, Dynamic] }, filter: facet }
-          - { field: sourceLabel, label: Source, kind: status, map: { Cloud: [neutral, Cloud], Synced: [info, Synced from AD] }, filter: facet }
+          - { field: membership, label: Membership, kind: enum, map: { Assigned: Assigned, Dynamic: Dynamic }, filter: facet }
+          - { field: sourceLabel, label: Source, kind: enum, map: { Cloud: Cloud, Synced: Synced from AD }, filter: facet }
           - { field: isAssignableToRole, label: Role-assignable, kind: boolean }
           - { field: description, label: Description, hidden: true }
           - { field: membershipRule, label: Membership rule, kind: code, hidden: true }
@@ -486,8 +487,8 @@ tabs:
           - { field: operatingSystemVersion, label: OS version }
           - field: trustType
             label: Join type
-            kind: status
-            map: { AzureAd: [info, Entra joined], ServerAd: [info, Hybrid joined], Workplace: [neutral, Registered] }
+            kind: enum
+            map: { AzureAd: Entra joined, ServerAd: Hybrid joined, Workplace: Registered }
           - { field: isCompliant, label: Compliant, kind: status, map: { "true": [ok, Compliant], "false": [crit, Not compliant] } }
           - { field: isManaged, label: Managed, kind: boolean }
           - { field: accountEnabled, label: Enabled, kind: boolean }

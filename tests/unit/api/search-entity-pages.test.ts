@@ -145,7 +145,7 @@ describe('palette entity pages come from content', () => {
    * identity.user is another review package's file in this wave: it declares `entity: user` when that merges (until
    * then the palette links users to Entra). Remove `user` here once it does — the test then holds it.
    */
-  const PENDING = new Set(['user']);
+  const PENDING = new Set<string>([]);
 
   it('portal/content declares one page per kind, each taking the object id', async () => {
     const loaded = await loadContentDir(path.join(repoRoot, 'portal/content'));

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.teams-user-policies
-version: 1.1.1
+version: 1.1.2
 title: Teams policies for a user
 summary: >-
   The Teams policies in effect for one person — messaging, meetings, calling, app setup and more — and where each comes
@@ -104,8 +104,8 @@ layout:
       - { field: policyName, label: In effect }
       - field: assignment
         label: Comes from
-        kind: status
-        map: { Direct: [info, Assigned directly], Group: [info, Group], Default: [neutral, Org-wide default] }
+        kind: enum
+        map: { Direct: Assigned directly, Group: Group, Default: Org-wide default }
         filter: facet
       - { field: groupId, label: Group, kind: link, link: { page: identity.group, params: { id: "${ row.groupId }" } } }
       - { field: priority, label: Group rank, kind: number, align: end }

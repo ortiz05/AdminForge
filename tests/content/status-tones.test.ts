@@ -11,13 +11,7 @@ const loaded = await loadContentDir(path.join(repoRoot, 'portal/content'));
  * Pages other packages of the 2026-10-21 platform review are changing at the same time; they move their columns to
  * `enum` when those changes merge. Remove an entry once its file is migrated — the test then holds it.
  */
-const PENDING = new Set([
-  'pages/identity/user.page.yaml#kind',
-  'pages/identity/user.page.yaml#membership',
-  'pages/identity/user.page.yaml#sourceLabel',
-  'pages/identity/user.page.yaml#trustType',
-  'pages/m365/teams-user-policies.page.yaml#assignment',
-]);
+const PENDING = new Set<string>([]);
 
 const SIGNAL = new Set(['ok', 'warn', 'crit']);
 const toneOf = (e: ColumnMapEntry): string | undefined =>

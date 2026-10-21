@@ -9,35 +9,45 @@ import { cn, safeUrl } from '@adminforge/ui';
  * values the server interpolates into instructions and messages arrive escaped, so tenant data never becomes markup.
  */
 
+/**
+ * Inline tokens: 1 code, 2 an escaped character, 3 bold, 4 italic, 5 a link label and 6 its target. Linear in the text,
+ * whatever it holds: each scan stops at the next delimiter of its own kind — code at the next "`", bold and italic at
+ * the next "*", a label at the next "[" or "]" and a target at the next "(", ")" or whitespace — so no run of
+ * delimiters makes one position scan what the next will scan again (as in the Markdown widget's tokenizer, S-21). A
+ * label that could hold "[" made 64,000 "[" freeze the page for seconds. `[a [b](/x)` links "b"; a target with
+ * parentheses needs them percent-encoded. Underscores are not emphasis here (instructions name settings like `AF_X_Y`).
+ */
+const INLINE =
+  /`([^`]+)`|\\([!-/:-@[-`{-~])|\*\*((?:\\.|[^*\\])+)\*\*|\*([^*\s\\](?:\\.|[^*\\])*)\*|\[((?:\\.|[^[\]\\])+)\]\(([^()\s]+)\)/
+    .source;
+
 function inline(text: string, keyBase: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re =
-    /(`[^`]+`)|(\\[!-/:-@[-`{-~])|(\*\*(?:\\.|[^*\\])+\*\*)|(\*[^*\s\\](?:\\.|[^*\\])*\*)|(\[(?:\\.|[^\]\\])+\]\([^)\s]+\))/g;
+  // A fresh expression per call: bold, italic and link labels are read again recursively.
+  const re = new RegExp(INLINE, 'g');
   let last = 0;
-  let m: RegExpExecArray | null;
   let i = 0;
-  while ((m = re.exec(text))) {
+  for (let m = re.exec(text); m; m = re.exec(text)) {
     if (m.index > last) out.push(text.slice(last, m.index));
-    const tok = m[0];
+    last = re.lastIndex;
     const key = `${keyBase}-${i++}`;
-    if (tok.startsWith('\\')) out.push(tok.slice(1));
-    else if (tok.startsWith('`'))
+    if (m[1] !== undefined)
       out.push(
         <code key={key} className="rounded-sm bg-sunken px-1 py-0.5 font-mono text-xs text-fg">
-          {tok.slice(1, -1)}
+          {m[1]}
         </code>,
       );
-    else if (tok.startsWith('**'))
+    else if (m[2] !== undefined) out.push(m[2]);
+    else if (m[3] !== undefined)
       out.push(
         <strong key={key} className="font-semibold text-fg">
-          {inline(tok.slice(2, -2), key)}
+          {inline(m[3], key)}
         </strong>,
       );
-    else if (tok.startsWith('*')) out.push(<em key={key}>{inline(tok.slice(1, -1), key)}</em>);
+    else if (m[4] !== undefined) out.push(<em key={key}>{inline(m[4], key)}</em>);
     else {
-      const lm = /^\[((?:\\.|[^\]\\])+)\]\(([^)\s]+)\)$/.exec(tok)!;
-      const target = safeUrl(lm[2]!);
-      const label = inline(lm[1]!, key);
+      const target = safeUrl(m[6]!);
+      const label = inline(m[5]!, key);
       out.push(
         target ? (
           <a
@@ -53,7 +63,6 @@ function inline(text: string, keyBase: string): ReactNode[] {
         ),
       );
     }
-    last = m.index + tok.length;
   }
   if (last < text.length) out.push(text.slice(last));
   return out;

@@ -24,7 +24,8 @@ describe('run Markdown (runbooks, manual steps, approvals) — L1', () => {
     expect(hrefs).toEqual(['/runs', 'https://learn.microsoft.com/', 'mailto:soc@example.com']);
     expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('target', '_blank');
     expect(screen.getByRole('link', { name: 'runs' })).not.toHaveAttribute('target');
-    expect(container).toHaveTextContent('a b c');
+    // A target ends at "(": `[c](javascript:alert(1))` is no link at all and stays as written.
+    expect(container).toHaveTextContent('a b [c](javascript:alert(1))');
   });
 
   it('backslash escapes (how the server inserts data) show the characters, not markup', () => {

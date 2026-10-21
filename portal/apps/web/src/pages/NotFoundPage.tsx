@@ -32,9 +32,10 @@ export function NotFoundPage() {
           icon={<SquaresFourIcon size={20} />}
           action={
             <>
-              <Button intent="primary" onClick={openPalette}>
+              <Button intent="primary" onClick={openPalette} aria-keyshortcuts="Control+K Meta+K">
                 Open the command palette
-                <Kbd keys={[modKey(), 'K']} />
+                {/* No shortcut to show on a phone, and the button would run past the panel's padding. */}
+                <Kbd keys={[modKey(), 'K']} className="max-sm:hidden" />
               </Button>
               <Link to="/" className={cn(button({ intent: 'ghost' }), 'text-accent')}>
                 Go to Overview

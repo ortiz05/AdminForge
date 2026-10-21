@@ -41,6 +41,14 @@ export function hasControlChars(s: string, allowLines = false): boolean {
   return false;
 }
 
+/** Furthest a Date reaches from 1970 either way; past it `toISOString()` throws. */
+const MAX_TIME = 8.64e15;
+
+/** The ISO string for a time in ms, or undefined when no Date can hold it (`-999999999d`, `P300000Y`). */
+export function isoTime(ms: number): string | undefined {
+  return Number.isFinite(ms) && Math.abs(ms) <= MAX_TIME ? new Date(ms).toISOString() : undefined;
+}
+
 /** `today`, `now`, `-30d`, `+7d`, `-12h` or an ISO date → ISO string (undefined when it is neither). */
 export function resolveDate(value: string, now: Date): string | undefined {
   const rel = RELATIVE_DATE_RE.exec(value);
@@ -49,7 +57,7 @@ export function resolveDate(value: string, now: Date): string | undefined {
     if (rel[1] === 'today')
       return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
     const ms = Number(rel[3]) * UNIT_MS[rel[4] as keyof typeof UNIT_MS];
-    return new Date(now.getTime() + (rel[2] === '-' ? -ms : ms)).toISOString();
+    return isoTime(now.getTime() + (rel[2] === '-' ? -ms : ms));
   }
   if (!ISO_DATE_RE.test(value)) return undefined;
   const d = new Date(value);
@@ -77,7 +85,8 @@ function dateRange(value: unknown, now: Date): DateRangeValue | string {
       return 'must be an ISO duration like P7D or { from, to }';
     }
     to = now.toISOString();
-    from = new Date(now.getTime() - ms).toISOString();
+    from = isoTime(now.getTime() - ms);
+    if (!from) return 'must be an ISO duration like P7D or { from, to }';
   } else if (value && typeof value === 'object' && !Array.isArray(value)) {
     const v = value as { from?: unknown; to?: unknown };
     from = typeof v.from === 'string' ? resolveDate(v.from, now) : undefined;

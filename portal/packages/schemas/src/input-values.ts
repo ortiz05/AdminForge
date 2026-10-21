@@ -6,6 +6,8 @@ import {
   HOSTNAME_RE,
   ISO_DURATION_RE,
   RELATIVE_DATE_RE,
+  hasControlChars,
+  isoTime,
   resolveDate,
   type ParamCheck,
 } from './param-check';
@@ -65,6 +67,13 @@ const PATTERN_PROBLEM = {
 
 function checkString(p: Extract<Param, { type: 'string' }>, v: unknown): ParamCheck {
   if (typeof v !== 'string') return { error: 'Expected text.' };
+  // As for page params: values end up in request paths and bodies, where a stray TAB or LF changes their meaning.
+  if (hasControlChars(v, p.multiline === true))
+    return {
+      error: p.multiline
+        ? 'Contains control characters.'
+        : 'Must be a single line without control characters.',
+    };
   const max = p.maxLength ?? MAX_INPUT_STRING;
   if (v.length > max) return { error: `Must be at most ${max} characters.` };
   if (p.minLength !== undefined && v.trim().length < p.minLength)
@@ -121,19 +130,20 @@ function checkEnum(p: Extract<Param, { type: 'enum' }>, v: unknown): ParamCheck 
 
 function checkDate(v: unknown, now: Date): ParamCheck {
   if (typeof v !== 'string') return { error: 'Expected a date.' };
-  if (RELATIVE_DATE_RE.test(v)) return { value: resolveDate(v, now) };
+  if (RELATIVE_DATE_RE.test(v)) {
+    const d = resolveDate(v, now);
+    return d ? { value: d } : { error: 'Expected an ISO date like 2026-01-31.' };
+  }
   return Number.isNaN(Date.parse(v)) ? { error: 'Expected an ISO date like 2026-01-31.' } : { value: v };
 }
 
 function checkDateRange(v: unknown, now: Date): ParamCheck {
-  if (typeof v === 'string' && ISO_DURATION_RE.test(v))
-    return {
-      value: {
-        from: new Date(now.getTime() - parseDuration(v)).toISOString(),
-        to: now.toISOString(),
-        timespan: v,
-      },
-    };
+  if (typeof v === 'string' && ISO_DURATION_RE.test(v)) {
+    const from = isoTime(now.getTime() - parseDuration(v));
+    return from
+      ? { value: { from, to: now.toISOString(), timespan: v } }
+      : { error: 'Expected { from, to } or an ISO duration like P7D.' };
+  }
   const r = v as { from?: unknown; to?: unknown } | null;
   if (!r || typeof r !== 'object' || typeof r.from !== 'string' || typeof r.to !== 'string')
     return { error: 'Expected { from, to } or an ISO duration like P7D.' };

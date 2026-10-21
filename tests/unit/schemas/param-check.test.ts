@@ -101,6 +101,24 @@ describe('page params: one check for the page and the API', () => {
     expect(await apiIssue(name, sent[0])).toBeUndefined();
   });
 
+  it('dates and ranges no Date can hold are refused, never thrown (a hand-edited link must not crash the page)', () => {
+    expect(checkParam(PARAMS.since!, '-999999999d', NOW)).toEqual({
+      error: 'must be an ISO date or today, now, -30d',
+    });
+    expect(checkParam(PARAMS.since!, '+999999999y', NOW)).toMatchObject({ error: expect.any(String) });
+    expect(checkParam(PARAMS.when!, 'P300000Y', NOW)).toMatchObject({ error: expect.any(String) });
+    expect(coerceParam(PARAMS.since!, '-999999999d', NOW)[1]).toBeDefined();
+    expect(typedValue({ field: 'd', label: 'D', type: 'date' }, '-999999999d', NOW)).toEqual({
+      problem: 'Enter a date like 2026-01-31, or today, now, -30d.',
+    });
+    expect(checkInputValue({ type: 'date' } as Param, '-999999999d', NOW)).toEqual({
+      error: 'Expected an ISO date like 2026-01-31.',
+    });
+    expect(checkInputValue({ type: 'dateRange' } as Param, 'P300000Y', NOW)).toEqual({
+      error: 'Expected { from, to } or an ISO duration like P7D.',
+    });
+  });
+
   it('messages read after the label', () => {
     expect(coerceParam(PARAMS.top!, '2000', NOW)[1]).toBe('must be at most 999');
     expect(coerceParam(PARAMS.pool!, 'a;b', NOW)[1]).toBe('does not match the expected format');
@@ -182,6 +200,24 @@ describe('run inputs: the form and the engine say the same thing', () => {
     const browserError = browser.success ? undefined : inputErrors(browser.error)[name];
     expect(engineError).toBeDefined();
     expect(browserError).toBe(engineError);
+  });
+
+  it('refuse control characters like page params do; multi-line text keeps its line breaks', async () => {
+    const inputs = {
+      name: { type: 'string', label: 'Name' },
+      reason: { type: 'string', label: 'Reason', multiline: true },
+    } as unknown as Params;
+    const engine = await validateInputs(inputs, { name: 'a\tb', reason: 'line one\nline two' }, { now: NOW });
+    expect(engine).toEqual({
+      ok: false,
+      errors: [{ field: 'name', message: 'Must be a single line without control characters.' }],
+    });
+    expect(inputErrors(inputsSchema(inputs).safeParse({ name: 'a\tb' }).error!)).toMatchObject({
+      name: 'Must be a single line without control characters.',
+    });
+    expect(checkInputValue(inputs.reason!, 'bell\u0007', NOW)).toEqual({
+      error: 'Contains control characters.',
+    });
   });
 
   it('patterns are anchored for inputs too (they used to match anywhere in the value)', () => {

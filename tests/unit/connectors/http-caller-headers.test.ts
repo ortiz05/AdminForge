@@ -81,6 +81,10 @@ describe('createHttpClient: caller headers', () => {
         'host',
         'proxy-authorization',
         'x-ms-client-request-id',
+        // Method overrides (S-23): the policy judges the method a request is sent with.
+        'x-http-method',
+        'x-http-method-override',
+        'x-method-override',
       ].sort(),
     );
     expect(isForbiddenHeader('AuThOrIzAtIoN')).toBe(true);

@@ -13,6 +13,9 @@ const Query = z.record(z.string(), QueryValue);
  * case; matched in any case. The same list as `FORBIDDEN_HEADERS` in @adminforge/connectors (a test keeps them equal:
  * schemas depends on nothing but zod and yaml), which the HTTP client, the datasource executor and the engine apply.
  */
+/** Method-override headers: they would change the method the request policy judged (S-23, `readPost`). */
+const METHOD_OVERRIDE_HEADERS = ['x-http-method-override', 'x-http-method', 'x-method-override'];
+
 export const FORBIDDEN_HEADER_NAMES: readonly string[] = [
   'authorization',
   'cookie',
@@ -20,6 +23,7 @@ export const FORBIDDEN_HEADER_NAMES: readonly string[] = [
   'host',
   'x-ms-client-request-id',
   'client-request-id',
+  ...METHOD_OVERRIDE_HEADERS,
 ];
 
 /** Request headers content may set: any but FORBIDDEN_HEADER_NAMES (validate refuses those, at the header's line). */
@@ -29,7 +33,9 @@ export const RequestHeaders = z.record(z.string(), z.string()).superRefine((head
       ctx.addIssue({
         code: 'custom',
         path: [name],
-        message: `AdminForge sets this header itself (the sign-in token, the correlation id, cookies and the host); remove ${name} from the request.`,
+        message: METHOD_OVERRIDE_HEADERS.includes(name.trim().toLowerCase())
+          ? `${name} would change the request's method after AdminForge checked it; remove it and set the method itself.`
+          : `AdminForge sets this header itself (the sign-in token, the correlation id, cookies and the host); remove ${name} from the request.`,
       });
 });
 

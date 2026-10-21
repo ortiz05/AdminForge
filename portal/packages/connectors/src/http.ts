@@ -169,7 +169,8 @@ const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 
 /**
  * Headers AdminForge owns on every outbound call (S-02), lower case: the bearer token, the correlation id Microsoft
- * logs (Graph's and ARM's spelling), cookies and the host. Content may never set them — the request schema refuses them
+ * logs (Graph's and ARM's spelling), cookies and the host — and method-override headers, which would turn a request the
+ * policy judged as a POST into a DELETE or PATCH on a server that honours them. Content may never set them — the request schema refuses them
  * at validate time (a mirrored list in @adminforge/schemas, which depends on nothing but zod and yaml), the datasource
  * executor and the playbook engine refuse them at run time, and `createHttpClient` drops them from what a caller passes
  * before adding its own, so nothing can replace or double the token or the correlation id.
@@ -181,6 +182,10 @@ export const FORBIDDEN_HEADERS: ReadonlySet<string> = new Set([
   'host',
   'x-ms-client-request-id',
   'client-request-id',
+  // Method overrides: the request policy judges the method a request is sent with (S-23, `readPost`).
+  'x-http-method-override',
+  'x-http-method',
+  'x-method-override',
 ]);
 
 /** Whether `name` is one of FORBIDDEN_HEADERS, in any letter case. */

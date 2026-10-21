@@ -44,6 +44,9 @@ Open <http://localhost:5173>. You're signed in as a mock engineer; every page re
 `tests/fixtures/`, and state lives in memory. The **dev toolbar** (mock mode only) switches your portal roles and arms
 or disarms write access, so you can see what a Reader, an Operator or an Approver sees.
 
+Write playbooks run end to end: arm with the dev toolbar, and a write with no fixture is accepted — nothing changes,
+there is no tenant. Probes and Teams delivery answer from fixtures too, so mock mode never reaches the internet.
+
 Mock mode ignores your env file on purpose, so it can't touch a shared database or a tenant. Use it for almost all UI
 and content work.
 
@@ -71,7 +74,7 @@ a migrated file of its own in a temporary directory, so they run everywhere and 
 pnpm guard                          # guard tests (the pre-commit hook)
 pnpm lint && pnpm format:check
 pnpm typecheck                      # every package (as CI runs it)
-pnpm test                           # unit, component, api, content, guards
+pnpm test                           # unit, component, api, content, guards, pwsh; then scale
 pnpm test:e2e                       # Playwright in mock mode, including the visual baselines
 pnpm adminforge validate            # every content definition
 pnpm adminforge test                # playbook and runbook tests
@@ -102,14 +105,14 @@ tenant** (never production) and a portal role there ([`docs/access.md`](../acces
 
 ## When setup fails
 
-| Symptom                                                | Fix                                                                             |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `pnpm` says the version doesn't match `packageManager` | `corepack enable`, then open a new shell                                        |
-| Commits go through without the guard tests running     | `git config core.hooksPath .githooks`                                           |
-| Playwright can't find a browser                        | Install Google Chrome system-wide; Playwright doesn't download one here         |
-| `env check` says DATABASE_PATH contains `CHANGE_ME`    | Run `pnpm --filter @adminforge/api init:local` again                            |
-| `env check` names `DATABASE_URL` and other old keys    | Keys of the Postgres releases: nothing reads them — remove them                 |
-| `PUBLIC_BASE_URL` error on `pnpm dev`                  | It has no default — pass it as in the mock-mode one-liner                       |
-| A page is blank in mock mode                           | Its datasource has no fixture; see [Testing → fixtures](09-testing.md#fixtures) |
-| No autocomplete in content YAML                        | `pnpm --filter @adminforge/schemas build` (the schemas are generated)           |
-| Anything else                                          | [`docs/troubleshooting.md`](../troubleshooting.md), then the team channel       |
+| Symptom                                                | Fix                                                                                       |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `pnpm` says the version doesn't match `packageManager` | `corepack enable`, then open a new shell                                                  |
+| Commits go through without the guard tests running     | `git config core.hooksPath .githooks`                                                     |
+| Playwright can't find a browser                        | Install Google Chrome system-wide; Playwright doesn't download one here                   |
+| `env check` says DATABASE_PATH contains `CHANGE_ME`    | Run `pnpm --filter @adminforge/api init:local` again                                      |
+| `env check` names `DATABASE_URL` and other old keys    | Keys of the Postgres releases: nothing reads them — remove them                           |
+| `PUBLIC_BASE_URL` error on `pnpm dev`                  | It has no default — pass it as in the mock-mode one-liner                                 |
+| A blank page or "no synthetic data" in mock mode       | A fixture is missing; the API log names it ([Testing → fixtures](09-testing.md#fixtures)) |
+| No autocomplete in content YAML                        | `pnpm --filter @adminforge/schemas build` (the schemas are generated)                     |
+| Anything else                                          | [`docs/troubleshooting.md`](../troubleshooting.md), then the team channel                 |

@@ -82,7 +82,8 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Validate content               | `pnpm adminforge validate` (add `--scopes` to compare with the app registrations)                                                        |
 | Playbook/runbook tests         | `pnpm adminforge test [pattern]`                                                                                                         |
 | All tests                      | `pnpm test` · e2e: `pnpm test:e2e` · production build: `pnpm build && pnpm test:e2e:prod` · guards: `pnpm guard`                         |
-| Focused tests                  | `pnpm --filter @adminforge/tests exec vitest run --project <unit\|component\|api\|content\|guards> <path>`                               |
+| Focused tests                  | `pnpm --filter @adminforge/tests exec vitest run --project <unit\|component\|api\|content\|guards\|pwsh\|scale> <path>`                  |
+| Real PowerShell tests          | `pnpm --filter @adminforge/tests test:pwsh` (runner workers, Pester; `pnpm test` runs them where `pwsh` is installed)                    |
 | Lint / types                   | `pnpm lint` · `pnpm typecheck` (type-checks only: builds nothing and writes no `dist/`)                                                  |
 | Format                         | `pnpm format` (write) · `pnpm format:check` (CI)                                                                                         |
 | Publish content to the DB      | `pnpm adminforge publish [--dry-run]` (runs validate + tests; needs committed content on `origin/main`, else `--allow-unreviewed`)       |

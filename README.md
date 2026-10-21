@@ -77,7 +77,7 @@ as a sidecar) with its database on a PersistentVolume: see `portal/deploy/kubern
 
 ## Tests
 
-`pnpm test` (unit, component, api, content, guards) · `pnpm test:e2e` (Playwright in mock mode, including the visual
+`pnpm test` (unit, component, api, content, guards, pwsh; then scale) · `pnpm test:e2e` (Playwright in mock mode, including the visual
 baselines in `tests/e2e`) · `pnpm guard` (runs on every commit) · `pnpm format:check` · live tenant validation:
 `pnpm test:live` (see `tests/live/README.md` and the `validating-against-a-tenant` skill). Details: `tests/README.md`.
 

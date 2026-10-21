@@ -9,24 +9,26 @@ What to test, where the test goes, and how to keep the suite fast and trustworth
 imports a test library. Add a **new** test file for new behaviour rather than appending to shared suites such as
 `content/validate-all.test.ts` — small files make ownership and review obvious.
 
-| You changed…                                         | Test in                                                    | Runs with              |
-| ---------------------------------------------------- | ---------------------------------------------------------- | ---------------------- |
-| Pure logic in a package or app                       | `tests/unit/<package>/<topic>.test.ts`                     | vitest `unit`          |
-| An API route or service                              | `tests/api/<area>.test.ts` (`app.inject`, memory stores)   | vitest `api`           |
-| Database behaviour (transactions, triggers, queries) | `tests/api/<area>-db.test.ts` (a temporary SQLite file)    | vitest `api`           |
-| A React component or coded page                      | `tests/component/<area>/<Component>.test.tsx` (jsdom, axe) | vitest `component`     |
-| Content logic (a transform, a rule)                  | `tests/content/<topic>.test.ts`                            | vitest `content`       |
-| A transform at enterprise size (the 250 ms budget)   | `tests/content/content-at-scale-<topic>.test.ts`           | vitest `scale`         |
-| A playbook or runbook                                | its own `tests:` block                                     | `pnpm adminforge test` |
-| A user journey or a visible change                   | `tests/e2e/<feature>.spec.ts` + screenshots                | Playwright             |
-| What only the production bundle shows (CSP, chunks)  | `tests/e2e/prod/<topic>.spec.ts`                           | `pnpm test:e2e:prod`   |
-| A PowerShell script or the runner module             | `tests/runner/pester/` (stub cmdlets)                      | Pester                 |
-| Behaviour only a real tenant can show                | `tests/live/` (never in CI)                                | Playwright (live)      |
+| You changed…                                         | Test in                                                                        | Runs with                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------ |
+| Pure logic in a package or app                       | `tests/unit/<package>/<topic>.test.ts`                                         | vitest `unit`                  |
+| An API route or service                              | `tests/api/<area>.test.ts` (`app.inject`, memory stores)                       | vitest `api`                   |
+| Database behaviour (transactions, triggers, queries) | `tests/api/<area>-db.test.ts` (a temporary SQLite file)                        | vitest `api`                   |
+| A React component or coded page                      | `tests/component/<area>/<Component>.test.tsx` (jsdom, axe)                     | vitest `component`             |
+| Content logic (a transform, a rule)                  | `tests/content/<topic>.test.ts`                                                | vitest `content`               |
+| A transform at enterprise size (the 250 ms budget)   | `tests/content/content-at-scale-<topic>.scale.test.ts` (any `*.scale.test.ts`) | vitest `scale`                 |
+| A playbook or runbook                                | its own `tests:` block                                                         | `pnpm adminforge test`         |
+| A user journey or a visible change                   | `tests/e2e/<feature>.spec.ts` + screenshots                                    | Playwright                     |
+| What only the production bundle shows (CSP, chunks)  | `tests/e2e/prod/<topic>.spec.ts`                                               | `pnpm test:e2e:prod`           |
+| Code that starts real PowerShell (runner workers)    | `tests/unit/runner/<topic>.pwsh.test.ts`                                       | vitest `pwsh`                  |
+| A PowerShell script or the runner module             | `tests/runner/pester/` (stub cmdlets)                                          | Pester (through vitest `pwsh`) |
+| Behaviour only a real tenant can show                | `tests/live/` (never in CI)                                                    | Playwright (live)              |
 
 ## Commands
 
 ```bash
-pnpm test                                                        # unit, component, api, content, guards; then scale
+pnpm test                                                        # unit, component, api, content, guards, pwsh; then scale
+pnpm --filter @adminforge/tests test:pwsh                        # real pwsh only: runner workers, Pester
 pnpm --filter @adminforge/tests exec vitest run --project api api/schedules   # one project, a path filter
 pnpm --filter @adminforge/tests exec vitest --project component  # watch mode
 pnpm guard                                                       # guards (also the pre-commit hook)
@@ -37,8 +39,11 @@ pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester
 
 Run the focused project while you work; run `pnpm test` and the relevant e2e spec before you push. The `*-db` suites
 need nothing running: each makes a migrated SQLite file of its own in a temporary directory (`tests/api/db.ts`) and
-never skips. Only `tests/api/import-postgres.test.ts` (the one-time importer) needs a Postgres (`TEST_POSTGRES_URL`) and
-skips without one. CI doesn't run Pester — if you touched the runner or a script, run it yourself and say so in the PR.
+never skips. Only `tests/api/import-postgres.test.ts` (the one-time importer) needs a Postgres: it creates and drops a
+scratch database on the server `TEST_POSTGRES_URL` names (never an env file's `DATABASE_URL`), skips without it
+locally and fails under `CI=true`. `pnpm test` runs Pester through `unit/runner/pester.pwsh.test.ts` wherever `pwsh`
+is installed and skips it elsewhere — if you touched the runner or a script on a machine without `pwsh`, say so in the
+PR.
 
 ## What a good test covers
 
@@ -56,8 +61,8 @@ skips without one. CI doesn't run Pester — if you touched the runner or a scri
   written and fail later.
 - **Load:** the whole suite runs in parallel. Don't assert tight wall-clock times unless the budget is the point; when
   it is (a transform's 250 ms budget), allow a retry (`{ retry: 2 }`) so a saturated machine doesn't fail a fast
-  implementation, while a real regression still fails every attempt. Heavy component tests that render a whole page
-  may set a larger `timeout` on their `describe`.
+  implementation, while a real regression still fails every attempt. The unit, component and content projects allow
+  15 s per test; a test whose work is long by nature sets its own `timeout`.
 - **No network:** connectors run on fixtures; e2e answers `/api` in the browser or from the local mock BFF. A test that
   needs the internet is a live test.
 - **No order dependence:** each test builds its own app and stores; API files run one at a time, so don't rely on
@@ -76,14 +81,24 @@ they cover:
   `OPERATIONAL`).
 - `tests/content/retired-content.test.ts` — nothing active links to, embeds, runs or schedules a retired definition.
 - `tests/unit/schemas/resource-graph-joins.test.ts` — the Resource Graph join/union lint `validate` applies.
-- `tests/content/content-at-scale-*.test.ts` — each big-list transform at its largest size under the real budget.
-  They run in the `scale` project, after the others and one file at a time; a busy machine (another suite, background
-  agents) can push one over — rerun that file alone before suspecting a regression.
+- `tests/content/content-at-scale-*.scale.test.ts` — each big-list transform at its largest size under the real
+  budget. Files named `*.scale.test.ts` run in the `scale` project, after the others and one file at a time; a busy
+  machine (another suite, background agents) can push one over — rerun that file alone before suspecting a regression.
+- `tests/content/fixtures-complete.test.ts` — every active page, dashboard and report datasource renders from the
+  fixtures (entity pages through its `SAMPLE_PARAMS`; add one for a new entity page), and every Resource Graph or Log
+  Analytics datasource and KQL probe names an `af:` variant the fixtures have.
 - `tests/e2e/prod/csp-no-eval.spec.ts` — the production build under the API's `script-src 'self'`: no violation.
 - `tests/guards/sqlite-only.test.ts` — runtime code is SQLite-only: no `pg` or `pg-boss`, no Postgres-only SQL, no
   `async` transaction function (the one-time importer excepted).
 - `tests/guards/kubernetes-manifests.test.ts` — the deployment keeps one replica, `Recreate`, a ReadWriteOncePod
   volume, a locked-down pod and the runner on the pod's loopback.
+- `tests/guards/no-deep-imports.test.ts` — runtime code reaches other packages only through their declared `exports`,
+  never `@adminforge/<pkg>/src/…`. Tests may import internals.
+- `tests/guards/test-file-names.test.ts` — the `*.scale` and `*.pwsh` suffixes: a scale test or one that starts
+  `pwsh` without its suffix fails.
+- `tests/unit/docs/` — every backticked path, link and heading reference (a doc's name, then › and a heading) in
+  CLAUDE.md, `.claude/`, the onboarding guides and the docs index resolves; every document has a row in
+  `docs/README.md`; every plan has a status line.
 
 A new guard earns its place only if it fails without the fix: prove that once (for the production bundle, build the
 old code into a scratch `--outDir` and serve it with `vite preview --outDir … --port 4174`, which the prod config
@@ -97,6 +112,12 @@ through DevTools, which ignores the page's CSP, so a control evaluates an inline
   the top of `portal/packages/connectors/src/fixtures.ts`. Resource Graph and Log Analytics fixtures usually match on a
   `// af:<id>` comment in the query's first line.
 - Add POST variants rather than overwriting a shared file another page depends on.
+- Probes in fixtures mode use `portal/apps/api/src/probes/fixture-network.ts`: `hosts/<host>/…` for HTTP (the portal's
+  own origin is `hosts/portal.example.com/…`), `dns/<name>/<TYPE>.json` (answers as text, or
+  `{ "error": "ENOTFOUND" }`) and `tls/<host>/<port>.json` (`expiresInDays`, `issuedDaysAgo`, …, relative to the
+  clock). `tests/api/probes-fixtures-offline.test.ts` runs every sweep with the network switched off.
+- Writes for compensation tests go to `AF-Test-User-01` / `-02` (`graph/v1.0/users/…01a1` and `…01a2`); in mock mode
+  a write no fixture describes is accepted (there is no tenant), a read without one fails.
 - e2e payloads live in `tests/support/web/fixtures/`; the mock API is `tests/e2e/support/mock-api.ts` plus feature
   mocks in `tests/support/web/` (`mock-automation.ts`, `mock-reports.ts`). A new endpoint needs a mock handler there
   before its UI can be tested. Shared helpers are listed in `tests/README.md` → Shared helpers.
@@ -127,8 +148,8 @@ results as counts and statuses.
 - [ ] New behaviour has new tests; refusals and roles covered; regression test for a bug fix
 - [ ] Content: `pnpm adminforge validate` + `pnpm adminforge test` clean
 - [ ] UI: component test (axe) and e2e with screenshots in both themes, reviewed
-- [ ] Big lists: a `content-at-scale-*` case; bundling or a web dependency: `pnpm test:e2e:prod`
-- [ ] Runner or scripts: Pester run locally
+- [ ] Big lists: a `content-at-scale-*.scale.test.ts` case; bundling or a web dependency: `pnpm test:e2e:prod`
+- [ ] Runner or scripts: Pester ran (`pnpm test` where `pwsh` is installed, or `test:pwsh`)
 - [ ] No fixed-date-versus-real-clock mixes, no network, no sleeps
 
 ## Read next

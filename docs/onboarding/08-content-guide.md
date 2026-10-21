@@ -94,7 +94,7 @@ requires:
   the rows' transform (`azure.vms-without-backup`: `subs`) — the only transform such a list has.
 - **Scale:** lists that can reach thousands of rows page in Resource Graph or Graph with no per-row transform; numbers
   come from a separate `summarize` query. A transform over a big list uses the native helpers and gets a
-  `tests/content/content-at-scale-*.test.ts` case at the list's largest size under the real 250 ms budget.
+  `tests/content/content-at-scale-*.scale.test.ts` case at the list's largest size under the real 250 ms budget.
 - Run every new request once against the validation tenant, read-only — fixtures can't tell you Microsoft rejects a
   query. The skills list the Graph and Resource Graph quirks people trip over. What you couldn't check live goes in
   `docs/licensing-review.md` (what each request relies on) and `docs/backlog.md` (the check still to do).
@@ -152,8 +152,10 @@ The schema refuses most mistakes; know the rules so you design for them (`adding
 
 Every datasource needs a synthetic fixture so mock mode, e2e and the content tests render it:
 `tests/fixtures/<service>/…` following the naming scheme at the top of
-`portal/packages/connectors/src/fixtures.ts`. Resource Graph and Log Analytics queries start with a
-`// af:<id>` comment so their fixture can match it. `Example Org`, `example.com`, generated GUIDs only.
+`portal/packages/connectors/src/fixtures.ts`. Resource Graph and Log Analytics queries — KQL probes included — start
+with a `// af:<id>` comment so their fixture can match it (`tests/content/fixtures-complete.test.ts` fails without
+one). An HTTP, DNS or certificate probe needs a `hosts/`, `dns/` or `tls/` fixture (see
+[Testing → Fixtures](09-testing.md#fixtures)). `Example Org`, `example.com`, generated GUIDs only.
 `pnpm adminforge fixtures record <page>` reads a page live as the automation identity (read-only) and writes
 sanitised fixtures — review every file before committing.
 
@@ -164,7 +166,7 @@ pnpm adminforge validate              # every definition: schema, references, ex
 pnpm adminforge validate --scopes     # + compare scopes with the app registrations (provisioner credentials)
 pnpm adminforge test [pattern]        # playbook and runbook tests
 pnpm --filter @adminforge/tests exec vitest run --project content
-pnpm --filter @adminforge/tests exec vitest run --project scale   # wall-clock budgets at enterprise size (files in tests/vitest.config.ts SCALE)
+pnpm --filter @adminforge/tests exec vitest run --project scale   # wall-clock budgets at enterprise size (files named *.scale.test.ts)
 pnpm guard
 # then look at it in mock mode: /p/<id>
 ```

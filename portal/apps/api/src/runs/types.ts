@@ -121,11 +121,28 @@ export interface TaskFilter {
   runIds?: string[];
 }
 
+/**
+ * F-08: the run statuses that count towards a person's open runs. Runs parked on a person (`awaiting_*`) and finished
+ * runs don't count.
+ */
+export const RUN_STATUS_OPEN: readonly RunStatus[] = ['queued', 'running'];
+
+/** What `insertOpenRun` did: inserted (or found, with `ifAbsent`) the run, or refused it at `open` open runs. */
+export type OpenRunInsert = { ok: true; row: RunRow } | { ok: false; open: number };
+
 /** Persistence used by the RunService, the worker and the engine store adapter. */
 export interface RunRepository {
   insertRun(run: NewRun): Promise<RunRow>;
   /** Inserts unless a run with the same id exists; returns the stored row either way. */
   insertRunIfAbsent(run: NewRun): Promise<RunRow>;
+  /**
+   * F-08: inserts a run a person starts from the portal unless its initiator already has `max` open runs — root runs
+   * (a bulk run counts once, child runs not at all) they started themselves (`identity: delegated`; scheduled runs
+   * don't count) that are queued or running (RUN_STATUS_OPEN). Counted and inserted in one write transaction, so
+   * starts at the same moment can't pass the cap together. With `ifAbsent`, a run with the same id is returned as it
+   * is (a replayed confirmation).
+   */
+  insertOpenRun(run: NewRun, limit: { max: number; ifAbsent?: boolean }): Promise<OpenRunInsert>;
   getRun(id: string): Promise<RunRow | null>;
   /** CAS on status when `expect` is given; null when the row is missing or the CAS failed. */
   updateRun(id: string, patch: RunRowPatch, expect?: readonly RunStatus[]): Promise<RunRow | null>;

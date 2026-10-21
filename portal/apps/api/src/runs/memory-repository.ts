@@ -1,17 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import type { HumanTask, RunEventInput, RunStatus, StepRecord } from '@adminforge/engine';
-import type {
-  EventRow,
-  NewRun,
-  RunFilter,
-  RunNotification,
-  RunRepository,
-  RunRow,
-  RunRowPatch,
-  TaskFilter,
-  TaskPolicy,
-  TaskRow,
-  TaskStatus,
+import {
+  RUN_STATUS_OPEN,
+  type EventRow,
+  type NewRun,
+  type OpenRunInsert,
+  type RunFilter,
+  type RunNotification,
+  type RunRepository,
+  type RunRow,
+  type RunRowPatch,
+  type TaskFilter,
+  type TaskPolicy,
+  type TaskRow,
+  type TaskStatus,
 } from './types';
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -34,6 +36,30 @@ export class MemoryRunRepository implements RunRepository {
   }
 
   async insertRunIfAbsent(run: NewRun): Promise<RunRow> {
+    return this.insertNow(run);
+  }
+
+  async insertOpenRun(run: NewRun, limit: { max: number; ifAbsent?: boolean }): Promise<OpenRunInsert> {
+    // Synchronous from the count to the insert: nothing else runs in between.
+    const existing = this.runs.get(run.id);
+    if (existing) {
+      if (limit.ifAbsent) return { ok: true, row: clone(existing) };
+      throw new Error(`duplicate run ${run.id}`);
+    }
+    let open = 0;
+    for (const r of this.runs.values())
+      if (
+        r.initiatorOid === run.initiatorOid &&
+        r.parentRunId === null &&
+        r.identity === 'delegated' &&
+        RUN_STATUS_OPEN.includes(r.status)
+      )
+        open++;
+    if (open >= limit.max) return { ok: false, open };
+    return { ok: true, row: this.insertNow(run) };
+  }
+
+  private insertNow(run: NewRun): RunRow {
     const existing = this.runs.get(run.id);
     if (existing) return clone(existing);
     const now = this.now();

@@ -224,8 +224,10 @@ const Schema = z
     // PowerShell runner (apps/runner; the pod's sidecar on 127.0.0.1); both unset = PowerShell steps/datasources disabled.
     RUNNER_URL: z.url().optional(),
     RUNNER_SHARED_KEY: z.string().min(40).optional(),
-    // Run jobs the API process works on at once (the API is the run worker, ADR-016).
-    RUN_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
+    // Run jobs the API process works on at once (the API is the run worker, ADR-016). Steps mostly wait on Microsoft.
+    RUN_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
+    // Runs one person may have queued or running at once, previews included (F-08; parked runs don't count).
+    RUN_MAX_OPEN_PER_USER: z.coerce.number().int().min(1).max(100).default(5),
     // Schedules the scheduler (in the API process, R6) runs at once.
     SCHEDULER_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(4),
     /** Scheduled report files: <dir>/<schedule>/<timestamp>.<ext> (default ~/.local/share/adminforge/artifacts). */

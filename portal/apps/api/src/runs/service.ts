@@ -128,6 +128,20 @@ export function confirmedRunId(previewRunId: string): string {
 /** Looks up a schedule's `requires.portalRoles` by schedule id (wired by the schedules module). */
 export type ScheduleRolesLookup = (scheduleId: string) => Promise<readonly PortalRole[] | null | undefined>;
 
+/** F-08: open runs (queued or running) one person may have at once; RUN_MAX_OPEN_PER_USER. */
+export const DEFAULT_MAX_OPEN_RUNS = 5;
+
+/** The 429 for a person at their open-run cap (F-08). */
+export const tooManyRuns = (max: number) =>
+  new AppError(
+    429,
+    'too_many_runs',
+    `You already have ${max} runs queued or running, the most one person can have at once.`,
+    {
+      hint: 'Wait for one to finish, or cancel one you don’t need (Runs), then start this again. Runs waiting for an approval, input, write access or a sign-in don’t count.',
+    },
+  );
+
 /** Per-request memo for view checks (definition and schedule roles). */
 type ViewCache = Map<string, Promise<readonly string[]>>;
 export const PREVIEW_MAX_AGE_MS = 15 * 60_000;
@@ -188,6 +202,8 @@ export class RunService {
       audit: AuditWriter;
       env: () => Record<string, unknown>;
       now: () => Date;
+      /** F-08: open runs one person may have at once (default 5). */
+      maxOpenRuns?: number;
     },
   ) {}
 
@@ -533,15 +549,20 @@ export class RunService {
   }
 
   /**
-   * Inserts a run; a confirmed execution gets the id derived from its preview, so a preview is used at most once
-   * (a replayed or concurrent confirmation finds the run the first one started).
+   * Inserts a run someone starts from the portal (a run, a preview or a bulk run), unless they already have
+   * `maxOpenRuns` queued or running (F-08: 429 `too_many_runs`). A confirmed execution gets the id derived from its
+   * preview, so a preview is used at most once (a replayed or concurrent confirmation finds the run the first one
+   * started).
    */
   private async insert(run: NewRun, caller: Caller, confirmed: Confirmed | null): Promise<RunRow> {
-    if (!confirmed) return this.deps.repo.insertRun(run);
-    const row = await this.deps.repo.insertRunIfAbsent({
-      ...run,
-      id: confirmedRunId(confirmed.previewRunId),
-    });
+    const max = this.deps.maxOpenRuns ?? DEFAULT_MAX_OPEN_RUNS;
+    const res = await this.deps.repo.insertOpenRun(
+      confirmed ? { ...run, id: confirmedRunId(confirmed.previewRunId) } : run,
+      { max, ifAbsent: confirmed !== null },
+    );
+    if (!res.ok) throw tooManyRuns(max);
+    const row = res.row;
+    if (!confirmed) return row;
     if (row.correlationId !== caller.correlationId)
       throw new AppError(
         409,

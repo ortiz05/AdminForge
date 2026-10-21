@@ -3,7 +3,7 @@ import { mockConfig } from './helpers';
 import { buildTestApp } from './support/app';
 
 // The API process is the run worker (ADR-016), so RUN_WORKER_CONCURRENCY — once read only by the separate worker
-// entry — must reach the API's own worker.
+// entry — must reach the API's own worker. The default is 8 (F-08: steps mostly wait on Microsoft).
 function recordingQueue() {
   const calls: Array<{ concurrency: number }> = [];
   const queue: RunQueue = {
@@ -18,7 +18,7 @@ function recordingQueue() {
 
 describe('the API runs its worker with RUN_WORKER_CONCURRENCY', () => {
   it.each([
-    [undefined, 4],
+    [undefined, 8],
     ['9', 9],
   ])('RUN_WORKER_CONCURRENCY=%s → %i jobs at once', async (value, expected) => {
     const { queue, calls } = recordingQueue();

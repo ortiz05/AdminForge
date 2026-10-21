@@ -203,7 +203,16 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
             await ctx.broker.get(session, service, mode, { forceRefresh: true });
       }),
   }));
-  const service = new RunService({ repo, queue, store, definitions, audit: ctx.audit, env, now: ctx.now });
+  const service = new RunService({
+    repo,
+    queue,
+    store,
+    definitions,
+    audit: ctx.audit,
+    env,
+    now: ctx.now,
+    maxOpenRuns: ctx.config.RUN_MAX_OPEN_PER_USER,
+  });
 
   let started = false;
   // Tells /readyz the run worker is alive (only where this process consumes the queue, with a database).

@@ -5,8 +5,10 @@ import { writeTx, type Database } from '../db/client';
 import { Leases } from '../db/leases';
 import { approvals, runs, runStepEvents, runSteps } from '../db/schema';
 import {
+  RUN_STATUS_OPEN,
   type EventRow,
   type NewRun,
+  type OpenRunInsert,
   type RunFilter,
   type RunNotification,
   type RunRepository,
@@ -158,6 +160,31 @@ export class SqliteRunRepository implements RunRepository {
       .returning();
     if (row) return toRun(row);
     return (await this.getRun(run.id))!;
+  }
+
+  async insertOpenRun(run: NewRun, limit: { max: number; ifAbsent?: boolean }): Promise<OpenRunInsert> {
+    // BEGIN IMMEDIATE: one start at a time (any process), so the count below stays true until the insert commits.
+    return writeTx(this.db, (tx): OpenRunInsert => {
+      if (limit.ifAbsent) {
+        const existing = tx.select().from(runs).where(eq(runs.id, run.id)).limit(1).get();
+        if (existing) return { ok: true, row: toRun(existing) };
+      }
+      const c = tx
+        .select({ open: sql<number>`count(*)` })
+        .from(runs)
+        .where(
+          and(
+            run.initiatorOid === null ? isNull(runs.initiatorOid) : eq(runs.initiatorOid, run.initiatorOid),
+            isNull(runs.parentRunId),
+            eq(runs.identity, 'delegated'),
+            inArray(runs.status, [...RUN_STATUS_OPEN]),
+          ),
+        )
+        .get();
+      const open = Number(c?.open ?? 0);
+      if (open >= limit.max) return { ok: false, open };
+      return { ok: true, row: toRun(tx.insert(runs).values(this.values(run)).returning().get()) };
+    });
   }
 
   async getRun(id: string): Promise<RunRow | null> {

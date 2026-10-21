@@ -47,7 +47,8 @@ function repo() {
   writeFileSync(path.join(contentDir, 'a.page.yaml'), 'kind: page\n');
   git(work, 'add', '-A');
   git(work, 'commit', '-q', '-m', 'content');
-  const url = `file://deploy:s3cret-token@localhost${origin}`;
+  // The password contains an unencoded `@`: everything up to the last one goes.
+  const url = `file://deploy:s3cret@token@localhost${origin}`;
   git(work, 'remote', 'add', 'origin', url);
   git(work, 'push', '-q', 'origin', 'HEAD:refs/heads/main');
   return {
@@ -82,6 +83,8 @@ describe('safeRemote', () => {
       'https://git.example.com/repo.git',
     );
     expect(safeRemote('/srv/git/adminforge.git\n')).toBe('/srv/git/adminforge.git');
+    expect(safeRemote('https://user:p@ss@git.example.com/r.git')).toBe('https://git.example.com/r.git');
+    expect(safeRemote('user:p@ss@git.example.com:org/r.git')).toBe('git.example.com:org/r.git');
   });
 
   it('refuses what no remote URL needs', () => {
@@ -105,7 +108,7 @@ describe('review state against origin (checkout)', () => {
     try {
       const s = reviewState(r.contentDir);
       expect(s).toMatchObject({ onOriginMain: true, problems: [], mainCommit: r.head(), remote: r.safeUrl });
-      expect(JSON.stringify(s)).not.toMatch(/s3cret|deploy:/);
+      expect(JSON.stringify(s)).not.toMatch(/s3cret|token@|deploy:/);
     } finally {
       r.cleanup();
     }
@@ -122,6 +125,27 @@ describe('review state against origin (checkout)', () => {
       expect(s.onOriginMain).toBe(false);
       expect(s.problems.map((p) => p.reason)).toEqual(['not-on-origin-main']);
       expect(s.mainCommit).not.toBe(r.head());
+    } finally {
+      r.cleanup();
+    }
+  });
+
+  it('a tag called main, or a local replace ref or graft, does not make a commit reviewed', () => {
+    const r = repo();
+    try {
+      const main = r.head();
+      writeFileSync(path.join(r.contentDir, 'a.page.yaml'), 'kind: page\n# rogue\n');
+      git(r.work, 'commit', '-q', '-am', 'rogue');
+      // Pushing a tag needs no merge rights.
+      git(r.work, 'push', '-q', 'origin', 'HEAD:refs/tags/main');
+      expect(reviewState(r.contentDir)).toMatchObject({ onOriginMain: false, mainCommit: main });
+      // Rewriting history locally: main's commit "has" the rogue commit as its parent.
+      git(r.work, 'replace', '--graft', main, r.head());
+      expect(git(r.work, 'merge-base', '--is-ancestor', 'HEAD', main)).toBe('');
+      expect(reviewState(r.contentDir).onOriginMain).toBe(false);
+      git(r.work, 'replace', '-d', main);
+      writeFileSync(path.join(r.work, '.git', 'info', 'grafts'), `${main} ${r.head()}\n`);
+      expect(reviewState(r.contentDir).onOriginMain).toBe(false);
     } finally {
       r.cleanup();
     }
@@ -278,6 +302,22 @@ describe('build-images.sh', () => {
       const res = r.run();
       expect(res.ok).toBe(true);
       expect(JSON.parse((res as { out: string }).out)).toMatchObject({ reviewed: false });
+    } finally {
+      r.cleanup();
+    }
+  });
+
+  it('checks against the main branch, not a tag called main, and ignores replace refs', () => {
+    const r = checkout();
+    try {
+      const main = r.head();
+      writeFileSync(path.join(r.contentDir, 'a.page.yaml'), 'kind: page\n# rogue\n');
+      git(r.work, 'commit', '-q', '-am', 'rogue');
+      git(r.work, 'push', '-q', 'origin', 'HEAD:refs/tags/main');
+      git(r.work, 'replace', '--graft', main, r.head());
+      const res = r.run();
+      expect(res.ok).toBe(true);
+      expect(JSON.parse((res as { out: string }).out)).toMatchObject({ reviewed: false, mainCommit: main });
     } finally {
       r.cleanup();
     }

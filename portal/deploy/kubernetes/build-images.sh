@@ -34,8 +34,8 @@ done
 safe_remote() {
   local url="$1"
   case "$url" in
-    [A-Za-z]*://*) url="$(printf '%s' "$url" | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)[^/@]*@#\1#; s#[?#].*$##')" ;;
-    *) url="$(printf '%s' "$url" | sed -E 's#^[^@/]+@##')" ;;
+    [A-Za-z]*://*) url="$(printf '%s' "$url" | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)[^/]*@#\1#; s#[?#].*$##')" ;;
+    *) url="$(printf '%s' "$url" | sed -E 's#^[^/]*@##')" ;;
   esac
   case "$url" in
     *[[:space:]]*|*[[:cntrl:]]*|*\"*|*\'*|*\\*) url="" ;;
@@ -45,6 +45,8 @@ safe_remote() {
 }
 
 cd "$ROOT"
+# Local replace refs and grafts could make any commit look merged to main: the review ignores them (as publish does).
+export GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null GIT_TERMINAL_PROMPT=0
 COMMIT="$(git rev-parse --short=12 HEAD)"
 # The images are built from the commit itself (`git archive HEAD`): uncommitted, untracked and git-ignored files never
 # reach them, so BUILD.json's commit is exactly what the image holds.
@@ -56,8 +58,9 @@ if ! ORIGIN_URL="$(git remote get-url origin 2>/dev/null)"; then
   exit 1
 fi
 REMOTE="$(safe_remote "$ORIGIN_URL")"
-# Review against origin's main as it is now, never a stale or hand-set origin/main.
-if ! git fetch --quiet origin main; then
+# Review against origin's main branch as it is now, never a stale or hand-set origin/main — and never a tag that
+# happens to be called main (a bare `main` would prefer refs/tags/main).
+if ! git fetch --quiet origin refs/heads/main; then
   echo "✗ git fetch origin main failed: the review record needs origin's main as it is now. Check the network and your access to origin, then build again." >&2
   exit 1
 fi

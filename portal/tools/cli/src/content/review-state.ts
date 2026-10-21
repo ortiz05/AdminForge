@@ -72,9 +72,10 @@ const SHA = /^[0-9a-f]{7,40}$/;
  */
 export function safeRemote(url: string | null | undefined): string | null {
   const u = (url ?? '').trim();
+  // Through the last `@` before the path: a password may itself contain an unencoded `@`.
   const out = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(u)
-    ? u.replace(/^([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^/@]*@/, '$1').replace(/[?#].*$/s, '')
-    : u.replace(/^[^@/]+@/, '');
+    ? u.replace(/^([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^/]*@/, '$1').replace(/[?#].*$/s, '')
+    : u.replace(/^[^/]*@/, '');
   if (!out || out.length > 500 || /[\s"'\\\p{Cc}]/u.test(out)) return null;
   return out;
 }
@@ -105,14 +106,22 @@ export type Git = (
   cwd: string,
 ) => { ok: true; out: string } | { ok: false; status: number | null };
 
+/** Environment for the review's git commands (build-images.sh exports the same). */
+export const TRUSTED_GIT_ENV = {
+  GIT_TERMINAL_PROMPT: '0',
+  GIT_NO_REPLACE_OBJECTS: '1',
+  GIT_GRAFT_FILE: '/dev/null',
+} as const;
+
 const runGit: Git = (args, cwd) => {
   try {
-    // ls-remote reaches origin: never wait on a credential prompt, and give up after a minute (unreviewed).
+    // ls-remote reaches origin: never wait on a credential prompt, and give up after a minute (unreviewed). Local
+    // replace refs and grafts are ignored: like a hand-set origin/main, they could make any commit look merged.
     const out = execFileSync('git', args, {
       cwd,
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 60_000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env: { ...process.env, ...TRUSTED_GIT_ENV },
     }).toString();
     return { ok: true, out };
   } catch (err) {

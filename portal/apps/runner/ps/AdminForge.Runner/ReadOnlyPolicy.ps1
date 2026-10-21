@@ -5,7 +5,7 @@
     SECURITY BOUNDARY. Read-mode jobs run with tokens that can write; this file is what keeps a read-mode script to
     reads: the static policy (Test-AdminForgeReadOnlyScript / Assert-AdminForgeReadOnlyScript), the runtime guards
     (Enable-AdminForgeReadOnlyMode) and the mode scripts can ask for (Get-AdminForgeMode). The rules are described in
-    the region comment below. Any change needs tests in tests/runner/pester/ReadOnlyPolicy.Tests.ps1 and a security
+    the region comment below. Any change needs tests in tests/runner/pester/ReadOnlyPolicy*.Tests.ps1 and a security
     review (.claude/agents/security-reviewer.md).
 #>
 
@@ -25,8 +25,9 @@ $script:Mode = 'write'
        Invoke-Expression, Add-Type, New-Object, Import-Module, Start-ThreadJob, Get-Content …), dynamic invocation
        (& $x, . $x), scripts and programs by path, Get-* commands that hand out tokens or live connections, .NET types
        outside a small allow-list, reflection and invocation members (.Invoke(), .GetType(), .ExecuteQuery() …), the
-       engine variables ($ExecutionContext, $Host, $PSCmdlet), provider variables (${function:…}, $env:…), classes and
-       using statements.
+       engine variables ($ExecutionContext, $Host, $PSCmdlet), provider variables (${function:…}, $env:…), classes,
+       using statements and file redirection (> out.txt, >>, 2>, *>, also > $null; merging a stream into the
+       output, 2>&1, writes no file and stays allowed).
     2. While it runs (Enable-AdminForgeReadOnlyMode): every non-Get command of every loaded service module
        (Exchange Online, its tmpEXO_* module, Teams, PnP, Microsoft Graph, Az …) is replaced by a constant guard,
        Invoke-MgGraphRequest / Invoke-AzRestMethod accept only GET, unknown non-Get commands fail as read-only, and
@@ -311,6 +312,9 @@ function Test-AdminForgeReadOnlyScript {
                 $bareName = ($path.UserPath -split ':')[-1]
                 if ($bareName -in $script:ReadOnlyDeniedVariables) { & $flag $node "`$$bareName" "Read-only scripts can't use the PowerShell engine, the host or module loading." }
             }
+            # > out.txt, >>, 2>, *>, n>: writes a file without calling a command (Out-File and Set-Content are refused
+            # as commands). A MergingRedirectionAst (2>&1, *>&1) only merges a stream into the output: allowed.
+            'FileRedirectionAst' { & $flag $node $node.Extent.Text "Read-only scripts can't redirect output to a file (to discard it, pipe to Out-Null or use -ErrorAction SilentlyContinue)." }
             'UsingStatementAst' { & $flag $node $node.Extent.Text 'Using statements are not allowed in read-only mode.' }
             'TypeDefinitionAst' { & $flag $node "class $($node.Name)" 'Classes and enums are not allowed in read-only mode.' }
             'ConfigurationDefinitionAst' { & $flag $node 'configuration' 'Configurations are not allowed in read-only mode.' }

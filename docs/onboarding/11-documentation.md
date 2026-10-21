@@ -5,26 +5,8 @@ it isn't finished (CLAUDE.md rule 11). This page says which docs each kind of ch
 
 ## The map
 
-| Doc                                                                  | Owns                                                                         |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `README.md`                                                          | What AdminForge is, prerequisites, quick start, where the docs are           |
-| `CLAUDE.md`                                                          | The non-negotiables and commands — short; rules, not explanations            |
-| `SECURITY.md`                                                        | Security model, threats and mitigations, known gaps and accepted risks       |
-| `CHANGELOG.md`                                                       | What changed for users and operators, per release (Keep a Changelog)         |
-| `docs/architecture.md`                                               | Processes, identities, data, content flow — as deployed                      |
-| `docs/api.md`                                                        | The HTTP contract: conventions, every endpoint, codes, limits, roles         |
-| `docs/access.md`                                                     | Portal roles, groups, what each app may do, separation of duties             |
-| `docs/operations.md`                                                 | Running AdminForge: restart, publish, upgrades, backups, emergency, rotation |
-| `docs/troubleshooting.md`                                            | Every error code people meet, what it means, what to do                      |
-| `docs/widgets.md`                                                    | Widget reference for content authors                                         |
-| `docs/news.md`                                                       | News and changes: sources, classification, egress                            |
-| `docs/extending.md` + `.claude/skills/*/SKILL.md`                    | How each extension point is done (for people and Claude Code)                |
-| `docs/licensing-review.md`                                           | Licence findings per feature                                                 |
-| `docs/backlog.md`                                                    | Known gaps and deferred work — anything you can't fix now                    |
-| `docs/adr/NNN-*.md`, `docs/decisions.md`                             | Why: architecture decisions (ADRs) and smaller decisions (log)               |
-| `docs/onboarding/`                                                   | This guide: how we work                                                      |
-| `tests/README.md`, `tests/live/README.md`, `portal/deploy/README.md` | Tests; live validation; host installation                                    |
-| `config/example.env`                                                 | Every configuration key with a comment                                       |
+Which document owns what, who reads it and what change must update it is in the
+[documentation index](../README.md), one row per document. A new document gets its row there in the same PR.
 
 ## What to update for each kind of change
 
@@ -45,6 +27,7 @@ it isn't finished (CLAUDE.md rule 11). This page says which docs each kind of ch
 | A new navigation section, or retired content     | `docs/onboarding/08-content-guide.md` (sections), `docs/operations.md` (what it needs), `docs/backlog.md` (how to bring retired content back) |
 | Anything a user or operator would notice         | `CHANGELOG.md` → `## Unreleased` → Added / Changed / Fixed / Security                                                                         |
 | How we work (commits, review, conventions)       | `docs/onboarding/` and, if it's a rule, `CLAUDE.md`                                                                                           |
+| A new document                                   | Its row in `docs/README.md` (what it owns, audience, when to update)                                                                          |
 
 ## Changelog
 

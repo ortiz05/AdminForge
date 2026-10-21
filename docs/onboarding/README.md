@@ -61,18 +61,10 @@ If you remember nothing else, remember these. Each links to the guide that expla
 
 ## Where the rules come from
 
-These guides explain and connect the sources of truth; when they disagree, the source wins and the guide is the bug.
-
-| Source                                                                                | Owns                                                     |
-| ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| [`CLAUDE.md`](../../CLAUDE.md)                                                        | The non-negotiables and commands (for people and Claude) |
-| [`SECURITY.md`](../../SECURITY.md)                                                    | The security model, threats, known gaps                  |
-| [`docs/architecture.md`](../architecture.md)                                          | Processes, identities, data, content flow as deployed    |
-| [`docs/api.md`](../api.md)                                                            | The HTTP API contract and its conventions                |
-| [`docs/adr/`](../adr/) and [`docs/decisions.md`](../decisions.md)                     | Why things are the way they are                          |
-| [`docs/extending.md`](../extending.md) and [`.claude/skills/`](../../.claude/skills/) | How each extension point is done                         |
-| [`tests/README.md`](../../tests/README.md)                                            | Test projects, fixtures, e2e                             |
-| [`docs/operations.md`](../operations.md)                                              | Running AdminForge                                       |
+These guides explain and connect the sources of truth: [`CLAUDE.md`](../../CLAUDE.md) for the non-negotiables and
+commands, [`SECURITY.md`](../../SECURITY.md) for the security model, and the reference documents the
+[documentation index](../README.md) lists with what each owns. When a guide and its source disagree, the source wins
+and the guide is the bug.
 
 ## Getting help
 

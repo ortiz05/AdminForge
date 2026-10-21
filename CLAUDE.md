@@ -22,7 +22,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | `portal/tools/cli`         | `adminforge` CLI (env check, provision, new, validate, test, publish, audit, db, fixtures)            |
 | `portal/deploy/kubernetes` | Images (`build-images.sh`), kustomize base and example overlay, the deployment runbook (`README.md`)  |
 | `tests/`                   | **All** tests and test-only deps (unit, component, api, content, e2e, live, guards, fixtures)         |
-| `docs/`                    | ADRs, `api.md`, `widgets.md`, `news.md`, `licensing-review.md`, `backlog.md`, `extending.md`          |
+| `docs/`                    | Every doc, indexed in `docs/README.md`: architecture, API, operations, ADRs, extending, backlog       |
 | `docs/onboarding/`         | Engineer onboarding: setup, conventions for code, API, web, content, tests, git, docs, security       |
 | `config/example.env`       | Every configuration key, documented. Real values live outside the repo.                               |
 

@@ -37,7 +37,7 @@ Licensing gaps are explained in the UI ("Requires …") and tracked in `docs/lic
 | `tests/`             | Every test and test-only dependency (unit, component, api, content, e2e incl. visual baselines, live, guards, runner, fixtures); see `tests/README.md` |
 | `tooling/`           | Developer tooling (lint, CI bundle budget, commit-message check)                                                                                       |
 | `config/example.env` | Every configuration key, documented. Real values live outside the repo.                                                                                |
-| `docs/`              | Architecture, API, ADRs, decisions, widget reference, extending guide, licensing review, backlog, engineer onboarding (`docs/onboarding/`)             |
+| `docs/`              | The documentation, indexed in `docs/README.md`: architecture, API, operations, ADRs, extending guide, engineer onboarding (`docs/onboarding/`)         |
 
 ## Prerequisites
 
@@ -90,14 +90,6 @@ agents in `.claude/agents/`, and `docs/extending.md` explains the workflow. The 
 
 ## Documentation
 
-- `docs/onboarding/` — **start here if you're joining**: setup, how it works, conventions for code, API, web, content,
-  tests, commits, pull requests and docs (`CONTRIBUTING.md` has the essentials)
-- `SECURITY.md` — security model and policy
-- `docs/architecture.md` — architecture: apps, identities, data flow
-- `docs/access.md` — access: sign-in, portal roles, permissions
-- `docs/operations.md` — operating AdminForge
-- `docs/troubleshooting.md` — troubleshooting
-- `portal/deploy/kubernetes/README.md` — the Kubernetes deployment: images, Secrets, deploy, upgrade, backups
-- `docs/extending.md`, `docs/widgets.md` — extending AdminForge with Claude Code; widget reference
-- `docs/adr/`, `docs/decisions.md`, `docs/licensing-review.md`, `docs/backlog.md`
-- `tests/README.md`, `tests/live/README.md` — test projects and live validation
+Joining? Start with the [engineer onboarding guide](docs/onboarding/README.md) (`CONTRIBUTING.md` has the essentials).
+Every other document — what it owns, who it is for and when it changes — is listed in the
+[documentation index](docs/README.md).

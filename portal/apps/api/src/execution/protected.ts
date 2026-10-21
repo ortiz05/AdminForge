@@ -13,6 +13,10 @@ import { identityCacheKey, type ExecutionIdentity } from './types';
  *  - every principal holding an AdminForge app role (appRoleAssignedTo of the Read and Write apps' service principals:
  *    the SG-AdminForge-<label>-<Role> groups and anyone assigned directly) — by id, never by name;
  *  - AF_PROTECTED_USER_IDS (break-glass / emergency-access accounts).
+ * Because the match is by id, a Graph write that names a user by sign-in name or address (`/users/{upn}`, an
+ * `@odata.id` naming one) is refused outright (S-15): content resolves the user's object id first (`$guid()`, which
+ * `adminforge validate` requires on `/users/` write paths). The refusal, not a UPN lookup, keeps the guard free of
+ * another Graph dependency.
  *
  * The directory part is read through the executor itself (automation identity first; otherwise the caller's own Read
  * sign-in) and cached for 10 minutes. When it can't be read, the ids from configuration (and the last answer) are
@@ -117,6 +121,70 @@ export function referencedIds(t: WriteTarget): Set<string> {
   return out;
 }
 
+/** `/users/{key}` (group 1) or `users(…)` (group 2: `'{key}'`, `{key}`, `id='{key}'`, any other alternate key). */
+const USER_REF = /(?:^|\/)users(?:\/([^/?#()]*)|\(([^)]*)\)?)/gi;
+/** Body keys whose values reference directory objects by URL (`members/$ref`, `owners@odata.bind`, …). */
+const isReferenceKey = (k: string) => k === '@odata.id' || /@odata\.bind$/i.test(k);
+/** Teams chats name their members by UPN or id: a conversation, not a change to the account (the notify step). */
+const CHAT_PATH = /^\/chats(\/|$)/i;
+
+/** Whether one reference names a user by anything but an object id (the collection itself names nobody). */
+function userKeyNotGuid(ref: string): boolean {
+  const text = decode(ref);
+  for (const m of text.matchAll(USER_REF)) {
+    const key = (
+      m[1] ??
+      m[2]!
+        .trim()
+        .replace(/^id\s*=\s*/i, '')
+        .replace(/^'(.*)'$/, '$1')
+    ).trim();
+    if (key !== '' && !GUID.test(key)) return true;
+  }
+  return false;
+}
+
+/** Every reference value (`@odata.id`, `…@odata.bind`) in a JSON body. */
+function bodyReferences(value: unknown, out: string[], depth = 0) {
+  if (depth > MAX_DEPTH || !value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const v of value) bodyReferences(v, out, depth + 1);
+    return;
+  }
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (isReferenceKey(k))
+      for (const ref of Array.isArray(v) ? v : [v]) if (typeof ref === 'string') out.push(ref);
+    bodyReferences(v, out, depth + 1);
+  }
+}
+
+/**
+ * Whether a Graph write names a user by anything but an object id (S-15): the segment after `/users/` (or the key in
+ * `users('…')`) in its path, or in an `@odata.id` / `@odata.bind` reference in its body. Graph accepts a sign-in name
+ * there, but the protected-object guard matches ids only, so such a write could reach a protected account unnoticed.
+ * Teams chat members (a conversation, not a change to anyone's account) are left alone.
+ */
+export function namesUserByName(t: WriteTarget): boolean {
+  if (t.service !== 'graph') return false;
+  const path = t.path.split('?')[0]!.replace(/^\/(v1\.0|beta)(?=\/)/, '');
+  if (userKeyNotGuid(path)) return true;
+  if (CHAT_PATH.test(decode(path))) return false;
+  const refs: string[] = [];
+  bodyReferences(t.body, refs);
+  return refs.some(userKeyNotGuid);
+}
+
+/** S-15: a declared Graph write naming a user by sign-in name or address instead of object id. */
+export const userNotById = () =>
+  new AppError(
+    403,
+    'user_not_by_id',
+    'This change names a user by sign-in name or email address instead of object ID, so AdminForge didn’t make it.',
+    {
+      hint: 'For the content author: look the user up first and pass their object ID through $guid(). AdminForge checks every change against the accounts it protects by object ID.',
+    },
+  );
+
 /** Whether a write is one that must not go ahead without the protected set. */
 export function isSensitiveWrite(t: WriteTarget): boolean {
   if (t.service !== 'graph') return false;
@@ -180,11 +248,19 @@ export class ProtectedObjects {
   }
 
   /**
-   * Throws `protected_object` when a write names a protected object, `protected_objects_unavailable` when the set
-   * couldn't be read and the write is a sensitive one; returns when the write may go ahead.
+   * Throws `user_not_by_id` when a Graph write names a user by anything but an object id (S-15; not for AdminForge's
+   * own notification mail, whose sender is configured as an address), `protected_object` when a write names a
+   * protected object, `protected_objects_unavailable` when the set couldn't be read and the write is a sensitive one;
+   * returns when the write may go ahead.
    */
-  async check(identity: ExecutionIdentity, targets: WriteTarget[], correlationId?: string): Promise<void> {
+  async check(
+    identity: ExecutionIdentity,
+    targets: WriteTarget[],
+    correlationId?: string,
+    opts: { notification?: boolean } = {},
+  ): Promise<void> {
     if (!targets.length) return;
+    if (!opts.notification && targets.some(namesUserByName)) throw userNotById();
     const named = new Set<string>();
     for (const t of targets) for (const id of referencedIds(t)) named.add(id);
     // Named in configuration: refused without asking Graph.

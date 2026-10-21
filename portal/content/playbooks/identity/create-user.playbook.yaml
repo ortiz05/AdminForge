@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.create-user
-version: 1.1.0
+version: 1.1.1
 title: Onboard user
 summary: >-
   Creates a cloud user account with a unique sign-in name, sets the manager, adds group memberships, assigns a licence,
@@ -194,7 +194,7 @@ steps:
       describe: Delete the new user (it stays restorable for 30 days)
       request:
         method: DELETE
-        path: /users/${ $encode(steps.create.output.id) }
+        path: /users/${ $encode($guid(steps.create.output.id)) }
 
   - id: manager
     type: graph
@@ -203,7 +203,7 @@ steps:
     when: ${ $boolean(inputs.managerId) = true }
     request:
       method: PUT
-      path: /users/${ $encode(steps.create.output.id) }/manager/$ref
+      path: /users/${ $encode($guid(steps.create.output.id)) }/manager/$ref
       body:
         "@odata.id": https://graph.microsoft.com/v1.0/users/${ $guid(inputs.managerId) }
 

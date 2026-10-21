@@ -9,7 +9,8 @@
  *   - datasource rules (content/lint.ts: bare datasource names, declaration order);
  *   - runner script pins: every `script` reference's `sha256` must be the sha256 of the file under
  *     <content>/scripts (content/lint.ts `scriptPinProblems`);
- *   - `env.X` references to keys that config/example.env does not declare.
+ *   - `env.X` references to keys that config/example.env does not declare;
+ *   - Graph writes naming a user after `/users/` by anything but `$guid()` (content/lint.ts `usersWriteProblems`).
  * Warnings (printed, never fail): a `$schema` that doesn't point at the generated JSON schema, Graph beta endpoints.
  *
  * Reads files only (content, scripts, config/example.env); no network, no database, nothing in the tenant.
@@ -21,7 +22,7 @@ import { collectExpressions, lintExpressions, validateExpressions } from '@admin
 import { formatContentError, loadContentDir, type LoadedDefinition } from '@adminforge/schemas';
 import { hiddenFromContent } from './api-bridge';
 import { relPath, type ContentCliContext } from './context';
-import { bareDatasourceRefs, datasourceOrderProblems, scriptPinProblems } from './lint';
+import { bareDatasourceRefs, datasourceOrderProblems, scriptPinProblems, usersWriteProblems } from './lint';
 
 export interface ValidateReport {
   definitions: number;
@@ -82,6 +83,7 @@ export async function checkContent(
           : `${at(p.segments)} ${p.path}: pinned sha256 does not match ${script} (its sha256 is ${p.actual}) — update the pin; the runner refuses a script whose sha256 differs.`,
       );
     }
+    for (const u of usersWriteProblems(d.def)) errs.push(`${at(u.segments)} ${u.path}: ${u.message}`);
     for (const e of collectExpressions(d.def))
       for (const m of e.source.matchAll(/\benv\.([A-Za-z0-9_]+)/g))
         if (!declaredEnv.has(m[1]!))

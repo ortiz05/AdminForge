@@ -1144,7 +1144,7 @@ export class Outbound implements OutboundExecutor {
         : SAFE_METHODS.has(method)
           ? []
           : [{ service, method, path: sent, query: call.query, body }];
-      await this.protectedObjects.check(identity, targets, correlationId);
+      await this.protectedObjects.check(identity, targets, correlationId, { notification });
     }
 
     const template = call.pathTemplate ?? fn?.template ?? templatePath(path);

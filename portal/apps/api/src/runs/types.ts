@@ -297,6 +297,12 @@ export interface RunView extends RunSummary {
     stepId: string;
     since: string | null;
     wakeAt?: string | null;
+    /**
+     * `prearm`: it waits for write access because it was bound before its session last turned write access on (S-08):
+     * its person checks it's one they started, then resumes it. With when the run started.
+     */
+    reason?: 'prearm';
+    startedAt?: string | null;
   } | null;
 }
 

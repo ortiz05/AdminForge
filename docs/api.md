@@ -622,7 +622,9 @@ waits for, and `Portal.Admin`; `metadata` for everyone else (S-25). Automation r
   - `run` — RunSummary plus `access` (`full` or `metadata`, below) and
     `definitionSha256, correlationId, inputs, outputs, error, previewRunId, waiting, confirm`;
     `inputs` are redacted per `redact: true`, `outputs` have secrets masked; `waiting` is `null` or
-    `{kind, path, stepId, since, wakeAt?}` with `kind` one of `approval`, `manual`, `wait`, `child`, `arm`, `reauth`.
+    `{kind, path, stepId, since, wakeAt?, reason?, startedAt?}` with `kind` one of `approval`, `manual`, `wait`,
+    `child`, `arm`, `reauth`; `reason: 'prearm'` (with the run's `startedAt`) on a run waiting for write access because it
+    was started before its session last turned write access on (S-08): its person checks it's theirs, then resumes it.
     `confirm` is `null` except on the caller's own succeeded single-run preview of a definition with a `confirm` block:
     `{type: 'typed' | 'click', value, message}`, the confirmation rendered from the preview's inputs and step outputs —
     `value` is the text a typed confirmation is compared with (null when the preview didn't produce it: the run can't be

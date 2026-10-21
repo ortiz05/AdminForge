@@ -98,6 +98,10 @@ function ParkedBanner({
         ? 'awaiting_reauth'
         : run.status;
 
+  // S-08: started before its session last turned write access on — it changes nothing until its person resumes it.
+  const prearm = status === 'awaiting_arm' && run.waiting?.reason === 'prearm';
+  const started = run.waiting?.startedAt ?? run.startedAt ?? run.createdAt;
+
   // Write access and a fresh sign-in are the initiator's to give: anyone else is told who the run waits for.
   const mine = run.initiator.oid !== null && run.initiator.oid === me.user.oid;
   if (!mine && (status === 'awaiting_arm' || status === 'awaiting_reauth')) {
@@ -107,15 +111,51 @@ function ParkedBanner({
         tone="neutral"
         icon={<HourglassMediumIcon size={18} />}
         title={
-          status === 'awaiting_arm'
-            ? `Paused until ${who} arms write access`
-            : `Paused until ${who} signs in again`
+          prearm
+            ? `Paused until ${who} resumes it`
+            : status === 'awaiting_arm'
+              ? `Paused until ${who} arms write access`
+              : `Paused until ${who} signs in again`
         }
       >
-        The next step runs with their access, so nothing else runs until they do.
+        {prearm
+          ? 'It started before they last turned on write access, so it changes nothing until they confirm it’s theirs and resume it.'
+          : 'The next step runs with their access, so nothing else runs until they do.'}
       </Callout>
     );
   }
+  if (prearm)
+    return (
+      <Callout
+        tone="warn"
+        icon={<LockKeyOpenIcon size={18} />}
+        title="Paused: check this run is yours, then resume it"
+        action={
+          arm.armed ? (
+            <Button intent="primary" pending={resuming} onClick={onResume}>
+              Resume run
+            </Button>
+          ) : me.canArm ? (
+            <Button onClick={openArmDialog}>
+              <LockKeyOpenIcon size={14} aria-hidden />
+              Arm write access
+            </Button>
+          ) : undefined
+        }
+      >
+        It started{' '}
+        {started ? (
+          <time dateTime={started} title={formatTimestamp(started)}>
+            {formatRelative(started)}
+          </time>
+        ) : (
+          'earlier'
+        )}
+        , before you last turned on write access, so it changes nothing until you resume it. Check it’s one
+        you started — the playbook, its inputs and when — then resume it. If you don’t recognise it, cancel it
+        and tell your security team.
+      </Callout>
+    );
   switch (status) {
     case 'awaiting_arm':
       return (

@@ -179,6 +179,10 @@ export interface RunWaiting {
   stepId: string;
   since: string | null;
   wakeAt: string | null;
+  /** `prearm`: waits for write access because it started before its session last turned it on (S-08). */
+  reason: 'prearm' | null;
+  /** When the run started (with `reason`). */
+  startedAt: string | null;
 }
 
 /**
@@ -384,6 +388,8 @@ function readWaiting(v: unknown): RunWaiting | null {
     stepId: pick(o, 'stepId') ?? path,
     since: pick(o, 'since') ?? null,
     wakeAt: pick(o, 'wakeAt') ?? null,
+    reason: pick(o, 'reason') === 'prearm' ? 'prearm' : null,
+    startedAt: pick(o, 'startedAt') ?? null,
   };
 }
 

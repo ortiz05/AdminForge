@@ -8,7 +8,17 @@ import {
   type StepRecord,
 } from '@adminforge/engine';
 import type { Params } from '@adminforge/schemas';
-import type { EventRow, RunAccess, RunRow, RunSummary, RunView, StepView, TaskRow, TaskView } from './types';
+import {
+  sessionBinding,
+  type EventRow,
+  type RunAccess,
+  type RunRow,
+  type RunSummary,
+  type RunView,
+  type StepView,
+  type TaskRow,
+  type TaskView,
+} from './types';
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
@@ -178,8 +188,17 @@ export function runView(
       row.status === 'cancelled' ||
       row.status === 'compensated'
         ? null
-        : waitingOf(steps),
+        : prearmed(row, waitingOf(steps)),
   };
+}
+
+/**
+ * S-08: a run bound before its session last turned write access on waits for its person to resume it before it
+ * writes; the view says so, with when the run started, so the run page can ask them to check it's theirs.
+ */
+function prearmed(row: RunRow, waiting: RunView['waiting']): RunView['waiting'] {
+  if (!waiting || row.status !== 'awaiting_arm' || !sessionBinding(row.sessionHash).prearm) return waiting;
+  return { ...waiting, reason: 'prearm', startedAt: iso(row.startedAt ?? row.createdAt) };
 }
 
 export function stepView(s: StepRecord, access: RunAccess = 'full'): StepView {

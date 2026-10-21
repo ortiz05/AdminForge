@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { safeUrl, type LinkComponent } from '@adminforge/ui';
+import { tokenizeInline, type InlineToken } from './inline';
 
 /**
  * A deliberately small Markdown subset for guidance text: headings, paragraphs, lists, code, emphasis and links.
@@ -81,64 +82,55 @@ export function parseBlocks(source: string): Block[] {
   return blocks;
 }
 
-const INLINE =
-  /(`[^`]+`)|(\*\*(?:\\.|[^*\\])+\*\*|__(?:\\.|[^_\\])+__)|(\*[^*\s\\](?:\\.|[^*\\])*\*|_[^_\s\\](?:\\.|[^_\\])*_)|(\[(?:\\.|[^\]\\])+\]\([^)\s]+\))|(\\[!-/:-@[-`{-~])/;
-
 /** Only these link targets become links; anything else (javascript:, data:, `//host`, `/\host`, …) stays text. */
 export const safeHref = safeUrl;
 
+const LINK = 'font-medium text-accent underline underline-offset-2 hover:text-accent-strong';
+
+function renderTokens(tokens: InlineToken[], Link: LinkComponent, keyPrefix: string): ReactNode[] {
+  return tokens.map((t, n) => {
+    const key = `${keyPrefix}-${n}`;
+    switch (t.type) {
+      case 'text':
+        return t.text;
+      case 'code':
+        return (
+          <code key={key} className="rounded-sm bg-sunken px-1 py-0.5 font-mono text-xs text-fg">
+            {t.text}
+          </code>
+        );
+      case 'strong':
+        return (
+          <strong key={key} className="font-semibold text-fg">
+            {renderTokens(t.children, Link, key)}
+          </strong>
+        );
+      case 'em':
+        return <em key={key}>{renderTokens(t.children, Link, key)}</em>;
+      case 'link': {
+        const target = safeHref(t.target);
+        const label = renderTokens(t.children, Link, key);
+        if (!target) return <span key={key}>{label}</span>;
+        if (target.external)
+          return (
+            <a key={key} href={target.href} target="_blank" rel="noreferrer" className={LINK}>
+              {label}
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          );
+        return (
+          <Link key={key} href={target.href} className={LINK}>
+            {label}
+          </Link>
+        );
+      }
+    }
+  });
+}
+
+/** Inline Markdown (code, strong, emphasis, links, escapes) as React elements; tokenized in linear time (inline.ts). */
 export function renderInline(text: string, Link: LinkComponent, keyPrefix = 'i'): ReactNode[] {
-  const out: ReactNode[] = [];
-  let rest = text;
-  let n = 0;
-  while (rest) {
-    const m = INLINE.exec(rest);
-    if (!m) {
-      out.push(rest);
-      break;
-    }
-    if (m.index > 0) out.push(rest.slice(0, m.index));
-    const token = m[0];
-    const key = `${keyPrefix}-${n++}`;
-    if (m[5]) {
-      out.push(token.slice(1));
-    } else if (m[1]) {
-      out.push(
-        <code key={key} className="rounded-sm bg-sunken px-1 py-0.5 font-mono text-xs text-fg">
-          {token.slice(1, -1)}
-        </code>,
-      );
-    } else if (m[2]) {
-      out.push(
-        <strong key={key} className="font-semibold text-fg">
-          {renderInline(token.slice(2, -2), Link, key)}
-        </strong>,
-      );
-    } else if (m[3]) {
-      out.push(<em key={key}>{renderInline(token.slice(1, -1), Link, key)}</em>);
-    } else if (m[4]) {
-      const lm = /^\[((?:\\.|[^\]\\])+)\]\(([^)\s]+)\)$/.exec(token)!;
-      const target = safeHref(lm[2]!);
-      const label = renderInline(lm[1]!, Link, key);
-      const cls = 'font-medium text-accent underline underline-offset-2 hover:text-accent-strong';
-      if (!target) out.push(<span key={key}>{label}</span>);
-      else if (target.external)
-        out.push(
-          <a key={key} href={target.href} target="_blank" rel="noreferrer" className={cls}>
-            {label}
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>,
-        );
-      else
-        out.push(
-          <Link key={key} href={target.href} className={cls}>
-            {label}
-          </Link>,
-        );
-    }
-    rest = rest.slice(m.index + token.length);
-  }
-  return out;
+  return renderTokens(tokenizeInline(text), Link, keyPrefix);
 }
 
 /**

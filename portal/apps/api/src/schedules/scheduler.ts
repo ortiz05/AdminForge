@@ -67,6 +67,11 @@ export interface SchedulerOptions {
    * automation identity, and one that names its creator can't run.
    */
   identities?: ScheduleIdentities | null;
+  /**
+   * Called after every tick that went through while this process leads (the scheduler's heartbeat, D-09): a tick
+   * that throws, or a scheduler without the lease, reports nothing, so /readyz can tell it isn't working.
+   */
+  onProgress?: () => void;
 }
 
 export const DEFAULT_TIMEOUT_SECONDS = 900;
@@ -231,6 +236,7 @@ export class Scheduler {
         this.again = false;
         try {
           await this.pass();
+          if (this.leading) this.o.onProgress?.();
         } catch (err) {
           this.o.log?.warn({ err: { message: (err as Error).message } }, 'scheduler: tick failed');
         }

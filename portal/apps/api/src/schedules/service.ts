@@ -31,6 +31,7 @@ import type { ArtifactStore, OpenedArtifact } from '../artifacts/store';
 import type { DefinitionSource } from '../definitions/types';
 import type { PlaybookRef } from '../runs/fingerprint';
 import { AppError } from '../errors';
+import type { ComponentHealth } from '../health/heartbeat';
 import { AUTOMATION_PAUSED } from '../execution/emergency';
 import { describeCron, nextRun } from './cron';
 import { deliveryView, type DeliveryView, type NotifyView } from './delivery-keys';
@@ -240,6 +241,8 @@ export class ScheduleService {
       automationPaused?: () => Promise<boolean>;
       /** Creators' grants (ADR-014), for the "needs sign-in" state of schedules that run with their access. */
       grants?: Pick<ScheduleGrantStore, 'get'>;
+      /** The scheduler's heartbeat (D-09) when it runs in this process with a database; the list reports it. */
+      schedulerHealth?: () => Promise<ComponentHealth>;
     },
   ) {}
 
@@ -362,7 +365,11 @@ export class ScheduleService {
     );
   }
 
-  async list(session?: SessionRecord): Promise<{ items: ScheduleItem[] }> {
+  /**
+   * GET /api/schedules. `scheduler` (when the scheduler runs here): `ok` while its ticks succeed, `stale` when it has
+   * made no progress for two minutes — the API answers, but nothing fires — with when it last did.
+   */
+  async list(session?: SessionRecord): Promise<{ items: ScheduleItem[]; scheduler?: ComponentHealth }> {
     const keys = await this.ensureSynced();
     const now = this.deps.now();
     const pending = new Map((await this.pendingApprovals()).map((a) => [a.subjectId, a.id]));
@@ -371,10 +378,13 @@ export class ScheduleService {
     );
     const reports = await this.reports();
     const grants = await this.grantsFor(rows);
+    // Health is a hint for the page: if it can't be read, the list still answers.
+    const scheduler = await this.deps.schedulerHealth?.().catch(() => undefined);
     return {
       items: rows.map((r) =>
         this.item(r, pending.get(r.key) ?? null, now, session, reports, grants.get(r.id)),
       ),
+      ...(scheduler ? { scheduler } : {}),
     };
   }
 

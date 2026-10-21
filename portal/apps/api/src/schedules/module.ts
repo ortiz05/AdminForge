@@ -2,7 +2,7 @@ import type { Connection } from '@adminforge/schemas';
 import { loadEnv } from '@adminforge/config';
 import { deliveryEnv, notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
 import { randomUUID } from 'node:crypto';
-import { Heartbeat } from '../health/heartbeat';
+import { componentHealth, Heartbeat } from '../health/heartbeat';
 import { ArtifactStore } from '../artifacts/store';
 import type { AppContext } from '../context';
 import { createNewsService, type NewsOptions } from '../news/module';
@@ -166,6 +166,14 @@ export function createSchedulesModule(
           data: { key: o.probeKey, status: o.status, metric: o.metric, ts: o.ts.toISOString() },
         }),
     });
+  const inProcess = opts.inProcess ?? ctx.config.NODE_ENV !== 'test';
+  // The scheduler's heartbeat for /readyz and the Schedules list: written from its ticks, not a timer (D-09).
+  const heartbeatDb = inProcess && ctx.config.NODE_ENV !== 'test' ? (ctx.database?.db ?? null) : null;
+  const heartbeat = heartbeatDb
+    ? new Heartbeat(heartbeatDb, 'scheduler', ctx.now, (err) =>
+        log?.warn({ err }, 'scheduler heartbeat failed'),
+      )
+    : null;
   const service = new ScheduleService({
     store,
     grants: identities.grants,
@@ -175,6 +183,9 @@ export function createSchedulesModule(
     events,
     artifacts,
     now: ctx.now,
+    ...(heartbeatDb
+      ? { schedulerHealth: async () => (await componentHealth(heartbeatDb, ctx.now())).scheduler }
+      : {}),
     notifyApprovers: async (r) => {
       await notifyApprovers(
         delivery,
@@ -215,7 +226,6 @@ export function createSchedulesModule(
   );
   const probes = new ProbeViews({ store, definitions: ctx.definitions, now: ctx.now });
 
-  const inProcess = opts.inProcess ?? ctx.config.NODE_ENV !== 'test';
   let scheduler: Scheduler | null = null;
   if (inProcess) {
     const lock = opts.lock !== undefined ? opts.lock : ctx.database ? leaseLock(ctx.database) : null;
@@ -253,6 +263,7 @@ export function createSchedulesModule(
       delivery,
       // Emergency stop (Admin → Settings): no schedule fires while automation is paused.
       automationPaused: () => isPaused(ctx.settings, 'automation'),
+      ...(heartbeat ? { onProgress: () => heartbeat.progress() } : {}),
       ...(opts.timers ? { timers: opts.timers } : {}),
       ...(log ? { log } : {}),
     });
@@ -262,12 +273,6 @@ export function createSchedulesModule(
   }
 
   let started = false;
-  const heartbeat =
-    ctx.database && ctx.config.NODE_ENV !== 'test'
-      ? new Heartbeat(ctx.database.db, 'scheduler', ctx.now, (err) =>
-          log?.warn({ err }, 'scheduler heartbeat failed'),
-        )
-      : null;
   return {
     store,
     events,
@@ -285,7 +290,6 @@ export function createSchedulesModule(
       started = true;
       await events.start();
       await scheduler?.start();
-      if (scheduler) heartbeat?.start();
       // Mock mode and e2e (fixtures): collect once at start so News and changes has items before the first hourly run.
       if (ctx.config.DATA_MODE === 'fixtures' && ctx.config.NODE_ENV !== 'test')
         void news
@@ -297,7 +301,6 @@ export function createSchedulesModule(
     async stop() {
       if (!started) return;
       started = false;
-      heartbeat?.stop();
       await scheduler?.stop();
       await events.stop();
     },

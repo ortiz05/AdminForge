@@ -10,7 +10,10 @@
  * backup: a consistent copy of DATABASE_PATH without credential rows (sessions, sign-in round trips, the token cache),
  * checked (integrity, audit chain) and mode 600; `-` writes it to stdout, so a copy can leave the pod already
  * encrypted on the operator's machine: `kubectl exec deploy/adminforge -c api -- adminforge db backup - | gpg -e -r
- * <key> > adminforge.db.gpg`. Reads the database; writes only the new file.
+ * <key> > adminforge.db.gpg`. The copy is the whole history, so it is itself recorded in it: before the copy leaves
+ * the process, a `database.backup` audit event (who, stdout or file — never the path —, plaintext, bytes, the copy's
+ * audit tail) goes to the live database; if that can't be written, the copy doesn't leave (a file is removed). A
+ * failed copy is recorded too. Copies from a read-only connection; writes the new file and that one event.
  *
  * import-postgres: the one-time move from the Postgres releases. Reads the old database (its URL from DATABASE_URL in
  * the env file — never a command-line argument, so the password stays out of shell history and the process list; or
@@ -41,6 +44,20 @@ import { databasePath } from '../shared/database-path';
 import { ConfigError } from '../shared/errors';
 import type { Out } from '../shared/output';
 
+/**
+ * Who ran a `db` command, for the audit log: the account and machine (in the pod, the image's user and the pod's name;
+ * `kubectl exec` doesn't say who is behind it — the cluster's audit log does).
+ */
+function cliActor(): { actorOid: string; actorUpn: string } {
+  let user: string;
+  try {
+    user = userInfo().username;
+  } catch {
+    user = `uid-${process.getuid?.() ?? 'unknown'}`; // no passwd entry for the uid (an arbitrary uid in a container)
+  }
+  return { actorOid: 'cli', actorUpn: `${user}@${hostname()}` };
+}
+
 /** `adminforge db backup <file|->`. With `-`, the file goes to stdout and messages to stderr. */
 export async function dbBackup(
   env: Record<string, string | undefined>,
@@ -60,12 +77,51 @@ export async function dbBackup(
   const say = toStdout ? io.err : io.out;
   const scratch = toStdout ? mkdtempSync(path.join(tmpdir(), 'adminforge-backup-')) : null;
   const dest = scratch ? path.join(scratch, 'adminforge.db') : databasePath({}, target);
+  const where = { destination: toStdout ? 'stdout' : 'file', plaintext: !!opts.plaintext };
+  /** The record of this copy, through the normal audit writer on a connection of its own (the copy's is read-only). */
+  const record = async (result: 'success' | 'failure', details: Record<string, unknown>) => {
+    const database = createDatabase(file, { name: 'cli', pollSignals: false });
+    try {
+      await new SqliteAuditWriter(database.db, undefined, null).append({
+        ...cliActor(),
+        mode: 'read',
+        action: 'database.backup',
+        targetType: 'database',
+        result,
+        correlationId: randomUUID(),
+        details,
+      });
+    } finally {
+      await database.close();
+    }
+  };
   const source = createDatabase(file, { readonly: true, name: 'cli' });
   try {
-    const result = await backupDatabase(source, dest);
+    let result: Awaited<ReturnType<typeof backupDatabase>>;
+    try {
+      result = await backupDatabase(source, dest);
+    } catch (err) {
+      // The attempt is history too. Its own failure must not hide why the copy failed, so it is only reported.
+      await record('failure', where).catch(() =>
+        say('  The failed attempt could not be recorded in the audit log either.'),
+      );
+      throw err;
+    }
+    // Before the copy leaves the process: no record, no copy.
+    try {
+      await record('success', {
+        ...where,
+        bytes: result.bytes,
+        auditEvents: result.audit.count,
+        ...(result.audit.tail ? { tailSeq: result.audit.tail.seq } : {}),
+      });
+    } catch (err) {
+      if (!scratch) rmSync(result.file, { force: true });
+      throw err;
+    }
     if (scratch) await pipeline(createReadStream(result.file), io.stdout ?? process.stdout);
     say(
-      `✓ Backup ${toStdout ? 'written to stdout' : result.file}: ${result.bytes} bytes, integrity ok, audit chain verified (${result.audit.count} event(s)${result.audit.tail ? `, tail seq ${result.audit.tail.seq}` : ''}); sessions, sign-ins and tokens left out.`,
+      `✓ Backup ${toStdout ? 'written to stdout' : result.file}: ${result.bytes} bytes, integrity ok, audit chain verified (${result.audit.count} event(s)${result.audit.tail ? `, tail seq ${result.audit.tail.seq}` : ''}); sessions, sign-ins and tokens left out; recorded in the audit log.`,
     );
     if (!toStdout)
       say('  It is not encrypted: encrypt it before it leaves this machine (docs/operations.md → Backups).');
@@ -91,8 +147,7 @@ export async function dbSignOutEveryone(
   try {
     const result = signOutEveryone(database.db, { scheduleGrants: opts.scheduleGrants });
     await new SqliteAuditWriter(database.db, opts.now, null).append({
-      actorOid: 'cli',
-      actorUpn: `${userInfo().username}@${hostname()}`,
+      ...cliActor(),
       mode: 'write',
       action: 'sessions.signed_out_everyone',
       targetType: 'sessions',

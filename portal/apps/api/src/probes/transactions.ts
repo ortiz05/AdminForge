@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ApiError, readBodyText } from '@adminforge/connectors';
+import { abortableDelay, ApiError, readBodyText } from '@adminforge/connectors';
 import { isGuid, syntheticTargetKey, type ProbeCheck } from '@adminforge/schemas';
 import { AppError } from '../errors';
 import { readableMessage } from '../execution/outbound';
@@ -47,20 +47,6 @@ const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 const notConfigured = (message: string, hint: string) =>
   new AppError(503, 'not_configured', message, { hint });
-
-const defaultSleep = (wait: number, signal: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    if (signal.aborted) return reject(signal.reason);
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', stop);
-      resolve();
-    }, wait);
-    const stop = () => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    };
-    signal.addEventListener('abort', stop, { once: true });
-  });
 
 /**
  * The test object a target names, read straight from configuration (never evaluated as an expression): only
@@ -247,7 +233,7 @@ export async function mailFlow(c: MailFlow, x: CheckContext): Promise<CheckResul
     c.waitSeconds * 1000,
     x.timeoutMs - (performance.now() - x.startedAt) - CLEANUP_RESERVE_MS,
   );
-  const sleep = x.deps.sleep ?? defaultSleep;
+  const sleep = x.deps.sleep ?? abortableDelay;
   let found: GraphMessage | undefined;
   let polls = 0;
   // Time since sending: the clock, but never less than the waits so far (a test's sleep returns at once).

@@ -164,6 +164,26 @@ export async function abortableSleep(sleep: Sleep, ms: number, signal?: AbortSig
   }
 }
 
+/**
+ * Waits `ms` on a real timer, or rejects with the signal's reason as soon as it aborts — clearing the timer, so a
+ * stopping process isn't held open by the wait. For callers whose `sleep` takes the signal itself (scheduled jobs,
+ * synthetic transaction probes); `abortableSleep` wraps an injected `Sleep` instead.
+ */
+export function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', stop);
+      resolve();
+    }, ms);
+    const stop = () => {
+      clearTimeout(timer);
+      reject(signal!.reason);
+    };
+    signal?.addEventListener('abort', stop, { once: true });
+  });
+}
+
 const SERVER_RETRYABLE = new Set([500, 502, 503, 504]);
 const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 

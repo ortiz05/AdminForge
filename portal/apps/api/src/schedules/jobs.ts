@@ -6,6 +6,7 @@ import {
   type DeliveryDeps,
   type DeliveryStatus,
 } from '../delivery/notifier';
+import { abortableDelay } from '@adminforge/connectors';
 import { isTerminal } from '@adminforge/engine';
 import {
   TRANSACTION_KINDS,
@@ -120,20 +121,6 @@ export interface JobDeps {
   log?: { warn(obj: object, msg: string): void };
 }
 
-const defaultSleep = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    if (signal.aborted) return reject(signal.reason);
-    const t = setTimeout(resolve, ms);
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(t);
-        reject(signal.reason);
-      },
-      { once: true },
-    );
-  });
-
 const INACTIVE = new Set(['draft', 'retired']);
 
 /** A synthetic transaction probe (it sends, uploads or creates on its test objects). */
@@ -182,7 +169,7 @@ async function eachLimited<T>(
 }
 
 export function createJobRunner(deps: JobDeps): JobRunner {
-  const sleep = deps.sleep ?? defaultSleep;
+  const sleep = deps.sleep ?? abortableDelay;
 
   async function probeJob(ctx: JobContext, job: ProbeJob): Promise<JobResult> {
     const probes = await selectProbes(job, deps.definitions);

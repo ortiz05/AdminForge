@@ -76,6 +76,11 @@ export interface SchedulerOptions {
 
 export const DEFAULT_TIMEOUT_SECONDS = 900;
 const REAP_GRACE_MS = 120_000;
+/**
+ * How long a job told to stop (time limit, lost lease) keeps its slot if it ignores the signal (D-23a). Its run is
+ * already recorded; the cap only stops a job that never ends from holding the slot for good.
+ */
+export const SETTLE_GRACE_MS = REAP_GRACE_MS;
 const MAX_RETRY_DELAY_MS = 6 * 3_600_000;
 /** Failures a retry cannot fix. */
 const PERMANENT = new Set([
@@ -110,7 +115,15 @@ class RunAborted extends Error {
 interface Active {
   scheduleId: string;
   controller: AbortController;
+  /** The run's row, schedule status and audit are written (shutdown waits for this). */
+  recorded: Promise<void>;
+  /** The slot is free: recorded, and the job itself ended (or SETTLE_GRACE_MS passed after it was told to stop). */
   done: Promise<void>;
+}
+
+/** Where `execute` hands back the job's own promise, so the slot can wait for it after a timeout. */
+interface JobHandle {
+  settled: Promise<void> | null;
 }
 
 const timeoutMsOf = (def: Schedule) => (def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000;
@@ -208,7 +221,8 @@ export class Scheduler {
       a.controller.abort(
         new RunAborted('interrupted', `The scheduler stopped before this run finished (${reason}).`),
       );
-    await Promise.allSettled([...this.active.values()].map((a) => a.done));
+    // The rows are written as interrupted; a job that ignores the abort keeps its slot (done) until it ends.
+    await Promise.allSettled([...this.active.values()].map((a) => a.recorded));
   }
 
   /** Ticks as soon as possible (new content, run-now requests, a run finished). */
@@ -522,20 +536,44 @@ export class Scheduler {
         ),
       timeoutSeconds * 1000,
     );
-    const done = this.execute(s, run, controller.signal)
+    const job: JobHandle = { settled: null };
+    const recorded = this.execute(s, run, controller.signal, job)
       .then(() => undefined)
       .catch((err: unknown) =>
         this.o.log?.error?.(
           { err: { message: (err as Error).message }, schedule: s.key },
           'scheduler: run bookkeeping failed',
         ),
-      )
+      );
+    // The slot stays taken until the job itself ends, not just its record (D-23a): a job that ignores the abort
+    // still holds outbound slots and loop time here, and its schedule's overlap policy still applies.
+    const done = recorded
+      .then(() => this.settle(s, run, controller.signal, job.settled))
       .finally(() => {
         this.timers.clearTimeout(timer);
         this.active.delete(run.id);
         this.wake();
       });
-    this.active.set(run.id, { scheduleId: s.id, controller, done });
+    this.active.set(run.id, { scheduleId: s.id, controller, recorded, done });
+  }
+
+  /** Waits for a job that was told to stop, at most SETTLE_GRACE_MS; says so if it never ended. */
+  private async settle(s: ScheduleRow, run: ScheduleRunRow, signal: AbortSignal, job: Promise<void> | null) {
+    if (!job) return;
+    if (!signal.aborted) return job;
+    let cap: unknown = null;
+    const capped = await Promise.race([
+      job.then(() => false),
+      new Promise<boolean>((resolve) => {
+        cap = this.timers.setTimeout(() => resolve(true), SETTLE_GRACE_MS);
+      }),
+    ]);
+    this.timers.clearTimeout(cap);
+    if (capped)
+      this.o.log?.warn(
+        { schedule: s.key, scheduleRunId: run.id },
+        'scheduler: a job ignored its stop signal; its slot is free again',
+      );
   }
 
   /** Executes one run to completion and records it (row, schedule status, audit, events, retry). */
@@ -543,6 +581,7 @@ export class Scheduler {
     s: ScheduleRow,
     run: ScheduleRunRow,
     signal: AbortSignal,
+    job: JobHandle = { settled: null },
   ): Promise<ScheduleRunRow | null> {
     const def = s.definition;
     const requestedBy = typeof run.result?.requestedBy === 'string' ? run.result.requestedBy : null;
@@ -603,19 +642,21 @@ export class Scheduler {
         signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
       );
       abort.catch(() => undefined);
-      const r = await Promise.race([
-        this.o.jobs.run({
-          schedule: s,
-          def,
-          run,
-          signal,
-          correlationId,
-          scheduledBy,
-          requestedByOid,
-          ...(runAs ? { identity: runAs.identity, user: runAs.user } : {}),
-        }),
-        abort,
-      ]);
+      const running = this.o.jobs.run({
+        schedule: s,
+        def,
+        run,
+        signal,
+        correlationId,
+        scheduledBy,
+        requestedByOid,
+        ...(runAs ? { identity: runAs.identity, user: runAs.user } : {}),
+      });
+      job.settled = running.then(
+        () => undefined,
+        () => undefined,
+      );
+      const r = await Promise.race([running, abort]);
       status = r.status ?? 'succeeded';
       result = r.result ?? null;
       runId = r.runId ?? null;

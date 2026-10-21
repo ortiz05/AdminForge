@@ -100,9 +100,9 @@ never touches a database file, a tenant or the internet; `PUBLIC_BASE_URL` has n
 localhost). Against the tenant, `init:local` writes `DATABASE_PATH=~/.local/share/adminforge/dev.db` into the env
 file; the API creates and migrates that file at start and is also the run worker and the scheduler — no Docker,
 nothing else to start. Never point `DATABASE_PATH` at a deployment's file. Env files are mode 600: the API and the
-CLI refuse one other users can read. Provisioner and live-test credentials live in `<env>.admin.env`, read only by
-`provision …`, `validate --scopes`, `env check` (key states) and the live tests. System Chrome is used by Playwright
-(no browser download).
+CLI refuse one other users can read (`env check` doesn't look at modes yet). Provisioner and live-test credentials
+live in `<env>.admin.env`, read only by `provision …`, `validate --scopes`, `env check` (key states) and the live
+tests. System Chrome is used by Playwright (no browser download).
 
 **Never build or install in a checkout a running service serves.** A service that runs from a checkout uses its
 `dist/` and `node_modules`, so `pnpm build`, `pnpm install` or `pnpm dev` there (anything that writes them) is a

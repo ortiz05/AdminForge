@@ -144,9 +144,10 @@ describe('Azure Virtual Desktop in the navigation', () => {
       '/p/avd.connections',
     ]);
     // The rail shows the AVD probes' status on the section's row (their group is the section key).
-    expect(records.some((r) => r.kind === 'probe' && (r.def as { group?: string }).group === 'avd')).toBe(
-      true,
-    );
+    const active = (r: DefinitionRecord) => (r.def as { status?: string }).status !== 'retired';
+    expect(
+      records.some((r) => r.kind === 'probe' && (r.def as { group?: string }).group === 'avd' && active(r)),
+    ).toBe(true);
   });
 
   it.each(VIEWS)('%s is a Reader view owned by the AVD team', (id) => {

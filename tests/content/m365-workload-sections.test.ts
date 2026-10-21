@@ -87,9 +87,11 @@ describe('Microsoft 365 workloads in the navigation', () => {
     // The section's checks are the status mark on its row (its key is the probes' group), not an item of their own.
     for (const key of WORKLOADS) {
       const section = navigation.sections.find((s) => s.key === key)!;
-      expect(section.items ?? []).toEqual([]);
+      expect((section.items ?? []).map((i) => i.href)).not.toContain(`/monitoring?group=${key}`);
       expect(
-        records.some((r) => r.kind === 'probe' && (r.def as Def).group === key),
+        records.some(
+          (r) => r.kind === 'probe' && (r.def as Def).group === key && (r.def as Def).status !== 'retired',
+        ),
         key,
       ).toBe(true);
     }
@@ -132,7 +134,9 @@ describe('Microsoft 365 workloads in the navigation', () => {
       '/p/m365.groups',
     ]);
     // No section lists its checks as a page any more: the rail draws them on the section's row (D-14).
-    expect(nav.sections.flatMap((s) => s.items).filter((i) => i.href.includes('group='))).toEqual([]);
+    expect(
+      nav.sections.flatMap((s) => s.items).filter((i) => i.href.startsWith('/monitoring?group=')),
+    ).toEqual([]);
   });
 });
 

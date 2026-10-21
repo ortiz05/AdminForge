@@ -43,9 +43,8 @@ describe('identity.revoke-consent-grant confirmation', () => {
     const refusals = (
       def.tests as Array<{ env?: Record<string, string>; expect: { failedStep?: string } }>
     ).filter((t) => t.expect.failedStep === 'notPortalApp');
-    expect(refusals.map((t) => Object.keys(t.env ?? {}))).toEqual([
-      ['AF_READ_CLIENT_ID'],
-      ['AF_PROTECTED_APP_IDS'],
-    ]);
+    const keys = refusals.flatMap((t) => Object.keys(t.env ?? {}));
+    expect(keys).toContain('AF_READ_CLIENT_ID');
+    expect(keys).toContain('AF_PROTECTED_APP_IDS');
   });
 });

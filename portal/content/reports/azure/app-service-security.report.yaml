@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.app-service-security
-version: 1.0.1
+version: 1.1.0
 title: App Service security settings
 summary: Web apps and Function Apps that accept plain HTTP, allow TLS below 1.2, allow unencrypted FTP, have remote debugging on or run a language version past (or near) its end of support — each setting per app, from the site configuration in Resource Graph.
 owner: azure-team
@@ -213,6 +213,32 @@ layout:
       - label: Open Configuration in Azure portal
         icon: arrow-square-out
         href: https://portal.azure.com/#resource${ row.id }/configuration
+      # Web apps only (AdminForge doesn't manage Azure Functions at this time), one app at a time: the Function App
+      # pages that offered these are retired.
+      - playbook: azure.restart-app
+        label: Restart
+        icon: arrow-clockwise
+        inputs:
+          subscriptionId: ${ row.subscriptionId }
+          resourceGroup: ${ row.resourceGroup }
+          name: ${ row.name }
+        when: ${ row.appKind = 'Web app' and row.state = 'Running' }
+      - playbook: azure.start-app
+        label: Start
+        icon: play
+        inputs:
+          subscriptionId: ${ row.subscriptionId }
+          resourceGroup: ${ row.resourceGroup }
+          name: ${ row.name }
+        when: ${ row.appKind = 'Web app' and row.state = 'Stopped' }
+      - playbook: azure.stop-app
+        label: Stop
+        icon: stop
+        inputs:
+          subscriptionId: ${ row.subscriptionId }
+          resourceGroup: ${ row.resourceGroup }
+          name: ${ row.name }
+        when: ${ row.appKind = 'Web app' and row.state = 'Running' }
       - label: Language support timelines
         icon: book-open
         href: https://learn.microsoft.com/azure/app-service/language-support-policy

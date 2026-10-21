@@ -277,6 +277,27 @@ const Schema = z
         });
       }
     }
+    // Production hardening — HSTS, the __Host- session cookie, the checks above, content from the database — keys off
+    // NODE_ENV, which defaults to development (a developer's machine). A portal other machines reach must not lose it
+    // quietly: the image and the Kubernetes ConfigMap set production (tests/guards/image-node-env.test.ts), and Entra
+    // sign-in refuses to start beyond loopback without it. Development against the tenant stays on this machine.
+    if (env.AUTH_MODE === 'entra' && env.NODE_ENV !== 'production') {
+      if (env.API_HOST !== undefined && !isLoopbackHost(env.API_HOST))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['API_HOST'],
+          message:
+            'listens beyond this machine (not loopback), which needs NODE_ENV=production (the container image and the Kubernetes ConfigMap set it); for development against the tenant keep API_HOST=127.0.0.1',
+        });
+      const url = new URL(env.PUBLIC_BASE_URL);
+      if (url.protocol === 'https:' && !isLoopbackHost(url.hostname))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['PUBLIC_BASE_URL'],
+          message:
+            'is an https address other machines reach, which needs NODE_ENV=production (HSTS, the __Host- session cookie, the production checks); for development against the tenant use http://localhost:<port>',
+        });
+    }
     for (const prev of (env.TOKEN_CACHE_PREVIOUS_KEYS ?? '')
       .split(',')
       .map((k) => k.trim())
@@ -319,7 +340,8 @@ const Schema = z
         });
     }
     // Mock sign-in hands every visitor every portal role without a password: only ever on this machine, on
-    // synthetic data, with no credentials that could reach the tenant.
+    // synthetic data, with no credentials that could reach the tenant. "This machine" is both ends: the interface the
+    // API listens on, and the address the browser uses (a proxy or tunnel on loopback could publish it under a name).
     if (env.AUTH_MODE === 'mock') {
       if (env.DATA_MODE !== 'fixtures')
         ctx.addIssue({
@@ -332,6 +354,13 @@ const Schema = z
           code: 'custom',
           path: ['API_HOST'],
           message: 'mock sign-in only listens on loopback (127.0.0.1, ::1 or localhost)',
+        });
+      if (!isLoopbackHost(new URL(env.PUBLIC_BASE_URL).hostname))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['PUBLIC_BASE_URL'],
+          message:
+            'mock sign-in only serves this machine: use http://localhost:<port> (behind a proxy or tunnel every visitor would get every role)',
         });
       for (const key of MOCK_FORBIDDEN_KEYS)
         if (env[key])

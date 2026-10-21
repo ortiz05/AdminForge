@@ -38,8 +38,14 @@ describe('credentials that must not reach the running portal', () => {
   });
 
   it('leaves development alone (the CLI and a developer API read the same files)', () => {
+    // On this machine: an https name others reach needs production (config-node-env-off-loopback.test.ts).
     expect(() =>
-      loadConfig({ ...production, NODE_ENV: 'development', DATABASE_URL: 'postgres://x@127.0.0.1/x' }),
+      loadConfig({
+        ...production,
+        NODE_ENV: 'development',
+        PUBLIC_BASE_URL: 'http://localhost:5173',
+        DATABASE_URL: 'postgres://x@127.0.0.1/x',
+      }),
     ).not.toThrow();
   });
 });

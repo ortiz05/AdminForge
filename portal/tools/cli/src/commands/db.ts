@@ -31,7 +31,7 @@ import { createReadStream, existsSync, mkdtempSync, renameSync, rmSync } from 'n
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import pg from 'pg';
+import type pg from 'pg';
 import { randomUUID } from 'node:crypto';
 import { hostname, userInfo } from 'node:os';
 import {
@@ -296,7 +296,9 @@ export async function importPostgres(
   if (!url)
     throw new ConfigError(`${key} is not set: it must hold the URL of the Postgres database to import.`);
   const target = databasePath(env, opts.to);
-  const client = new pg.Client({ connectionString: url, application_name: 'adminforge-import' });
+  // Loaded here, not at the top: only this one-time import needs the Postgres driver (`db backup` runs nightly).
+  const { default: postgres } = await import('pg');
+  const client = new postgres.Client({ connectionString: url, application_name: 'adminforge-import' });
   client.on('error', () => undefined);
   await client.connect();
   try {

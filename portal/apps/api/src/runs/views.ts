@@ -220,12 +220,29 @@ export function taskView(
   // `excludes` (who the change grants access to) is enforced server-side; `canDecide` already reflects it.
   const { initiatorOid: _i, ...rest } = t.policy;
   const { excludes: _e, ...shown } = rest as typeof rest & { excludes?: unknown };
+  // Metadata: the fields named here and nothing else, so a field added to tasks later stays out until it is listed.
+  const common = {
+    path: shown.path,
+    stepId: shown.stepId,
+    title: shown.title,
+    definitionKey: shown.definitionKey,
+    definitionVersion: shown.definitionVersion,
+    requestedByUpn: shown.requestedByUpn,
+  };
   const policy: TaskView['policy'] =
     access === 'full'
       ? shown
       : shown.kind === 'approval'
-        ? { ...shown, message: null }
-        : { ...shown, instructions: '', checklist: [] };
+        ? {
+            ...common,
+            kind: 'approval',
+            message: null,
+            approvers: shown.approvers,
+            minApprovals: shown.minApprovals,
+            expiresAt: shown.expiresAt,
+            ...(shown.writesAfter !== undefined ? { writesAfter: shown.writesAfter } : {}),
+          }
+        : { ...common, kind: 'manual', instructions: '', checklist: [] };
   const decisions = t.decisions.map(({ sessionHash: _s, ...d }) =>
     access !== 'full'
       ? { oid: d.oid, upn: d.upn, decision: d.decision, at: d.at }

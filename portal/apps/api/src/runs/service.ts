@@ -389,6 +389,7 @@ export class RunService {
     if (t.decisions.some((d) => d.oid === session.userOid)) return true;
     return (
       t.status === 'pending' &&
+      (!t.expiresAt || t.expiresAt > this.deps.now()) &&
       !isTerminal(run.status) &&
       hasRole(session, 'Playbook.Approver') &&
       hasAny(session, t.policy.approvers) &&
@@ -1459,6 +1460,18 @@ export class RunService {
       ...(q.status ? { status: q.status } : {}),
     });
     const items: TaskView[] = [];
+    // How much of each run the caller sees, once per run: its own gate in full, else as on the run page — and a run
+    // they may not open (a scheduled run outside their roles) as metadata.
+    const seen = new Map<string, Promise<RunAccess>>();
+    const accessTo = (run: RunRow) => {
+      let a = seen.get(run.id);
+      if (!a)
+        seen.set(
+          run.id,
+          (a = this.canView(s, run).then((ok) => (ok ? this.access(s, run) : ('metadata' as const)))),
+        );
+      return a;
+    };
     for (const t of tasks) {
       if (t.policy.kind !== 'approval' || !hasAny(s, t.policy.approvers)) continue;
       const run = await this.deps.repo.getRun(t.subjectId);
@@ -1468,7 +1481,7 @@ export class RunService {
         t.status = 'expired';
       }
       if (q.status === 'pending' && isTerminal(run.status)) continue;
-      const access = this.approverOf(s, run, t) ? 'full' : await this.access(s, run);
+      const access = this.approverOf(s, run, t) ? 'full' : await accessTo(run);
       items.push(taskView(t, this.canDecide(s, run, t), undefined, access));
     }
     return { items };

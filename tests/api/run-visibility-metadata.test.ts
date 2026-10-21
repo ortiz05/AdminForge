@@ -426,3 +426,80 @@ describe('scheduled runs (automation identity) are not one person’s data (S-25
     await t.close();
   });
 });
+
+describe('edges of "asked to approve" (S-25 review)', () => {
+  it('a gate past its expiry no longer counts as asking, even before anything marks it expired', async () => {
+    const t = await setup();
+    const avery = await t.login(AVERY, OPERATOR);
+    const { runId } = (
+      await avery.post('/api/runs', { playbook: 'test.gated', inputs: { userId: USER, reason: REASON } })
+    ).json();
+    await t.drain();
+    const asked = (await (await t.login(DREW, APPROVER)).get(`/api/runs/${runId}`)).json();
+    expect(asked.run.access).toBe('full');
+    // An hour past the gate's expiry (72 hours by default), with nothing having looked at it since.
+    t.clock.t = Date.parse(asked.tasks[0].expiresAt) + 3_600_000;
+    const later = await t.login(DREW, APPROVER);
+    const seen = (await later.get(`/api/runs/${runId}`)).json();
+    expect(seen.tasks[0].status).toBe('pending');
+    expect(seen.run.access).toBe('metadata');
+    await t.close();
+  });
+
+  it('the metadata view of a gate carries the listed fields and nothing else', async () => {
+    const t = await setup();
+    const avery = await t.login(AVERY, OPERATOR);
+    const { runId } = (
+      await avery.post('/api/runs', { playbook: 'test.gated', inputs: { userId: USER, reason: REASON } })
+    ).json();
+    await t.drain();
+    const casey = await t.login(CASEY, OPERATOR);
+    const task = (await casey.get(`/api/runs/${runId}`)).json().tasks[0];
+    expect(Object.keys(task.policy).sort()).toEqual(
+      [
+        'approvers',
+        'definitionKey',
+        'definitionVersion',
+        'expiresAt',
+        'kind',
+        'message',
+        'minApprovals',
+        'path',
+        'requestedByUpn',
+        'stepId',
+        'title',
+        'writesAfter',
+      ].sort(),
+    );
+    expect(task.policy.message).toBeNull();
+    await t.close();
+  });
+
+  it('the inbox shows a scheduled run’s gate decided by someone else as metadata to an approver who can’t open the run', async () => {
+    const t = await setup();
+    const run = await t.runs.service.createScheduledRun({
+      schedule: { key: 'ops.gated', createdBy: 'content (owner: tests)' },
+      playbook: 'test.gated',
+      inputs: { userId: USER, reason: REASON },
+    });
+    await t.drain();
+    // Approvers without Portal.Operator can't open a scheduled run, but the gate asks them.
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver']);
+    const drew = await t.login(DREW, ['Portal.Reader', 'Playbook.Approver']);
+    const pending = (await drew.get('/api/approvals?status=pending')).json().items[0];
+    expect(pending).toMatchObject({
+      subjectId: run.id,
+      policy: { message: expect.stringContaining(REASON) },
+    });
+    await blake.post(`/api/runs/${run.id}/approvals/approve`, { decision: 'approve', comment: COMMENT });
+    await t.drain();
+    const decided = (await drew.get('/api/approvals?status=approved')).json().items[0];
+    expect(decided).toMatchObject({ subjectId: run.id, policy: { message: null } });
+    expectNoData(decided);
+    expect((await blake.get('/api/approvals?status=approved')).json().items[0]).toMatchObject({
+      policy: { message: expect.stringContaining(REASON) },
+      decisions: [{ comment: COMMENT }],
+    });
+    await t.close();
+  });
+});

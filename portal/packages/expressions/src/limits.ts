@@ -248,6 +248,10 @@ export function rewriteConcat(ast: unknown): number {
       continue;
     }
     const n = v as Record<string, unknown>;
+    // `x ~> a & b` applies a string, which JSONata refuses (T2006); as a call, `~>` would pass x to it instead.
+    const rhs = n.rhs as { type?: unknown; value?: unknown; position?: unknown } | undefined;
+    if (n.type === 'apply' && rhs?.type === 'binary' && rhs.value === '&')
+      n.rhs = { type: 'block', expressions: [rhs], position: rhs.position };
     if (n.type !== 'binary' || n.value !== '&') {
       for (const x of Object.values(n)) if (x && typeof x === 'object') stack.push(x);
       continue;

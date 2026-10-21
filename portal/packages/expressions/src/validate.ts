@@ -58,12 +58,16 @@ function callsEval(node: unknown): boolean {
   return Object.values(node).some((v) => typeof v === 'object' && callsEval(v));
 }
 
-/** A variable named like AdminForge's internal bindings (`$__afDeadline`, `$__afOrderBy`, …): reserved. */
+/**
+ * A variable named like AdminForge's internal bindings (`$__afDeadline`, `$__afConcat`, …): reserved — also as the
+ * name a path step binds (`@$__afConcat`, `#$__afConcat`), which would replace the binding for the rest of the path.
+ */
 function usesInternal(node: unknown): boolean {
   if (!node || typeof node !== 'object') return false;
   if (Array.isArray(node)) return node.some(usesInternal);
-  const n = node as { type?: string; value?: unknown };
-  if (n.type === 'variable' && typeof n.value === 'string' && n.value.startsWith('__af')) return true;
+  const n = node as { type?: string; value?: unknown; focus?: unknown; index?: unknown };
+  const reserved = (v: unknown) => typeof v === 'string' && v.startsWith('__af');
+  if ((n.type === 'variable' && reserved(n.value)) || reserved(n.focus) || reserved(n.index)) return true;
   return Object.values(node).some((v) => typeof v === 'object' && usesInternal(v));
 }
 

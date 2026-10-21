@@ -60,6 +60,12 @@ describe('& is size-checked like $join', () => {
     expect(await evaluate(expr, scope)).toEqual(JSON.parse(JSON.stringify(expected ?? null)) ?? undefined);
   });
 
+  it('keeps `x ~> a & b` an error, as in JSONata (the right side is text, not a function)', async () => {
+    const expr = "'a' ~> $join(['b']) & 'c'";
+    await expect(compile(expr).evaluate({})).rejects.toMatchObject({ code: 'T2006' });
+    await expect(evaluate(expr)).rejects.toMatchObject({ code: 'T2006' });
+  });
+
   it('keeps errors JSONata raises for a value with no text form', async () => {
     await expect(evaluate("'x' & (1 / 0)")).rejects.toThrow(
       /D3001|Attempting to invoke string function on Infinity/,
@@ -73,8 +79,13 @@ describe('& is size-checked like $join', () => {
     expect(lintExpressions({ query: { $filter: "${ 'id eq ' & params.q }" } })).toHaveLength(1);
   });
 
-  it('the internal concatenation is not callable from content', () => {
-    expect(validateExpressions({ text: "${ $__afConcat('a', 'b') }" }).map((i) => i.message)).toContain(
+  it.each([
+    ["$__afConcat('a', 'b')"],
+    ["[1]@$__afConcat.('a' & 'b')"],
+    ["['x']#$__afConcat.('a' & 'b')"],
+    ["[{ 'a': 1 }]@$__afDeadline.(['b', 'a']^($))"],
+  ])('the internal names cannot be called or rebound from content: %s', (expr) => {
+    expect(validateExpressions({ text: `\${ ${expr} }` }).map((i) => i.message)).toContain(
       'Variables starting with $__af are reserved for AdminForge itself.',
     );
   });

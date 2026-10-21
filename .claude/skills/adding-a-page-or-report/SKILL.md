@@ -7,7 +7,8 @@ description: Use when asked to add or change an AdminForge page, dashboard, enti
 
 ## Overview
 
-Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,reports}/<section>/`. The generic renderer
+Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,reports}/<prefix>/` — the folder is the id
+prefix (`portal/content/README.md`). The generic renderer
 (`/p/$key`) and the datasource executor do the rest: **no React for a new page**. Widget keys are in `docs/widgets.md`;
 the expression helpers, JSONata habits, Microsoft quirks and fixture rules are in `docs/content-recipes.md`.
 
@@ -21,10 +22,12 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
 
 ## Steps
 
-1. **Reuse first.** `rg -l "<topic>" portal/content` and `rg "^id:" portal/content/{pages,dashboards,reports}`. If a
-   page already covers it, extend it and bump `version` (minor for additions).
-2. **Scaffold:** `pnpm adminforge new page <section>/<name> --template list-detail|dashboard|entity|report`
-   (reports: `new report …`). Keep the `$schema` line — VS Code autocompletes from it.
+1. **Reuse first.** `pnpm adminforge list --section <section> --kind page,dashboard,report` (or `--search "<topic>"`)
+   and `rg -l "<topic>" portal/content`. If a page already covers it, extend it and bump `version` (minor for
+   additions).
+2. **Scaffold:** `pnpm adminforge new page <prefix>/<name> --template list-detail|dashboard|entity|report` (reports:
+   `new report …`); the prefix is the section the page belongs to, and `validate` refuses a file outside the folder
+   its id names. Keep the `$schema` line — VS Code autocompletes from it.
 3. **Datasources** — `source: graph|graphBatch|arm|resourceGraph|logAnalytics|function|runner|static`:
    - Filter and count **at the source** (`$filter`, `$select`, `$top`, `$count`, KQL `where` / `summarize`), not in
      `transform`: transforms run on the API thread with a 250 ms budget. Tenant-wide questions that would need many

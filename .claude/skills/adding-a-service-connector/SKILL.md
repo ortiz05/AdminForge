@@ -23,7 +23,8 @@ mode) → token for the identity → connector in `portal/packages/connectors`. 
 
 ### Your own API or Azure Function
 
-1. `pnpm adminforge new connection <section>/<name>`: `baseUrl: ${env.X}`, `audience: ${env.Y}` (add both keys to
+1. Reuse first: `pnpm adminforge list --kind connection` — an existing connection may already have the operation.
+   Then `pnpm adminforge new connection <prefix>/<name>`: `baseUrl: ${env.X}`, `audience: ${env.Y}` (add both keys to
    `config/example.env` — `adding-a-configuration-key`), named `operations` with `method`, `path`,
    `mode: read|write`. The audience must be **your own** app registration (`api://…` or its application id): Microsoft
    first-party audiences (Graph, ARM, Exchange, SharePoint…) are refused, because the token would go to the

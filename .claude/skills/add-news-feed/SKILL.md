@@ -22,7 +22,8 @@ Microsoft's own public feeds. Read `docs/news.md` first.
 
 ## Steps
 
-1. **Reuse first.** `rg -l "<product>" portal/content/feeds` — most changes are a new `classify` rule on an existing
+1. **Reuse first.** `pnpm adminforge list --kind feed --search "<product>"` (full text:
+   `rg -l "<product>" portal/content/feeds`) — most changes are a new `classify` rule on an existing
    feed (e.g. a newly managed Azure service → add its product category to `feeds.azure-updates`).
 2. **Find the official feed and verify it live** (`curl -sS -A 'AdminForge-News/1.0' -o <scratch>/feed.xml -w '%{http_code} %{redirect_url}'`):
    RSS 2.0 or Atom, 200 without redirects off-host, and note ETag/Last-Modified support and size. Prefer the source

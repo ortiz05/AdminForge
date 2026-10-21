@@ -130,6 +130,7 @@ Ask Claude to run a reviewer before you commit (they read uncommitted changes) o
 
 Tool references: `portal/tools/cli/README.md` (every `adminforge` command), `tooling/README.md`, `portal/apps/runner/README.md`
 and `portal/content/scripts/README.md` (runner scripts), `tests/README.md` (test projects and shared helpers),
+`portal/content/README.md` (where content goes: folder = id prefix, sections, `adminforge list`),
 `docs/content-recipes.md` (content how-to).
 
 When you change _how_ something is extended (a new schema field, a new CLI command, a new widget convention), update the

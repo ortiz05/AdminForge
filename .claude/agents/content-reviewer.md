@@ -14,8 +14,9 @@ You review AdminForge content changes. Read `CLAUDE.md`, the skill in `.claude/s
    unquoted or wrapped user data, `/users/` writes without `$guid()`, headers AdminForge owns, Resource Graph queries
    over the join limits, bare `ds.` names and stale script pins — read the rest by hand.
 3. For each changed definition check, and cite file:line for every finding:
-   - **Reuse:** does another definition already do this (`rg "^id:|^title:" portal/content`)? Near-duplicates are
-     findings.
+   - **Reuse:** does another definition already do this
+     (`pnpm adminforge list --section <section> --search "<words>"`, `rg "^id:|^title:" portal/content`)?
+     Near-duplicates are findings. `validate` already refuses a file outside the folder its id names.
    - **Write safety** (playbook skill, steps 4–8): write steps have `mode: write` + plain-language `describe`;
      preconditions are read and `assert`ed before writes; `risk` matches impact (`high` → typed `confirm`, `critical`
      → `approval` with `excludes` for whoever it grants access); `idempotent: false` on writes whose repeat hurts (a

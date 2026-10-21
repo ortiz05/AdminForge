@@ -7,7 +7,7 @@ description: Use when asked to add or change an AdminForge action, playbook, run
 
 ## Overview
 
-Write actions are playbooks: YAML in `portal/content/playbooks/<section>/`, executed by `@adminforge/engine` with the
+Write actions are playbooks: YAML in `portal/content/playbooks/<prefix>/`, executed by `@adminforge/engine` with the
 engineer's delegated identity (Write app, only while armed). Runbooks (`runbooks/`) are guided procedures that mix
 Markdown sections, manual steps and executable steps.
 
@@ -23,9 +23,10 @@ Markdown sections, manual steps and executable steps.
 
 ## Steps
 
-1. **Reuse first.** `rg "^id:" portal/content/playbooks` — prefer extending an existing playbook (add a guard step,
-   bump `version`) over a near-duplicate. Call another playbook with a `type: playbook` step.
-2. **Scaffold:** `pnpm adminforge new playbook <section>/<name>` (or `new runbook …`).
+1. **Reuse first.** `pnpm adminforge list --kind playbook,runbook --section <section>` (or `--search "<action>"`) —
+   prefer extending an existing playbook (add a guard step, bump `version`) over a near-duplicate. Call another
+   playbook with a `type: playbook` step.
+2. **Scaffold:** `pnpm adminforge new playbook <prefix>/<name>` (or `new runbook …`); the folder is the id prefix.
 3. **Inputs** use typed params (`user`, `group`, `device`, `app`, `resource`, `guid`, `enum`, …) — they become the
    form. Sensitive inputs get `redact: true` (masked in stored steps, events and audit; a step that would send a masked
    value fails with `redacted_value`). Manual-step fields are masked the same way, and only the person a manual step

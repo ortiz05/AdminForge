@@ -29,9 +29,12 @@ synthetic tests and configuration checks that write time-series results shown on
 
 ## Steps
 
-1. **Reuse first.** Probes are swept by tag: tag a new probe (`tags: [hourly]`, `[config-check]`) and an existing
+1. **Reuse first.** `pnpm adminforge list --kind probe,schedule --section <section>` shows a section's checks and
+   schedules. Probes are swept by tag: tag a new probe (`tags: [hourly]`, `[config-check]`) and an existing
    sweep schedule (`schedules/probes/*.schedule.yaml`, `job.select.tags`) picks it up — often no new schedule needed.
-2. **Scaffold:** `pnpm adminforge new probe <section>/<name>` / `new schedule <section>/<name>`, design the query in
+2. **Scaffold:** `pnpm adminforge new probe probes/<name>` (writes `probes/<name>.probe.yaml`, id `probes.<name>`;
+   set `group:`) / `new schedule <job group>/<name>` (`reports/`, `maintenance/`, `billing/`; sweeps are `sweep.*` in
+   `schedules/probes/` — `portal/content/README.md` › Probes and schedules), design the query in
    **Query Studio** (`/query`; it offers the sources the installation switched on, `AF_QUERY_SOURCES`) and use _Save as
    probe/report/schedule_, or build a schedule in the **schedule editor** (`/schedules/new`: choices, plain English or
    cron, with the next runs, any IANA time zone, job, retries, alerts → YAML for review).

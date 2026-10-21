@@ -200,6 +200,11 @@ export const definitions = sqliteTable(
     /** JSON text: the authored key order is kept (form field order, datasource order). */
     body: json('body').notNull(),
     sha256: text('sha256').notNull(),
+    /**
+     * The content schema version the row was published under (@adminforge/schemas CONTENT_SCHEMA_VERSION); rows from
+     * before the column existed were published under version 1. Bodies are re-validated on load whatever it says.
+     */
+    schemaVersion: integer('schema_version').notNull().default(1),
     authorOid: text('author_oid'),
     approverOid: text('approver_oid'),
     createdAt: ts('created_at').notNull().$defaultFn(now),

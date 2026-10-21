@@ -10,7 +10,9 @@
  *      recorded in the audit event; --dry-run only warns);
  *   3. the API's DbDefinitionStore writes new versions and sends the `definitions_changed` signal (the running API
  *      drops those cache entries) — idempotent by sha256 (an unchanged version is skipped) and all-or-nothing (changed
- *      content without a version bump, or an older version, is refused, and then nothing is written);
+ *      content without a version bump, or an older version, is refused, and then nothing is written). Each row is
+ *      stamped with the content schema version (@adminforge/schemas CONTENT_SCHEMA_VERSION), unchanged ones too;
+ *      `--dry-run` lists the published versions stamped with an older one and whether they still pass;
  *   4. one `content.published` audit event in the database's hash chain (actor `cli`, the local user@host, versions,
  *      git state), awaited — only when something new was created.
  *
@@ -20,6 +22,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { hostname, userInfo } from 'node:os';
+import { CONTENT_SCHEMA_VERSION } from '@adminforge/schemas';
 import { databasePath } from '../shared/database-path';
 import {
   createDatabase,
@@ -146,10 +149,40 @@ export async function publishContent(
     ctx.out(
       `${result.refused ? '✗' : '✓'} ${verb}: ${result.created} new version(s), ${result.unchanged} unchanged, ${result.refused} refused${result.refreshed ? `, ${result.refreshed} restored to their authored key order` : ''}${opts.dryRun ? ' (dry run)' : ''}${result.notified ? '; the running portal was told (definitions_changed)' : ''}.`,
     );
+    if (opts.dryRun && result.olderSchema) for (const l of olderSchemaLines(result.olderSchema)) ctx.out(l);
     return result;
   } finally {
     await target.close();
   }
+}
+
+/** Rows listed by name in a dry run; the rest are counted. */
+const MAX_OLDER_LISTED = 50;
+
+/**
+ * Dry run: the published versions stamped with an older content schema version (D-07) — failing ones first, since the
+ * API refuses them when it loads them — or that there are none.
+ */
+export function olderSchemaLines(rows: NonNullable<PublishResult['olderSchema']>): string[] {
+  if (!rows.length)
+    return [`✓ Every published version is on the current content schema (${CONTENT_SCHEMA_VERSION}).`];
+  const failing = rows.filter((r) => r.problems.length);
+  const ordered = [...failing, ...rows.filter((r) => !r.problems.length)];
+  const lines = [
+    `⚠ ${rows.length} published version(s) are from an older content schema (current: ${CONTENT_SCHEMA_VERSION}); ${
+      failing.length
+        ? `${failing.length} no longer pass(es) it and would be refused when loaded:`
+        : 'all still pass it:'
+    }`,
+    ...ordered
+      .slice(0, MAX_OLDER_LISTED)
+      .map(
+        (r) =>
+          `  ${r.problems.length ? '✗' : '⚠'} ${r.kind} ${r.key} ${r.version}${r.status === 'retired' ? ' (retired)' : ''} (schema ${r.schemaVersion}) — ${r.problems.length ? r.problems.join('; ') : 'still valid'}`,
+      ),
+  ];
+  if (ordered.length > MAX_OLDER_LISTED) lines.push(`  … and ${ordered.length - MAX_OLDER_LISTED} more`);
+  return lines;
 }
 
 /** Who ran the CLI (local account and host), for the audit trail. */

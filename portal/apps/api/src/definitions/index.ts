@@ -9,6 +9,8 @@ export {
   DbDefinitionStore,
   DEFINITIONS_CHANNEL,
   notifyPayload,
+  type DbStoreOptions,
+  type OlderSchemaRow,
   type PublishEntry,
   type PublishItem,
   type PublishResult,

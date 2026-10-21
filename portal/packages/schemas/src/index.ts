@@ -14,6 +14,7 @@ export * from './connection';
 export * from './navigation';
 export * from './news';
 export * from './definition';
+export * from './schema-version';
 export * from './references';
 export * from './parse';
 export * from './json-schema';

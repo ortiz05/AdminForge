@@ -17,6 +17,8 @@ export interface DefinitionRecord<D extends Definition = Definition> {
   /** fs: path relative to the content dir. */
   file?: string;
   publishedAt?: Date | null;
+  /** Database rows: the content schema version the row was published under (its body passed the current one). */
+  schemaVersion?: number;
 }
 
 /** What a run or a datasource pins: the definition plus its version and content hash. */
@@ -61,7 +63,7 @@ export interface DefinitionSource {
    */
   retired?(kind: Kind, key: string): Promise<DefinitionRecord | null>;
   onChange(listener: ChangeListener): () => void;
-  /** Content problems found while loading (fs source; empty for db). */
+  /** Content problems found while loading (fs: files that don't validate; db: published rows refused on load). */
   problems(): ContentError[];
   close(): Promise<void>;
 }

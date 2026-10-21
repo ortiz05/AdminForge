@@ -15,7 +15,11 @@ import {
   type ResolvedDefinition,
 } from './types';
 
-type Log = { info?(obj: object, msg: string): void; warn(obj: object, msg: string): void };
+type Log = {
+  info?(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  error?(obj: object, msg: string): void;
+};
 
 export const definitionNotFound = (kind: string, key: string, version?: string) =>
   new AppError(
@@ -94,7 +98,7 @@ export class CachedDbSource implements DefinitionSource {
   }
 
   problems(): ContentError[] {
-    return [];
+    return this.store.problems();
   }
 
   async close(): Promise<void> {
@@ -174,9 +178,10 @@ export function createDefinitionRegistry(
   if (config.CONTENT_SOURCE === 'db') {
     if (!database) return registryFrom(unavailableSource(), 'db');
     return registryFrom(
-      new CachedDbSource(new DbDefinitionStore(database.db, () => new Date(), database.signals), {
-        signals: database.signals,
-      }),
+      new CachedDbSource(
+        new DbDefinitionStore(database.db, () => new Date(), database.signals, { log: log ?? null }),
+        { signals: database.signals },
+      ),
       'db',
     );
   }

@@ -130,6 +130,25 @@ outcome. Decisions taken in that review:
 - **The data moves once** with `adminforge db import-postgres`: the audit chain is re-verified and its tail must equal
   Postgres'; signed-in sessions are not copied, so everyone signs in again.
 
+## Platform review (2026-10-21)
+
+- **One content schema version, bumped only for breaking schema changes.** `CONTENT_SCHEMA_VERSION`
+  (`@adminforge/schemas`, `schema-version.ts`) is a single integer for every kind; `adminforge publish` stamps it on
+  each definition row (`definitions.schema_version`, a plain `ADD COLUMN … DEFAULT 1`: no table rebuild, rows from
+  before are version 1) and `publish --dry-run` lists the rows stamped with an older one. **Bump it in the same change
+  when a schema change is not backward-compatible** — a definition that validated before may no longer validate (a
+  field removed, renamed, narrowed or made required, an enum value dropped, a default whose meaning changes); additive,
+  optional changes keep it. After such an upgrade, publish the content again. Rejected: a version per kind (more to
+  keep in step for no gain at this size) and refusing every row under an older version (the load-time check below
+  already refuses exactly the rows that no longer pass).
+- **Published rows are re-validated when loaded.** The API parses each row with its kind's current schema the first
+  time it loads it (remembered by sha256 and body) and requires the body to name its own row's kind, id and version; a
+  row that fails is refused — one log line, a `problems()` entry the content health check reports, and 500
+  `definition_unavailable` for the person — and never runs. The sha256 is of the YAML source, so it can't be
+  recomputed from the body: the check is the schema, not the hash. It covers what bypasses `publish`
+  (`db import-postgres`, a restored file, anything with the volume), not an attacker who writes a valid weaker
+  definition there — the audit chain and volume access are the controls for that.
+
 ## Validation tenant specifics (not tenant identifiers)
 
 - No Microsoft 365 / Entra P1/P2 / Intune / Defender licences; see `docs/licensing-review.md`.

@@ -1,8 +1,10 @@
-import type { Definition, Kind } from '@adminforge/schemas';
-import { and, eq, inArray } from 'drizzle-orm';
+import { CONTENT_SCHEMA_VERSION, type ContentError, type Definition, type Kind } from '@adminforge/schemas';
+import { and, eq, inArray, lt } from 'drizzle-orm';
 import { writeTx, type Db, type Tx } from '../db/client';
 import type { Signals } from '../db/signals';
 import { definitions } from '../db/schema';
+import { AppError } from '../errors';
+import { checkStoredBody, definitionUnavailable, rowProblem } from './row-check';
 import { compareSemVer, recordKey, type DefinitionRecord, type DefinitionsChanged } from './types';
 
 export const DEFINITIONS_CHANNEL = 'definitions_changed';
@@ -46,7 +48,44 @@ export interface PublishResult {
   /** Nothing is written when anything is refused (publishing is all-or-nothing). */
   applied: boolean;
   notified: boolean;
+  /**
+   * Dry runs only: published versions stamped with an older content schema version than this code's, and whether
+   * each still passes the current schemas (the API refuses the ones that don't when it loads them).
+   */
+  olderSchema?: OlderSchemaRow[];
 }
+
+/** A published (or retired) version written under an older content schema version. */
+export interface OlderSchemaRow {
+  kind: string;
+  key: string;
+  version: string;
+  status: 'published' | 'retired';
+  schemaVersion: number;
+  /** What fails under the current schemas (empty: still valid). */
+  problems: string[];
+}
+
+type Log = { warn(obj: object, msg: string): void; error?(obj: object, msg: string): void };
+
+export interface DbStoreOptions {
+  /** Where refused rows are reported (once per row body). */
+  log?: Log | null;
+  /** The content schema version stamped on new rows (default CONTENT_SCHEMA_VERSION; tests simulate upgrades). */
+  schemaVersion?: number;
+}
+
+/** A body's load-time check, remembered by sha256 (see `checked`). */
+interface Checked {
+  /** The row and body it was checked for: a hit needs both to be the same. */
+  ident: string;
+  body: string;
+  def: Definition | null;
+  problems: string[];
+}
+
+/** Checked bodies kept per store (one per published version; the oldest are dropped beyond this). */
+const MAX_CHECKED = 5000;
 
 export function notifyPayload(keys: string[]): string {
   const json = JSON.stringify({ keys } satisfies DefinitionsChanged);
@@ -71,16 +110,7 @@ const latestOf = <T extends { version: string }>(rows: T[]): T | undefined =>
 
 type Row = typeof definitions.$inferSelect;
 
-const toRecord = (row: Row): DefinitionRecord => ({
-  kind: row.kind as Kind,
-  key: row.key,
-  version: row.version,
-  sha256: row.sha256,
-  def: row.body as Definition,
-  status: row.status === 'retired' ? 'retired' : 'published',
-  source: row.source === 'portal' ? 'portal' : 'git',
-  publishedAt: row.publishedAt,
-});
+const statusOf = (status: string) => (status === 'retired' ? ('retired' as const) : ('published' as const));
 
 /**
  * Published definitions in the database (`definitions` table). Publishing is idempotent per sha256, refuses a version
@@ -89,11 +119,77 @@ const toRecord = (row: Row): DefinitionRecord => ({
  * entries).
  */
 export class DbDefinitionStore {
+  /**
+   * Load-time checks by sha256 (S-07). A hit also needs the same row identity and body text: a body rewritten in place
+   * (key order restored by publish, or written behind its back) is checked again.
+   */
+  private readonly checked = new Map<string, Checked>();
+  /** Rows refused when loaded, by row id (`problems()`). */
+  private readonly refused = new Map<string, ContentError>();
+  private readonly log: Log | null;
+  private readonly schemaVersion: number;
+
   constructor(
     private readonly db: Db,
     private readonly now: () => Date = () => new Date(),
     private readonly signals: Pick<Signals, 'publish' | 'emitLocal'> | null = null,
-  ) {}
+    opts: DbStoreOptions = {},
+  ) {
+    this.log = opts.log ?? null;
+    this.schemaVersion = opts.schemaVersion ?? CONTENT_SCHEMA_VERSION;
+  }
+
+  /**
+   * The row as a record, after its body passed its kind's current schema and names its own kind, id and version.
+   * Otherwise it is refused: logged once, listed in `problems()`, and a 500 `definition_unavailable` — never used.
+   */
+  private toRecord(row: Row): DefinitionRecord {
+    const ident = `${row.id}\u0000${row.kind}\u0000${row.key}\u0000${row.version}`;
+    const body = JSON.stringify(row.body);
+    let hit = this.checked.get(row.sha256);
+    if (!hit || hit.ident !== ident || hit.body !== body) {
+      const check = checkStoredBody(row, row.body);
+      hit = { ident, body, def: check.ok ? check.def : null, problems: check.ok ? [] : check.problems };
+      this.checked.delete(row.sha256);
+      this.checked.set(row.sha256, hit);
+      if (this.checked.size > MAX_CHECKED) this.checked.delete(this.checked.keys().next().value!);
+      if (!hit.def) {
+        const fields = {
+          kind: row.kind,
+          key: row.key,
+          version: row.version,
+          sha256: row.sha256,
+          schemaVersion: row.schemaVersion,
+          issues: hit.problems,
+        };
+        const msg =
+          'published definition refused: its stored body does not pass the content schema (publish the content again)';
+        if (this.log?.error) this.log.error(fields, msg);
+        else this.log?.warn(fields, msg);
+      }
+    }
+    if (!hit.def) {
+      this.refused.set(row.id, rowProblem(row, hit.problems));
+      throw definitionUnavailable(row);
+    }
+    this.refused.delete(row.id);
+    return {
+      kind: row.kind as Kind,
+      key: row.key,
+      version: row.version,
+      sha256: row.sha256,
+      def: hit.def,
+      status: statusOf(row.status),
+      source: row.source === 'portal' ? 'portal' : 'git',
+      publishedAt: row.publishedAt,
+      schemaVersion: row.schemaVersion,
+    };
+  }
+
+  /** Rows refused when they were loaded (they stay refused until a load finds them valid). */
+  problems(): ContentError[] {
+    return [...this.refused.values()];
+  }
 
   private static plan(entries: PublishEntry[], existing: Meta[]): PublishItem[] {
     const byKey = new Map<string, Meta[]>();
@@ -176,7 +272,9 @@ export class DbDefinitionStore {
     let refreshed = 0;
     if (opts.dryRun || !entries.length) {
       const items = await this.plan(entries);
-      return summary(items, false, false);
+      return opts.dryRun
+        ? { ...summary(items, false, false), olderSchema: this.olderSchema() }
+        : summary(items, false, false);
     }
     // BEGIN IMMEDIATE: one publisher at a time across processes (the CLI, the portal editor).
     const outcome = writeTx(this.db, (tx) => {
@@ -187,7 +285,7 @@ export class DbDefinitionStore {
       if (items.some((i) => i.action === 'refused'))
         return { items, applied: false, changed: [] as string[] };
       const now = this.now();
-      const restored = this.restoreKeyOrder(
+      const restored = this.refreshUnchanged(
         tx,
         entries.filter((_, i) => items[i]!.action === 'unchanged'),
       );
@@ -204,6 +302,7 @@ export class DbDefinitionStore {
               source: e.source ?? 'git',
               body: e.def,
               sha256: e.sha256,
+              schemaVersion: this.schemaVersion,
               authorOid: e.authorOid ?? null,
               approverOid: e.approverOid ?? null,
               createdAt: now,
@@ -226,10 +325,12 @@ export class DbDefinitionStore {
   }
 
   /**
-   * Rewrites the stored body of unchanged versions (same sha256) whose key order differs from the authored file, and
-   * returns their record keys. The content is identical; only the order of object keys is restored.
+   * Unchanged versions (same sha256) published again: a stored body that differs from what this publish parsed from
+   * the same file (key order from the jsonb era, or defaults a newer schema adds) is rewritten, and the row is stamped
+   * with the current content schema version — the body is now exactly what the current schemas made of the file.
+   * Returns the record keys whose body changed (only those are announced; a new stamp alone changes nothing served).
    */
-  private restoreKeyOrder(tx: Tx, unchanged: PublishEntry[]): string[] {
+  private refreshUnchanged(tx: Tx, unchanged: PublishEntry[]): string[] {
     if (!unchanged.length) return [];
     const rows = tx
       .select({
@@ -238,6 +339,7 @@ export class DbDefinitionStore {
         key: definitions.key,
         version: definitions.version,
         body: definitions.body,
+        schemaVersion: definitions.schemaVersion,
       })
       .from(definitions)
       .where(inArray(definitions.key, [...new Set(unchanged.map((e) => e.def.id))]))
@@ -247,11 +349,46 @@ export class DbDefinitionStore {
       const row = rows.find(
         (r) => r.kind === e.def.kind && r.key === e.def.id && r.version === e.def.version,
       );
-      if (!row || JSON.stringify(row.body) === JSON.stringify(e.def)) continue;
-      tx.update(definitions).set({ body: e.def }).where(eq(definitions.id, row.id)).run();
-      restored.add(recordKey(e.def.kind, e.def.id));
+      if (!row) continue;
+      const sameBody = JSON.stringify(row.body) === JSON.stringify(e.def);
+      if (sameBody && row.schemaVersion === this.schemaVersion) continue;
+      tx.update(definitions)
+        .set(
+          sameBody
+            ? { schemaVersion: this.schemaVersion }
+            : { body: e.def, schemaVersion: this.schemaVersion },
+        )
+        .where(eq(definitions.id, row.id))
+        .run();
+      if (!sameBody) restored.add(recordKey(e.def.kind, e.def.id));
     }
     return [...restored].sort();
+  }
+
+  /** Published and retired versions stamped with an older content schema version, each checked against the current one. */
+  private olderSchema(): OlderSchemaRow[] {
+    const rows = this.db
+      .select()
+      .from(definitions)
+      .where(and(lt(definitions.schemaVersion, this.schemaVersion), inArray(definitions.status, LIVE)))
+      .all();
+    return rows
+      .map((row) => {
+        const check = checkStoredBody(row, row.body);
+        return {
+          kind: row.kind,
+          key: row.key,
+          version: row.version,
+          status: statusOf(row.status),
+          schemaVersion: row.schemaVersion,
+          problems: check.ok ? [] : check.problems,
+        };
+      })
+      .sort(
+        (a, b) =>
+          recordKey(a.kind, a.key).localeCompare(recordKey(b.kind, b.key)) ||
+          compareSemVer(a.version, b.version),
+      );
   }
 
   /** The latest version of `key` when it is retired (null when the latest is published, or nothing is). */
@@ -259,7 +396,7 @@ export class DbDefinitionStore {
     const latest = latestOf(await this.metasOf(kind, key));
     if (latest?.status !== 'retired') return null;
     const [row] = await this.db.select().from(definitions).where(eq(definitions.id, latest.id)).limit(1);
-    return row ? toRecord(row) : null;
+    return row ? this.toRecord(row) : null;
   }
 
   /** Id, version and status of every live version of one key. */
@@ -285,12 +422,12 @@ export class DbDefinitionStore {
           ),
         )
         .limit(1);
-      return row ? toRecord(row) : null;
+      return row ? this.toRecord(row) : null;
     }
     const latest = latestOf(await this.metasOf(kind, key));
     if (!latest || latest.status === 'retired') return null;
     const [row] = await this.db.select().from(definitions).where(eq(definitions.id, latest.id)).limit(1);
-    return row ? toRecord(row) : null;
+    return row ? this.toRecord(row) : null;
   }
 
   /** Latest non-retired version of every key (optionally one kind). */
@@ -318,9 +455,16 @@ export class DbDefinitionStore {
       .map((m) => m.id);
     if (!ids.length) return [];
     const rows = await this.db.select().from(definitions).where(inArray(definitions.id, ids));
-    return rows
-      .map(toRecord)
-      .sort((a, b) => recordKey(a.kind, a.key).localeCompare(recordKey(b.kind, b.key)));
+    // A refused row is left out of the list (it is in problems() and the log); the rest are served.
+    const records: DefinitionRecord[] = [];
+    for (const row of rows) {
+      try {
+        records.push(this.toRecord(row));
+      } catch (err) {
+        if (!(err instanceof AppError) || err.code !== 'definition_unavailable') throw err;
+      }
+    }
+    return records.sort((a, b) => recordKey(a.kind, a.key).localeCompare(recordKey(b.kind, b.key)));
   }
 
   /** Every version of one key, newest first (history views). */
@@ -341,7 +485,7 @@ export class DbDefinitionStore {
     return rows
       .map((r) => ({
         ...r,
-        status: r.status === 'retired' ? ('retired' as const) : ('published' as const),
+        status: statusOf(r.status),
         source: r.source === 'portal' ? ('portal' as const) : ('git' as const),
       }))
       .sort((a, b) => compareSemVer(b.version, a.version));

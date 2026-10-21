@@ -28,11 +28,15 @@ function routesFromTree(tree: string): string[] {
   return out;
 }
 
+// The API also serves the built web app (`GET *`) when `portal/apps/web/dist` exists; that is the SPA, not an API
+// route, and whether a checkout has a build must not decide this test.
+const NO_WEB_BUILD = { WEB_DIST_DIR: path.join(repoRoot, 'tests', 'no-web-build') };
+
 async function registered(mode: 'mock' | 'entra'): Promise<string[]> {
   const t =
     mode === 'mock'
-      ? await makeApp(mockConfig())
-      : await makeApp(entraConfig(), { auth: new FakeAuthClient() });
+      ? await makeApp(mockConfig(NO_WEB_BUILD))
+      : await makeApp(entraConfig(NO_WEB_BUILD), { auth: new FakeAuthClient() });
   try {
     await t.app.ready();
     return routesFromTree(t.app.printRoutes({ commonPrefix: false }));

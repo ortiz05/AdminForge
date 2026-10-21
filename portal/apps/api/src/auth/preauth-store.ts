@@ -1,6 +1,7 @@
-import { eq, lt } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import { count, eq, gt, lt } from 'drizzle-orm';
+import { writeTx, type Db } from '../db/client';
 import { preauth } from '../db/schema';
+import { AppError } from '../errors';
 import type { AppKind } from './types';
 
 /** Extra data carried through an arm round trip (audited at the callback), or the schedule a grant is for. */
@@ -32,7 +33,41 @@ export interface PreauthRecord {
 
 export const PREAUTH_TTL_MS = 10 * 60_000;
 
+/**
+ * Round trips that may be pending at once (S-28). Every anonymous `GET /auth/login` writes one, on the one SQLite
+ * writer, and the per-address limits don't bound the table when many addresses send them. Beyond this many unexpired
+ * rows a new sign-in start is refused with `signin_busy` and nothing is written; arming and a schedule's consent (which
+ * need a signed-in session and are limited per session) still start. Far above what ~50 people signing in at once need.
+ */
+export const PREAUTH_MAX_PENDING = 5_000;
+
+export interface PreauthStoreOptions {
+  /** Default PREAUTH_MAX_PENDING. */
+  maxPending?: number;
+}
+
+/** 503: the pending sign-ins are full; the person waits for them to expire. */
+export const signinBusy = () =>
+  new AppError(
+    503,
+    'signin_busy',
+    'AdminForge has too many sign-ins in progress right now, so it didn’t start yours.',
+    {
+      hint: 'Wait a few minutes, then sign in again. If it keeps happening, give a portal administrator the reference.',
+    },
+  );
+
+/** Only sign-ins start without a session; the cap applies to them. */
+const capped = (record: PreauthRecord) => record.sessionIdHash === null;
+
+/**
+ * When `record`'s round trip started: every record is written with `expiresAt` = start + PREAUTH_TTL_MS
+ * (`beginRoundTrip`), so the rows still pending then are those that expire after it — no clock of the store's own.
+ */
+const startOf = (record: PreauthRecord) => new Date(record.expiresAt.getTime() - PREAUTH_TTL_MS);
+
 export interface PreauthStore {
+  /** Writes the record; a sign-in start beyond PREAUTH_MAX_PENDING pending rows throws `signin_busy` instead. */
   put(record: PreauthRecord): Promise<void>;
   /** Removes and returns the record (single use). Expiry is checked by the caller. */
   take(state: string): Promise<PreauthRecord | null>;
@@ -40,10 +75,29 @@ export interface PreauthStore {
 }
 
 export class SqlitePreauthStore implements PreauthStore {
-  constructor(private readonly db: Db) {}
+  private readonly maxPending: number;
+  constructor(
+    private readonly db: Db,
+    opts: PreauthStoreOptions = {},
+  ) {
+    this.maxPending = opts.maxPending ?? PREAUTH_MAX_PENDING;
+  }
 
   async put(record: PreauthRecord): Promise<void> {
-    await this.db.insert(preauth).values(record);
+    // The count and the insert in one write transaction: two sign-ins can't both take the last place.
+    const written = writeTx(this.db, (tx) => {
+      if (capped(record)) {
+        const [row] = tx
+          .select({ n: count() })
+          .from(preauth)
+          .where(gt(preauth.expiresAt, startOf(record)))
+          .all();
+        if ((row?.n ?? 0) >= this.maxPending) return false;
+      }
+      tx.insert(preauth).values(record).run();
+      return true;
+    });
+    if (!written) throw signinBusy();
   }
 
   async take(state: string): Promise<PreauthRecord | null> {
@@ -73,8 +127,18 @@ export class SqlitePreauthStore implements PreauthStore {
 
 export class MemoryPreauthStore implements PreauthStore {
   readonly rows = new Map<string, PreauthRecord>();
+  private readonly maxPending: number;
+  constructor(opts: PreauthStoreOptions = {}) {
+    this.maxPending = opts.maxPending ?? PREAUTH_MAX_PENDING;
+  }
 
   async put(record: PreauthRecord): Promise<void> {
+    if (capped(record)) {
+      const start = startOf(record).getTime();
+      let pending = 0;
+      for (const r of this.rows.values()) if (r.expiresAt.getTime() > start) pending++;
+      if (pending >= this.maxPending) throw signinBusy();
+    }
     this.rows.set(record.state, structuredClone(record));
   }
 

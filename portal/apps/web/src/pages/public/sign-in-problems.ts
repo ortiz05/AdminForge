@@ -87,6 +87,14 @@ const SIGN_IN: Record<string, ProblemCopy> = {
     next: 'Wait a moment and try again.',
     primary: 'sign-in',
   },
+  signin_busy: {
+    title: 'AdminForge is busy with other sign-ins',
+    body: 'Too many sign-ins were started in the last few minutes, so AdminForge didn’t start yours.',
+    next: 'Wait a few minutes, then sign in again.',
+    admin:
+      'More than 5,000 sign-ins are pending at once, which usually means requests are flooding the sign-in address. Check the Ingress logs for where they come from.',
+    primary: 'sign-in',
+  },
   rate_limited: {
     title: 'Too many sign-in attempts',
     body: 'AdminForge paused sign-ins from this browser for a moment.',

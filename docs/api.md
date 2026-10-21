@@ -281,6 +281,9 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
   invalid or > 4096 chars). `account=choose` — show Entra's account picker (`prompt=select_account`); otherwise the
   current session's UPN (if any) is sent as `login_hint`.
 - **Response:** 302 to the Read app's Entra authorize URL; sets the binding cookie.
+- **Errors:** `signin_busy` 503 — 5,000 sign-ins are already pending (started in the last 10 minutes and not
+  finished), so this one isn't started and nothing is written (a navigation → problem page). Arming and schedule
+  consent, which need a session, still start.
 - **Mock mode:** ends any current session, signs in as the synthetic `avery@example.com` (tenant `Example Org`) with
   `MOCK_ROLES`, and 302s to `returnTo`. `claims` and `account` are ignored.
 

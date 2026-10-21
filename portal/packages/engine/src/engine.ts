@@ -16,6 +16,7 @@ import {
   isTransientError,
   retryAfterMs,
   RunCancelled,
+  RunInterrupted,
   StepError,
   toRunError,
 } from './errors';
@@ -95,7 +96,16 @@ export interface EngineOptions {
 }
 
 export interface ExecuteOptions {
+  /**
+   * Aborts the step in flight. Its reason says why: a `RunInterrupted` (shutdown, lost run lock) leaves the run
+   * resumable from its last checkpoint; any other abort is a person's cancel and ends the run `cancelled`.
+   */
   signal?: AbortSignal;
+  /**
+   * A graceful stop (shutdown): the step in flight may finish, and the run stops at its next checkpoint, resumable.
+   * Retry backoffs are cut short. The process aborts `signal` with `RunInterrupted('shutdown')` once its grace is over.
+   */
+  interrupt?: AbortSignal;
   /** Child playbook depth (0 for a top-level run). */
   depth?: number;
 }
@@ -104,7 +114,9 @@ type Flow =
   | { kind: 'ok' }
   | { kind: 'park'; status: RunStatus; wakeAt?: Date }
   | { kind: 'fail'; error: RunError; policy: 'fail' | 'compensate'; needsReview?: boolean }
-  | { kind: 'cancelled' };
+  | { kind: 'cancelled' }
+  /** Shutdown or a lost run lock: the run stops without being written and resumes from its last checkpoint. */
+  | { kind: 'interrupted'; why: RunInterrupted };
 
 const OK: Flow = { kind: 'ok' };
 
@@ -190,6 +202,8 @@ class Execution {
   private readonly records = new Map<string, StepRecord>();
   private seq = 1;
   private readonly ac = new AbortController();
+  /** A graceful stop: no new step starts (ExecuteOptions.interrupt). */
+  private readonly interrupt: AbortSignal | undefined;
   private readonly dryRun: boolean;
   private readonly byId = new Map<string, Step>();
   private lastCancelCheck = 0;
@@ -227,10 +241,47 @@ class Execution {
       this.seq = Math.max(this.seq, r.seq + 1);
     }
     for (const s of allSteps(def)) this.byId.set(s.id, s);
-    if (opts.signal) {
-      if (opts.signal.aborted) this.ac.abort();
-      else opts.signal.addEventListener('abort', () => this.ac.abort(), { once: true });
+    // The reason travels with the abort: an interrupt (shutdown, lost lock) is not a cancel.
+    const signal = opts.signal;
+    if (signal) {
+      if (signal.aborted) this.ac.abort(signal.reason);
+      else signal.addEventListener('abort', () => this.ac.abort(signal.reason), { once: true });
     }
+    this.interrupt = opts.interrupt;
+  }
+
+  // ───────────────────────────── stopping ─────────────────────────────
+
+  /** Why the run must stop now, resumable: an interrupt on the signal, else a graceful stop; null otherwise. */
+  private interruption(): RunInterrupted | null {
+    const hard = RunInterrupted.from(this.ac.signal);
+    if (hard) return hard;
+    if (!this.interrupt?.aborted) return null;
+    return RunInterrupted.from(this.interrupt) ?? new RunInterrupted('shutdown');
+  }
+
+  /** The flow when the signal aborted: interrupted (resumable) for an interrupt, cancelled for anything else. */
+  private stopped(): Flow {
+    const why = RunInterrupted.from(this.ac.signal);
+    return why ? { kind: 'interrupted', why } : { kind: 'cancelled' };
+  }
+
+  /** After a lost lock this worker no longer owns the run: it records nothing more (another worker drives it). */
+  private disowned(): RunInterrupted | null {
+    const why = RunInterrupted.from(this.ac.signal);
+    return why && !why.owned ? why : null;
+  }
+
+  /**
+   * Interrupted: the run and the step in flight are left as they are (`running`), so the next worker continues from
+   * the last checkpoint. On a shutdown the run's log says so; after a lost lock nothing is written.
+   */
+  private async pause(why: RunInterrupted): Promise<RunOutcome> {
+    if (why.owned)
+      await this.emit(null, { type: 'log', level: 'info', data: { message: why.message } }).catch(
+        () => undefined,
+      );
+    return { status: this.run.status };
   }
 
   // ───────────────────────────── run lifecycle ─────────────────────────────
@@ -257,7 +308,9 @@ class Execution {
     try {
       flow = await this.runSteps(this.topSteps(), this.top);
     } catch (err) {
-      if (err instanceof RunCancelled || this.ac.signal.aborted) flow = { kind: 'cancelled' };
+      const why = RunInterrupted.from(err);
+      if (why) flow = { kind: 'interrupted', why };
+      else if (err instanceof RunCancelled || this.ac.signal.aborted) flow = this.stopped();
       else throw err;
     }
     return this.finish(flow);
@@ -313,6 +366,8 @@ class Execution {
       }
       case 'cancelled':
         return this.end('cancelled', {});
+      case 'interrupted':
+        return this.pause(flow.why);
       case 'fail':
         if (flow.needsReview) return this.end('needs_review', { error: flow.error });
         if (flow.policy === 'compensate') return this.finishCompensation(flow.error);
@@ -549,9 +604,9 @@ class Execution {
     return this.limits.maxRunMs - (this.clock.now().getTime() - started - this.humanWaitMs());
   }
 
-  /** Before each step: cancellation (signal or stored status) and the run time limit. */
+  /** Before each step: cancellation (signal or stored status), an interrupt, and the run time limit. */
   private async checkpoint(): Promise<Flow | null> {
-    if (this.ac.signal.aborted) return { kind: 'cancelled' };
+    if (this.ac.signal.aborted) return this.stopped();
     const now = this.clock.now().getTime();
     if (now - this.lastCancelCheck >= CANCEL_CHECK_MS || this.lastCancelCheck === 0) {
       this.lastCancelCheck = now;
@@ -561,6 +616,8 @@ class Execution {
         return { kind: 'cancelled' };
       }
     }
+    const why = this.interruption();
+    if (why) return { kind: 'interrupted', why };
     if (this.remainingMs() <= 0) {
       return {
         kind: 'fail',
@@ -986,6 +1043,9 @@ class Execution {
         } else {
           result = await this.withTimeout(a.timeout, stepAc, () => handler.execute(prep, ctx));
         }
+        // The lock lapsed while the call was out (another worker has the run): its result is not ours to record.
+        const lost = this.disowned();
+        if (lost) return { kind: 'flow', flow: { kind: 'interrupted', why: lost } };
         if (result.park) {
           await this.close(rec, frame.actor, {
             status: 'waiting',
@@ -1027,6 +1087,10 @@ class Execution {
         });
         return { kind: 'ok', rec };
       } catch (err) {
+        // Interrupted mid-call: whether the call took effect is unknown, so the record stays `running` and the next
+        // worker decides (retried, or `needs_review` for an `idempotent: false` step).
+        const why = RunInterrupted.from(this.ac.signal) ?? RunInterrupted.from(err);
+        if (why) return { kind: 'flow', flow: { kind: 'interrupted', why } };
         if (err instanceof IdentityUnavailable) {
           await this.close(rec, frame.actor, {
             status: 'waiting',
@@ -1053,9 +1117,14 @@ class Execution {
             },
           });
           try {
-            await this.clock.sleep(delay, this.ac.signal);
+            await this.clock.sleep(
+              delay,
+              this.interrupt ? AbortSignal.any([this.ac.signal, this.interrupt]) : this.ac.signal,
+            );
           } catch {
-            return { kind: 'flow', flow: { kind: 'cancelled' } };
+            if (this.ac.signal.aborted) return { kind: 'flow', flow: this.stopped() };
+            const why = this.interruption();
+            return { kind: 'flow', flow: why ? { kind: 'interrupted', why } : { kind: 'cancelled' } };
           }
           attempt++;
           continue;
@@ -1225,7 +1294,8 @@ class Execution {
     let stop = false;
     let failure: Extract<Flow, { kind: 'fail' }> | null = null;
     let park: Extract<Flow, { kind: 'park' }> | null = null;
-    let cancelled = false;
+    /** Cancelled or interrupted: the loop stops as it is (an interrupted one resumes later). */
+    let halted: Extract<Flow, { kind: 'cancelled' | 'interrupted' }> | null = null;
 
     const iterate = async (index: number) => {
       const iframe: Frame = {
@@ -1255,7 +1325,7 @@ class Execution {
         park ??= flow;
       } else {
         stop = true;
-        cancelled = true;
+        halted ??= flow;
       }
       if (flow.kind === 'ok' || flow.kind === 'fail') {
         done++;
@@ -1270,7 +1340,7 @@ class Execution {
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, items.length)) }, worker));
 
-    if (cancelled) return { kind: 'cancelled' };
+    if (halted) return halted;
     const output = results.filter((r): r is Record<string, unknown> => r !== undefined);
     if (failure) {
       const f = failure as Extract<Flow, { kind: 'fail' }>;
@@ -1701,7 +1771,10 @@ class Execution {
       .sort((a, b) => b.seq - a.seq);
     const failures: Array<{ stepId: string; path: string; message: string }> = [];
     for (const rec of candidates) {
-      if (this.ac.signal.aborted) return this.end('cancelled', {});
+      const halt = this.ac.signal.aborted ? this.stopped() : null;
+      if (halt?.kind === 'cancelled') return this.end('cancelled', {});
+      const why = halt?.kind === 'interrupted' ? halt.why : this.interruption();
+      if (why) return this.pause(why);
       const step = this.byId.get(rec.stepId)!;
       const comp = step.compensate!;
       const cpath = `${rec.path}#compensate`;
@@ -1745,7 +1818,7 @@ class Execution {
         compensation: true,
       });
       if (out.kind === 'flow') {
-        if (out.flow.kind === 'park') return this.finish(out.flow);
+        if (out.flow.kind === 'park' || out.flow.kind === 'interrupted') return this.finish(out.flow);
         if (out.flow.kind === 'cancelled') return this.end('cancelled', {});
         continue;
       }

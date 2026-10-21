@@ -3,6 +3,7 @@ import {
   hasWriteSteps,
   isParked,
   isTerminal,
+  RunInterrupted,
   type AutomationDefinition,
   type Engine,
   type RunError,
@@ -152,11 +153,17 @@ export async function pinnedDefinition(
  * Consumes run jobs: lock the run (one executor per run), load its pinned definition, let the engine drive it from
  * its checkpoint, and re-enqueue `wait` wake-ups. Cancellation arrives as a `run_events` notification and aborts the
  * in-flight step. A periodic sweep expires approvals and re-enqueues runs whose job was lost.
+ *
+ * Stopping is not cancelling (D-01): on shutdown runs stop at their next checkpoint and the steps still in flight
+ * after the queue's grace are interrupted (`RunInterrupted('shutdown')`); a lapsed run lock interrupts the run at once
+ * (`lock_lost`). Either way the run stays `running` and resumable, and its job is queued again.
  */
 export class RunWorker {
   private readonly active = new Map<string, AbortController>();
   private unsubscribe: (() => void) | null = null;
   private timer: NodeJS.Timeout | null = null;
+  /** Aborted when this process stops: every run (children included) stops at its next checkpoint. */
+  private draining = new AbortController();
 
   constructor(
     private readonly deps: {
@@ -177,6 +184,7 @@ export class RunWorker {
   ) {}
 
   async start(concurrency: number, opts: { sweep?: boolean } = {}): Promise<void> {
+    this.draining = new AbortController();
     this.unsubscribe = this.deps.bus.subscribe('*', (n) => {
       if (n.type === 'run' && n.status === 'cancelled') this.active.get(n.runId)?.abort();
     });
@@ -193,11 +201,30 @@ export class RunWorker {
     }
   }
 
+  /** The graceful-stop signal runs are executed with (child runs stop at their checkpoints too). */
+  get interrupt(): AbortSignal {
+    return this.draining.signal;
+  }
+
+  /** Run ids being driven by this process right now (logged when a shutdown runs out of time). */
+  activeRuns(): string[] {
+    return [...this.active.keys()];
+  }
+
+  /**
+   * Graceful stop: runs stop at their next checkpoint; the queue stops claiming jobs, gives the steps in flight its
+   * grace, then interrupts them, and their jobs are queued again (the next process resumes the runs). Cancellations
+   * still arrive meanwhile. Stops the queue too.
+   */
   async stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.draining.abort(new RunInterrupted('shutdown'));
+    await this.deps.queue.stop();
     this.unsubscribe?.();
-    for (const ac of this.active.values()) ac.abort();
+    this.unsubscribe = null;
+    // Anything the queue left running is interrupted too — never cancelled.
+    for (const ac of this.active.values()) ac.abort(new RunInterrupted('shutdown'));
   }
 
   /** One job: drive `runId` (or its root) until it finishes or parks. */
@@ -216,9 +243,11 @@ export class RunWorker {
     const lock = await repo.tryLock(runId);
     if (!lock) throw new RetryLater();
     const ac = new AbortController();
-    const onAbort = () => ac.abort();
-    signal?.addEventListener('abort', onAbort, { once: true });
-    lock.lost?.addEventListener('abort', onAbort, { once: true });
+    // The queue aborts a job only when this process stops; a lapsed lock means another worker may drive the run now.
+    const onStop = () => ac.abort(new RunInterrupted('shutdown'));
+    const onLost = () => ac.abort(new RunInterrupted('lock_lost'));
+    signal?.addEventListener('abort', onStop, { once: true });
+    lock.lost?.addEventListener('abort', onLost, { once: true });
     this.active.set(runId, ac);
     try {
       row = await repo.getRun(runId);
@@ -249,8 +278,21 @@ export class RunWorker {
       // `user.roles` for the initiator's first steps.
       if (row.identity === 'delegated')
         await this.deps.identity.liveSession(row.sessionHash, {}, row.initiatorOid).catch(() => null);
-      const outcome = await this.deps.engine.execute(runId, def, { signal: ac.signal });
+      const outcome = await this.deps.engine.execute(runId, def, {
+        signal: ac.signal,
+        interrupt: this.draining.signal,
+      });
       if (outcome.wakeAt) await this.deps.queue.enqueue(runId, { startAfter: outcome.wakeAt });
+      const why =
+        RunInterrupted.from(ac.signal) ??
+        (this.draining.signal.aborted ? new RunInterrupted('shutdown') : null);
+      if (why && outcome.status === 'running' && !outcome.wakeAt) {
+        // Interrupted, and resumable from its last checkpoint. A lost lock: try again shortly (whoever holds the run
+        // now finishes it; if no one does, this worker resumes it). A shutdown: the next process resumes it.
+        if (!why.owned) throw new RetryLater('The run lock lapsed; trying again shortly');
+        await this.deps.queue.enqueue(runId);
+        return;
+      }
       if (
         outcome.status === 'succeeded' &&
         def.refreshTokens &&
@@ -263,8 +305,8 @@ export class RunWorker {
           .refreshTokens(row.sessionHash)
           .catch((err: unknown) => this.deps.log?.warn({ err, runId }, 'token refresh after run failed'));
     } finally {
-      signal?.removeEventListener('abort', onAbort);
-      lock.lost?.removeEventListener('abort', onAbort);
+      signal?.removeEventListener('abort', onStop);
+      lock.lost?.removeEventListener('abort', onLost);
       this.active.delete(runId);
       await lock.release();
     }

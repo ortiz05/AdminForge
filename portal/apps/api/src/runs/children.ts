@@ -4,6 +4,7 @@ import {
   IdentityUnavailable,
   isTerminal,
   redactedValueError,
+  RunInterrupted,
   StepError,
   type Actor,
   validateInputs,
@@ -43,6 +44,8 @@ export class RunChildRunner implements ChildRunner {
       audit: AuditWriter;
       env: () => Record<string, unknown>;
       now: () => Date;
+      /** The process's graceful-stop signal (RunWorker.interrupt): a child stops at its checkpoints like its root. */
+      interrupt?: () => AbortSignal | undefined;
     },
   ) {}
 
@@ -133,7 +136,20 @@ export class RunChildRunner implements ChildRunner {
     }
     if (!isTerminal(row.status)) {
       this.deps.store.bind(id, def);
-      const out = await this.deps.engine().execute(id, def, { depth: req.depth, signal: req.signal });
+      const interrupt = this.deps.interrupt?.();
+      const out = await this.deps.engine().execute(id, def, {
+        depth: req.depth,
+        signal: req.signal,
+        ...(interrupt ? { interrupt } : {}),
+      });
+      // Interrupted (shutdown, lost lock): the child stays resumable, and so does the parent's step that runs it —
+      // resuming the parent continues this same child (childRunId).
+      if (out.status === 'running' && !out.wakeAt) {
+        const why =
+          RunInterrupted.from(req.signal) ??
+          (interrupt?.aborted ? (RunInterrupted.from(interrupt) ?? new RunInterrupted('shutdown')) : null);
+        if (why) throw why;
+      }
       return {
         runId: id,
         status: out.status,

@@ -156,7 +156,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     roleCheck: new RoleCheck(ctx),
     ...(log ? { log } : {}),
   });
-  const holder: { engine?: Engine } = {};
+  const holder: { engine?: Engine; worker?: RunWorker } = {};
   const children = new RunChildRunner({
     repo,
     store,
@@ -166,6 +166,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     audit: ctx.audit,
     env,
     now: ctx.now,
+    interrupt: () => holder.worker?.interrupt,
   });
   const engine = (holder.engine = new Engine({
     store,
@@ -179,7 +180,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     ...(opts.limits ? { limits: opts.limits } : {}),
     rolesOf: (actor) => (actor.oid ? (identity.roles.get(actor.oid) ?? []) : []),
   }));
-  const worker = new RunWorker({
+  const worker = (holder.worker = new RunWorker({
     repo,
     queue,
     engine,
@@ -201,7 +202,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
           for (const service of ['graph', 'arm'] as const)
             await ctx.broker.get(session, service, mode, { forceRefresh: true });
       }),
-  });
+  }));
   const service = new RunService({ repo, queue, store, definitions, audit: ctx.audit, env, now: ctx.now });
 
   let started = false;
@@ -238,8 +239,8 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     async stop() {
       started = false;
       heartbeat?.stop();
+      // Interrupts, never cancels (D-01): runs stop at a checkpoint and their jobs are queued again (stops the queue).
       await worker.stop();
-      await queue.stop();
       await bus.stop();
       await secrets.stop();
     },

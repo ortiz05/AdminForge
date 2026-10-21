@@ -53,6 +53,36 @@ export class RunCancelled extends Error {
   }
 }
 
+/**
+ * The run was stopped for a reason that is not a person's (D-01): the process is shutting down (`shutdown`), or it
+ * lost the run's lock to another worker after stalling past the lease (`lock_lost`). Used as the reason of the abort
+ * signal passed to `Engine.execute` (a plain abort, without it, is a person's cancel), and thrown by ports that notice
+ * it (a child run that was interrupted). The engine leaves the run resumable: the step in flight stays `running` and
+ * the run is not written, so the next worker continues from the last checkpoint — an interrupted idempotent step is
+ * retried, an `idempotent: false` one ends `needs_review`.
+ */
+export class RunInterrupted extends Error {
+  constructor(readonly reason: 'shutdown' | 'lock_lost') {
+    super(
+      reason === 'shutdown'
+        ? 'AdminForge is restarting. The run continues from its last checkpoint once it is back.'
+        : 'Another worker took this run over.',
+    );
+    this.name = 'RunInterrupted';
+  }
+
+  /** Whether this worker still holds the run (a shutdown) and may record what it has finished; not after a lost lock. */
+  get owned(): boolean {
+    return this.reason === 'shutdown';
+  }
+
+  /** The interrupt behind an aborted signal (its reason) or a thrown error; null for anything else (a cancel). */
+  static from(value: unknown): RunInterrupted | null {
+    const v = value instanceof AbortSignal ? (value.aborted ? value.reason : null) : value;
+    return v instanceof RunInterrupted ? v : null;
+  }
+}
+
 /** 429 / 5xx / network failures (connectors' ApiError), or an error marked `transient: true` (StepError option). */
 export function isTransientError(err: unknown): boolean {
   if (err instanceof StepError) return err.opts.transient === true;

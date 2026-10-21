@@ -301,6 +301,8 @@ export class InProcessRunQueue implements RunQueue {
   >();
   private readonly pendingStart = new Set<string>();
   private readonly inflight = new Set<Promise<void>>();
+  /** One per running job: aborted when stop() runs out of grace (like the SQLite queue). */
+  private readonly controllers = new Set<AbortController>();
   private stopped = false;
   /** Errors from handlers (tests assert none). */
   readonly errors: unknown[] = [];
@@ -308,6 +310,8 @@ export class InProcessRunQueue implements RunQueue {
   constructor(
     private readonly log?: Log,
     private readonly retryDelayMs = 50,
+    /** How long stop() waits for running jobs before aborting them. */
+    private readonly gracefulMs = 10_000,
   ) {}
 
   async start(): Promise<void> {}
@@ -382,8 +386,10 @@ export class InProcessRunQueue implements RunQueue {
       do {
         s.again = false;
         await this.acquire();
+        const ac = new AbortController();
+        this.controllers.add(ac);
         try {
-          await this.handler!(runId, new AbortController().signal);
+          await this.handler!(runId, ac.signal);
           failures = 0;
         } catch (err) {
           if (!(err instanceof RetryLater)) {
@@ -394,6 +400,7 @@ export class InProcessRunQueue implements RunQueue {
           await new Promise((r) => setTimeout(r, this.retryDelayMs));
           s.again = true;
         } finally {
+          this.controllers.delete(ac);
           this.release();
         }
       } while (s.again && !this.stopped);
@@ -411,9 +418,13 @@ export class InProcessRunQueue implements RunQueue {
     }
   }
 
+  /** Stops taking jobs, gives running ones the grace to finish, then aborts them (as a shutdown). */
   async stop(): Promise<void> {
     this.stopped = true;
     for (const s of this.state.values()) if (s.timer) clearTimeout(s.timer);
-    await Promise.allSettled([...this.inflight]);
+    const running = () => Promise.allSettled([...this.inflight]);
+    await Promise.race([running(), new Promise((r) => setTimeout(r, this.gracefulMs).unref())]);
+    for (const ac of this.controllers) ac.abort();
+    await Promise.race([running(), new Promise((r) => setTimeout(r, 5_000).unref())]);
   }
 }

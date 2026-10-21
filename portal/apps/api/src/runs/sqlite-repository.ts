@@ -102,12 +102,18 @@ export class SqliteRunRepository implements RunRepository {
   /** Called after an event is recorded (runs/module.ts: the run event bus and the browsers' event stream). */
   onNotify: ((n: RunNotification) => void) | null = null;
   private readonly leases: Leases;
+  private readonly lockTtlMs: number;
+  private readonly lockRenewMs: number;
 
   constructor(
     private readonly database: Database,
     private readonly now: () => Date = () => new Date(),
+    /** The run lock's lease and how often its holder renews it (tests shorten both). */
+    opts: { lockTtlMs?: number; lockRenewMs?: number } = {},
   ) {
     this.leases = new Leases(database.sqlite, () => this.now().getTime());
+    this.lockTtlMs = opts.lockTtlMs ?? RUN_LOCK_TTL_MS;
+    this.lockRenewMs = opts.lockRenewMs ?? RUN_LOCK_RENEW_MS;
   }
 
   private get db() {
@@ -361,18 +367,19 @@ export class SqliteRunRepository implements RunRepository {
   async tryLock(runId: string) {
     const name = `run:${runId}`;
     const holder = `${this.database.signals.origin}:${randomUUID()}`;
-    if (!this.leases.tryAcquire(name, holder, RUN_LOCK_TTL_MS)) return null;
+    if (!this.leases.tryAcquire(name, holder, this.lockTtlMs)) return null;
     const lost = new AbortController();
     const renew = setInterval(() => {
       try {
-        if (this.leases.renew(name, holder, RUN_LOCK_TTL_MS)) return;
-        // Expired and taken over (this process stalled for longer than the TTL): stop driving the run.
+        if (this.leases.renew(name, holder, this.lockTtlMs)) return;
+        // Expired, maybe taken over (this process stalled for longer than the TTL): stop driving the run. The worker
+        // interrupts it (never cancels it) and tries again shortly.
         clearInterval(renew);
-        lost.abort(new Error('The run lock lapsed and another worker took the run over.'));
+        lost.abort(new Error('The run lock lapsed; another worker may have taken the run over.'));
       } catch {
         // A busy database: the next renewal (well before the TTL) tries again.
       }
-    }, RUN_LOCK_RENEW_MS);
+    }, this.lockRenewMs);
     renew.unref();
     let released = false;
     return {

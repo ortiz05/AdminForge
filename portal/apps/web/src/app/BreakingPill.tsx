@@ -1,11 +1,13 @@
 import { Link } from '@tanstack/react-router';
-import { SirenIcon, tv } from '@adminforge/ui';
+import { NewspaperIcon, tv } from '@adminforge/ui';
 
 const pill = tv({
   base: [
-    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-crit/40 bg-crit-subtle px-2.5 text-xs font-semibold text-crit',
-    'transition-colors duration-(--af-motion-fast) hover:border-crit',
-    // In write mode the rail turns ember: the pill follows the rail's ink instead of adding a second alarm colour.
+    // Info, not crit: "breaking" covers advisories and deadlines too, and the pill is on every page. The News page
+    // gives each item its own tone (incidents in crit).
+    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-accent/40 bg-accent-subtle px-2.5 text-xs font-semibold text-info',
+    'transition-colors duration-(--af-motion-fast) hover:border-accent',
+    // In write mode the rail turns ember: the pill follows the rail's ink instead of adding a second colour.
     'armed:border-on-armed/40 armed:bg-on-armed/15 armed:text-on-armed armed:hover:border-on-armed',
   ],
 });
@@ -24,7 +26,7 @@ export function BreakingPill({ count }: { count: number }) {
       className={pill()}
       aria-label={`${count} unread breaking ${count === 1 ? 'change' : 'changes'}: open News and changes`}
     >
-      <SirenIcon size={14} weight="fill" aria-hidden className="motion-safe:animate-pulse" />
+      <NewspaperIcon size={14} weight="fill" aria-hidden />
       <span className="tabular-nums">{text}</span>
       <span>new breaking</span>
     </Link>

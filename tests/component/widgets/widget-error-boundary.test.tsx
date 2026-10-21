@@ -39,7 +39,7 @@ function explodingRow(state = { explode: true }) {
   };
 }
 
-let consoleError: ReturnType<typeof vi.spyOn>;
+let consoleError: { mock: { calls: unknown[][] } };
 beforeEach(() => {
   // React and the boundary log the caught error; keep the test output readable.
   consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});

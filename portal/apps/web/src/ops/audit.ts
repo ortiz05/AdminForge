@@ -97,6 +97,8 @@ export interface ChainVerification {
   ok: boolean;
   checked: number;
   brokenAt: number | null;
+  /** From `brokenAt` on the events are keyed with a key the portal doesn't have: unverified, not proven changed. */
+  keyMissing: boolean;
 }
 
 export const auditVerifyQuery = queryOptions({
@@ -108,7 +110,12 @@ export const auditVerifyQuery = queryOptions({
         const o = rec(input);
         const ok = bool(o.ok);
         if (ok === undefined) throw new TypeError('Expected { ok }');
-        return { ok, checked: num(o.checked) ?? 0, brokenAt: num(o.brokenAt) ?? null };
+        return {
+          ok,
+          checked: num(o.checked) ?? 0,
+          brokenAt: num(o.brokenAt) ?? null,
+          keyMissing: bool(o.keyMissing) ?? false,
+        };
       }),
     }),
   staleTime: 5 * 60_000,

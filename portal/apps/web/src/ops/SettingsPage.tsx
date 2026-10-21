@@ -19,7 +19,8 @@ import { Callout, Facts, isForbidden, QueryError, useDocumentTitle } from './ui'
 
 /**
  * GET /api/admin/settings (Portal.Admin) — read-only installation facts. The API answers today:
- *   { authMode, dataMode, contentSource, writeSessionMaxMinutes, apps: { read, write, automation }: boolean, tenant: { name, domain } }
+ *   { authMode, dataMode, contentSource, writeSessionMaxMinutes, writeStepUp, auditChain: { keyed, since?, pinned? },
+ *     apps: { read, write, automation }: boolean, tenant: { name, domain } }
  * and the page also shows these optional fields when present (see the report for the full wish list):
  *   environment: { label, nodeEnv, publicBaseUrl, version } · writeAuthContext · sessionIdleMinutes · sessionAbsoluteHours
  *   content: { watch, definitions, problems } · database: { configured } · apps.<key>: { present, clientId, credential } · apps.runner
@@ -52,6 +53,8 @@ export interface SettingsResponse {
   sessionAbsoluteHours: number | null;
   apps: Array<{ key: string; label: string; purpose: string; status: AppStatus }>;
   database: { configured: boolean | null };
+  /** Whether the audit log is HMAC-keyed (AUDIT_CHAIN_KEY) and since which event; null when the API doesn't say. */
+  auditChain: { keyed: boolean; since: number | null; pinned: boolean } | null;
 }
 
 const APPS: Array<{ key: string; label: string; purpose: string }> = [
@@ -100,6 +103,8 @@ const SettingsParser = parser((input): SettingsResponse => {
   const apps = rec(o.apps);
   const authMode = pick(o, 'authMode') ?? pick(auth, 'mode');
   if (!authMode) throw new TypeError('Expected { authMode }');
+  const chain = rec(o.auditChain);
+  const chainKeyed = bool(chain.keyed);
   return {
     tenant: {
       name: pick(rec(o.tenant), 'name') ?? null,
@@ -129,6 +134,10 @@ const SettingsParser = parser((input): SettingsResponse => {
       return status ? [{ ...a, status }] : [];
     }),
     database: { configured: bool(rec(o.database).configured) ?? null },
+    auditChain:
+      chainKeyed === undefined
+        ? null
+        : { keyed: chainKeyed, since: num(chain.since) ?? null, pinned: bool(chain.pinned) ?? false },
   };
 });
 
@@ -147,6 +156,31 @@ function Present({
     <span className={`inline-flex items-center gap-1.5 font-medium ${ok ? 'text-ok' : 'text-crit'}`}>
       <Glyph size={14} weight="fill" aria-hidden />
       {ok ? yes : no}
+    </span>
+  );
+}
+
+/**
+ * The audit log's key (S-10): keyed since which event, or an Unkeyed warning, with what it means underneath — words
+ * that wrap (a pill truncates on a phone).
+ */
+function AuditChainFact({ chain }: { chain: NonNullable<SettingsResponse['auditChain']> }) {
+  return (
+    <span className="flex min-w-0 flex-col items-start gap-1">
+      {chain.keyed ? (
+        <span>Keyed{chain.since !== null ? ` since event ${chain.since.toLocaleString('en-US')}` : ''}</span>
+      ) : (
+        <StatusPill status="warn" size="sm">
+          Unkeyed
+        </StatusPill>
+      )}
+      <span className="max-w-full text-xs break-words text-fg-3">
+        {!chain.keyed
+          ? 'Set AUDIT_CHAIN_KEY so changing an event needs a key the database doesn’t hold.'
+          : chain.pinned
+            ? 'Changing an event needs the key, and the keyed part is pinned (AUDIT_CHAIN_KEYED_SINCE).'
+            : 'Changing an event needs the key. Set AUDIT_CHAIN_KEYED_SINCE to this event so removing the keyed part is caught too.'}
+      </span>
     </span>
   );
 }
@@ -313,6 +347,11 @@ export function SettingsPage() {
                     : []),
                   ...(s.database.configured !== null
                     ? ([['Database', <Present key="db" ok={s.database.configured} />]] as Array<
+                        [string, ReactNode]
+                      >)
+                    : []),
+                  ...(s.auditChain
+                    ? ([['Audit log', <AuditChainFact key="a" chain={s.auditChain} />]] as Array<
                         [string, ReactNode]
                       >)
                     : []),

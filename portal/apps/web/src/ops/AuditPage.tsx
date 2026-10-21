@@ -57,6 +57,10 @@ function ChainStatus() {
     >
       <StatusPill status="ok">Chain verified ✓ · {v.checked.toLocaleString('en-US')} events</StatusPill>
     </span>
+  ) : v.keyMissing ? (
+    <span title="From this event on the chain is keyed with an audit chain key that isn't configured (AUDIT_CHAIN_PREVIOUS_KEYS), so it can't be checked.">
+      <StatusPill status="crit">Can’t verify from #{v.brokenAt ?? '?'} · key not configured</StatusPill>
+    </span>
   ) : (
     <StatusPill status="crit">Chain broken at #{v.brokenAt ?? '?'}</StatusPill>
   );

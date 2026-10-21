@@ -1499,6 +1499,7 @@ export function settings() {
     contentSource: 'fs',
     writeSessionMaxMinutes: 60,
     writeStepUp: 'freshSignIn',
+    auditChain: { keyed: false },
     apps: { read: true, write: true, automation: false },
     tenant: { name: 'Example Org', domain: 'example.com' },
   };

@@ -5,7 +5,7 @@ Copy what you need into your PR or your notes. Each item links to where it's exp
 ## Your first day
 
 - [ ] Repository access, and you're in the team channel
-- [ ] Node 24, pnpm via `corepack enable`, Docker, Google Chrome, VS Code + YAML extension, Claude Code
+- [ ] Node 24, pnpm via `corepack enable`, Google Chrome, VS Code + YAML extension, Claude Code
       ([setup](01-setup.md))
 - [ ] `pnpm install`; `git config core.hooksPath` prints `.githooks`; optional commit template configured
 - [ ] Mock mode runs at <http://localhost:5173>; you switched roles and armed write access with the dev toolbar
@@ -14,7 +14,7 @@ Copy what you need into your PR or your notes. Each item links to where it's exp
 
 ## Your first week
 
-- [ ] Local Postgres running; DB-backed API tests run instead of skipping
+- [ ] Your env file exists and `init:local` filled it (your own `DATABASE_PATH`, token-cache key); `env check` runs
       ([setup](01-setup.md#give-yourself-a-local-database))
 - [ ] Read guides 3–13 and `CLAUDE.md`; skimmed `SECURITY.md`, `docs/architecture.md`, `docs/api.md` → Conventions
 - [ ] Traced one request end to end in the code: a page's datasource, from `/api/datasources/execute-many` to

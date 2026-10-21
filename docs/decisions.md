@@ -4,17 +4,17 @@ Decisions taken while building AdminForge, in addition to the ADRs in `docs/adr/
 
 ## Open decisions from the plan (D1–D9)
 
-| #   | Decision                | Outcome                                                                                                                                                                                                         |
-| --- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | Git host                | GitHub (`ortiz05/AdminForge`), Actions CI on latest action majors                                                                                                                                               |
-| D2  | Network exposure        | This host; services on `http://localhost:3300`, published to the LAN through Caddy (`tls internal`, port 8443, no root) — TLS is required for any non-localhost origin (`__Host-` cookie, Entra redirect rules) |
-| D3  | Region                  | `eastus` for test resources (`AF_TEST_LOCATION`)                                                                                                                                                                |
-| D4  | Naming prefix           | `adminforge` / `AF_`                                                                                                                                                                                            |
-| D5  | Write step-up           | Conditional Access auth context when `WRITE_AUTH_CONTEXT` is set (needs Entra ID P1); validation tenant has no P1, so step-up is a fresh interactive sign-in (`prompt=login`, `max_age=0`) to the Write app     |
-| D6  | Write session length    | 60 min default, `WRITE_SESSION_MAX_MINUTES` caps it, one extension                                                                                                                                              |
-| D7  | Portal role groups      | `SG-AdminForge-<label>-<Role>` created by provisioning                                                                                                                                                          |
-| D8  | Live validation         | Automated: dedicated test user signs in with password + TOTP (registered once by the live helper); writes only on `AF-Test-*` objects                                                                           |
-| D9  | Content source of truth | Git (`portal/content`) → `adminforge publish` → Postgres; production reads Postgres, dev reads the files with hot reload                                                                                        |
+| #   | Decision                | Outcome                                                                                                                                                                                                           |
+| --- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Git host                | GitHub (`ortiz05/AdminForge`), Actions CI on latest action majors                                                                                                                                                 |
+| D2  | Network exposure        | A Kubernetes Ingress with TLS in front of the one pod (ADR-017; until 2026-10-20 this host through Caddy, `tls internal`) — TLS is required for any non-localhost origin (`__Host-` cookie, Entra redirect rules) |
+| D3  | Region                  | `eastus` for test resources (`AF_TEST_LOCATION`)                                                                                                                                                                  |
+| D4  | Naming prefix           | `adminforge` / `AF_`                                                                                                                                                                                              |
+| D5  | Write step-up           | Conditional Access auth context when `WRITE_AUTH_CONTEXT` is set (needs Entra ID P1); validation tenant has no P1, so step-up is a fresh interactive sign-in (`prompt=login`, `max_age=0`) to the Write app       |
+| D6  | Write session length    | 60 min default, `WRITE_SESSION_MAX_MINUTES` caps it, one extension                                                                                                                                                |
+| D7  | Portal role groups      | `SG-AdminForge-<label>-<Role>` created by provisioning                                                                                                                                                            |
+| D8  | Live validation         | Automated: dedicated test user signs in with password + TOTP (registered once by the live helper); writes only on `AF-Test-*` objects                                                                             |
+| D9  | Content source of truth | Git (`portal/content`) → the app image → `adminforge publish` in the pod → the database (SQLite since 2026-10-20, ADR-016); production reads the database, dev reads the files with hot reload                    |
 
 ## Plan review (2026-10-15)
 
@@ -46,17 +46,18 @@ outcome. Decisions taken in that review:
 - **Delivery:** email through Graph `sendMail` as the automation identity from `AF_MAIL_SENDER`; Teams through
   Workflows webhooks on Microsoft hosts only; recipients and webhooks are always `${ env.X }` configuration. Failure
   alerts fire only when no retry is left. Approval requests notify `AF_APPROVALS_EMAIL` / `AF_APPROVALS_TEAMS_WEBHOOK`.
-- **Self-monitoring:** the worker and scheduler write heartbeats; `/readyz` reports `degraded` when either goes quiet,
+- **Self-monitoring:** the run worker and the scheduler (both in the API process since ADR-016) write heartbeats; `/readyz` reports `degraded` when either goes quiet,
   which the portal-readiness probe catches. `probes.audit-chain` re-walks the audit chain hourly. Every Microsoft call
   is logged as one structured line (template path, status, duration, throttling, request id). OpenTelemetry export is
   optional and not built.
 - **Backups:** `adminforge-backup.timer` (daily, 14 days) with a recorded restore drill (docs/operations.md).
+  Superseded 2026-10-20: volume snapshots and `adminforge db backup` (ADR-016).
 - **Least privilege:** baseline Write-app scopes no content uses were removed; content declares what it needs.
 
 ## Platform
 
 - **TypeScript 7** (native compiler) for all packages; the lint toolchain lives in `tooling/lint` with TypeScript 6 because typescript-eslint needs the classic compiler API.
-- **Latest majors everywhere** (React 19.3, Vite 8, Vitest 5, zod 4.6, Fastify 5, MSAL Node 7, pg-boss 12, ECharts 6, Postgres 18). `pnpm outdated -r` is clean except the deliberate TS 6 in `tooling/lint`.
+- **Latest majors everywhere** (React 19.3, Vite 8, Vitest 5, zod 4.6, Fastify 5, MSAL Node 7, ECharts 6). `pnpm outdated -r` is clean except the deliberate TS 6 in `tooling/lint`.
 - **Fonts**: Fontsource variable packages (Archivo with the width axis, Atkinson Hyperlegible Next and Mono), self-hosted.
 - **Runtime vs tests split**: everything runnable under `portal/`, every test and test-only dependency under `tests/`.
 - **Formatting**: Prettier enforced in CI (`pnpm format:check`); the Claude Code hook formats files as they're written. Content YAML and fixtures are excluded.
@@ -72,7 +73,8 @@ outcome. Decisions taken in that review:
   - Provisioning grants content-declared automation **write** permissions only with
     `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`.
   - Configuration is layered: runtime / admin-only / per-deployment overlay / runner-only files; the host services and
-    `pnpm dev` use separate databases.
+    `pnpm dev` use separate databases. (Since 2026-10-20 the pod reads only its environment — a Secret without the
+    admin-only keys, and a ConfigMap — and `pnpm dev` has a database file of its own.)
   - Failed browser navigations (sign-in, arming, report downloads) land on a public problem page with only a code,
     reference and Microsoft code in the URL; the copy lives in the web app.
   - Deferred (backlog): session-id rotation on arm, keyed audit anchor, re-validating definitions on load.
@@ -108,6 +110,25 @@ outcome. Decisions taken in that review:
   `Function('')` to decide whether to compile validators, so the web app sets `jitless` before anything validates
   (`disableEvalProbe`). Validators run interpreted in the browser (fast enough for its payloads); the API keeps
   compiled ones. Rejected: allowing `unsafe-eval`.
+
+## Storage and deployment (2026-10-20)
+
+- **One SQLite file on a PersistentVolume, owned by one process** (ADR-016; owner decision — PostgreSQL rejected). The
+  API process is also the run worker and the scheduler; the separate services and `RUN_WORKER_IN_PROCESS` /
+  `SCHEDULER_IN_PROCESS` are gone. What Postgres did between processes became tables: `run_jobs` (pg-boss),
+  `signals` (LISTEN/NOTIFY), `leases` (advisory locks); append-only rules are SQLite triggers. Trade-off: SQLite has
+  no roles, so whoever can write the volume can drop the triggers — tamper evidence is the hash chain and its
+  checkpoints in the container log, which must be shipped off the cluster.
+- **Write transactions are synchronous** (`writeTx`, `BEGIN IMMEDIATE`): nothing is awaited inside one, so writers
+  never interleave, also across processes. `tests/guards/sqlite-only.test.ts` refuses async transaction functions,
+  Postgres-only SQL and the `pg` driver outside the one-time importer.
+- **Kubernetes only, one pod** (ADR-017): one replica, `Recreate`, the runner as a sidecar on the pod's loopback, a
+  ReadWriteOncePod volume on block storage. Trade-off: a deploy is a short outage, and there is no scaling out — fine
+  for about 50 engineers at once. Rejected: keeping the systemd host deployment as a second path to maintain.
+- **Content is published from the image** (`kubectl exec … adminforge publish`); the image's `BUILD.json` records
+  whether its content was reviewed, since there is no git checkout in the pod.
+- **The data moves once** with `adminforge db import-postgres`: the audit chain is re-verified and its tail must equal
+  Postgres'; signed-in sessions are not copied, so everyone signs in again.
 
 ## Validation tenant specifics (not tenant identifiers)
 

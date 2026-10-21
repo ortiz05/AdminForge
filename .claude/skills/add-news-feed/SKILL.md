@@ -44,8 +44,10 @@ Microsoft's own public feeds. Read `docs/news.md` first.
    `tests/content/feeds-classify.test.ts` — at least one kept and one dropped look-alike.
 10. **Validate:** `pnpm adminforge validate`, `pnpm --filter @adminforge/tests exec vitest run --project content content/feeds`,
     `pnpm guard`; update the sources table in `docs/news.md`. Then remove `status: draft`.
-11. **Try it once live:** publish, then `node portal/apps/scheduler/dist/main.js --schedule maintenance.news-refresh-hourly`
-    on the host and check the feed's status on `/news` (counts only in anything you paste).
+11. **Try it once live:** against your dev database,
+    `pnpm --filter @adminforge/scheduler exec tsx src/main.ts --schedule maintenance.news-refresh-hourly` (in a
+    deployment, after publishing: `node portal/apps/scheduler/dist/main.js --schedule …` in the pod), then check the
+    feed's status on `/news` (counts only in anything you paste).
 
 ## Common mistakes
 

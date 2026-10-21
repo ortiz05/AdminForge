@@ -10,15 +10,15 @@ layout predictable is what lets several engineers (and Claude Code) work in it w
 ├── portal/                 everything that runs AdminForge
 │   ├── apps/
 │   │   ├── web/            React SPA (Vite, TanStack Router + Query)
-│   │   ├── api/            BFF (Fastify) + run worker (src/worker.ts) + DB schema and migrations (drizzle/)
-│   │   ├── scheduler/      host scheduler (automation identity)
-│   │   └── runner/         PowerShell runner (Node host in src/, PowerShell in ps/, pinned modules)
+│   │   ├── api/            BFF (Fastify), also the run worker and the scheduler; SQLite schema and migrations (drizzle/)
+│   │   ├── scheduler/      scheduler one-shots (--once, --probe, --schedule; automation identity)
+│   │   └── runner/         PowerShell runner, the pod's sidecar (Node host in src/, PowerShell in ps/, pinned modules)
 │   ├── packages/           shared libraries (below)
 │   ├── content/            declarative content: pages, dashboards, reports, playbooks, runbooks, schedules,
 │   │                       probes, connections, feeds, scripts, navigation.yaml
 │   ├── tools/cli/          the `adminforge` CLI: env check, provision, new, validate, test, fixtures, publish, audit (its README is the command reference)
-│   └── deploy/             systemd units, Caddyfile example, dev Postgres compose file, backup and database-role
-│                           scripts (backup/, db/), host README
+│   └── deploy/kubernetes/  the app image (Dockerfile, build-images.sh), kustomize base and example overlay,
+│                           the loader pod (tools/), the deployment runbook (README.md)
 ├── tests/                  ALL tests and test-only dependencies (09-testing.md)
 ├── docs/                   architecture, API, ADRs, decisions, operations, troubleshooting, onboarding (this folder)
 ├── config/example.env      every configuration key, documented — real values never live in the repo
@@ -63,10 +63,11 @@ src/
 ├── config.ts         zod schema for every configuration key (mirrors config/example.env)
 ├── errors.ts         AppError → ApiErrorBody, the error handler, audited denials, problem-page redirects
 ├── routes/<area>.ts  HTTP only: parse, guard, call a service, shape the reply
-├── <feature>/        e.g. schedules/: service.ts (rules), store.ts (interface + in-memory), pg-store.ts (Postgres),
+├── <feature>/        e.g. schedules/: service.ts (rules), store.ts (interface + in-memory), sqlite-store.ts (SQLite),
 │                     types.ts, module.ts (wiring), plus focused helpers (cron.ts, sync.ts, …)
 ├── auth/ security/ execution/   sign-in and sessions; request hardening; the outbound executor and write guards
-└── db/schema.ts      the Drizzle schema; migrations in ../drizzle/ (generated, never edited once applied)
+└── db/              client.ts (the connection, writeTx), schema.ts (the Drizzle schema), signals, leases, backup;
+                      migrations in ../drizzle/ (generated, never edited once applied)
 ```
 
 The [API guide](06-api-guide.md) shows a route, service, store and contract end to end. The runner has its own
@@ -109,12 +110,12 @@ rg "^id:" portal/content/{pages,dashboards,reports,playbooks}
 
 | Thing                     | Convention                                                                                                                                                                                                                                                                                                                                                                        | Example                                               |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| TypeScript modules        | kebab-case `.ts`                                                                                                                                                                                                                                                                                                                                                                  | `delivery-keys.ts`, `pg-store.ts`                     |
+| TypeScript modules        | kebab-case `.ts`                                                                                                                                                                                                                                                                                                                                                                  | `delivery-keys.ts`, `sqlite-store.ts`                 |
 | React components          | PascalCase `.tsx`, one main component per file                                                                                                                                                                                                                                                                                                                                    | `ReportsPage.tsx`, `ScheduleForm.tsx`                 |
 | Content ids               | `<section>.<name>`, lower kebab, dotted; the `portal.` prefix is reserved                                                                                                                                                                                                                                                                                                         | `identity.inactive-users`, `probes.dns-spf`           |
 | Content files             | `pnpm adminforge new <kind> <section>/<name>` writes `<kind folder>/<section>/<name>.<kind>.yaml`                                                                                                                                                                                                                                                                                 | `reports/identity/inactive-users.report.yaml`         |
 | Content sections          | Mostly the area — `identity`, `m365`, `endpoint`, `security`, `azure`, `avd`, `billing` (Exchange, SharePoint and Teams pages keep their `m365.*` ids and folder; their overviews are `exchange.overview` and so on); schedules are grouped by job (`reports/`, `probes/`, `maintenance/`); dashboards, probes, feeds and connections are flat files or folders with an id prefix |                                                       |
-| Tests                     | `<subject>.test.ts(x)`; Postgres-backed `*-pg.test.ts`                                                                                                                                                                                                                                                                                                                            | `tests/api/portal-schedules-create.test.ts`           |
+| Tests                     | `<subject>.test.ts(x)`; database-backed `*-db.test.ts`                                                                                                                                                                                                                                                                                                                            | `tests/api/portal-schedules-create.test.ts`           |
 | API paths                 | `/api/<plural-noun>[/:key][/<sub-resource or action>]`                                                                                                                                                                                                                                                                                                                            | `/api/schedules/:key/runs`, `/api/schedules/:key/run` |
 | Error codes               | `snake_case`, specific                                                                                                                                                                                                                                                                                                                                                            | `cron_too_frequent`, `schedule_is_content`            |
 | Audit actions             | `<subject>.<event>`, past tense for new ones                                                                                                                                                                                                                                                                                                                                      | `schedule.created`, `report.exported`                 |

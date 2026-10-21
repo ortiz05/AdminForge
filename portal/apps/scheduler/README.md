@@ -1,40 +1,42 @@
 # @adminforge/scheduler
 
-The scheduler service (R6, ADR-011): runs content schedules — probe sweeps, KQL checks, reports, news collection,
-playbook schedules (handed to the run worker) — on this host as the **automation identity**. One process holds the
-Postgres leader lock and fires schedules; any other is a hot standby. How it is installed and run on the host is in
-[`portal/deploy/README.md`](../../deploy/README.md#the-scheduler).
+The scheduler's one-shots (R6, ADR-011): run every probe, the named probes or one schedule **now**, as the
+**automation identity**, and exit. The scheduler itself — probe sweeps, KQL checks, reports, news collection, playbook
+schedules — runs inside the API process (ADR-016: one process owns the SQLite file), behind the `adminforge.scheduler`
+lease. A one-shot runs beside it against the same `DATABASE_PATH`, without the lease; a playbook run it starts is
+queued for the API's run worker.
 
 ## Files
 
-| File              | What                                                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/main.ts`     | The entry point: parses the flags, logs JSON lines through `safeLogFields`, runs the service (leader election, `SIGINT`/`SIGTERM` shutdown) or a one-shot. |
-| `src/one-shot.ts` | One schedule or probes **now**, without leadership, and the status lines they print. Shared with `tests/live/scripts/run-schedule-once.ts`.                |
-| `tsup.config.ts`  | Bundles `src/main.ts` (and the workspace packages it uses) into `dist/main.js`; npm dependencies stay external.                                            |
+| File              | What                                                                                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main.ts`     | The entry point: parses the flags, logs JSON lines through `safeLogFields`, runs one one-shot and exits. Without a one-shot flag it prints usage and exits 2.           |
+| `src/one-shot.ts` | One schedule or probes **now**, without leadership, and the status lines they print. Shared with `tests/live/scripts/run-schedule-once.ts`.                             |
+| `tsup.config.ts`  | Bundles `src/main.ts` (and the workspace packages it uses) into `dist/main.js`, which the app image carries; npm dependencies (better-sqlite3 is native) stay external. |
 
-The scheduling logic itself (store, jobs, scheduler, leader election, delivery) lives in the API package and is shared
-with the API's in-process scheduler (`SCHEDULER_IN_PROCESS=true` in development). This package reaches it only through
-the API's tooling entry points — `@adminforge/api/tooling` (configuration, context, log fields, delivery) and
-`@adminforge/api/tooling/scheduler` (runs and schedules modules, `Scheduler`, `runProbe`) — never through
-`@adminforge/api/src/…` paths.
+The scheduling logic itself (store, jobs, scheduler, leader election, delivery) lives in the API package. This package
+reaches it only through the API's tooling entry points — `@adminforge/api/tooling` (configuration, context, log
+fields, delivery) and `@adminforge/api/tooling/scheduler` (runs and schedules modules, `Scheduler`, `runProbe`) — never
+through `@adminforge/api/src/…` paths.
 
 ## Commands
 
 ```sh
-pnpm --filter @adminforge/scheduler dev                  # the service, from source (tsx watch)
+pnpm --filter @adminforge/scheduler exec tsx src/main.ts --once            # every probe once, from source (dev env file)
+pnpm --filter @adminforge/scheduler exec tsx src/main.ts --probe <key> [--probe <key>…]   # the named probes once
+pnpm --filter @adminforge/scheduler exec tsx src/main.ts --schedule <key>  # one schedule now (a manual run, audited)
 pnpm --filter @adminforge/scheduler typecheck
-node portal/apps/scheduler/dist/main.js                  # the service, built (needs DATABASE_URL)
-node portal/apps/scheduler/dist/main.js --once           # every probe once
-node portal/apps/scheduler/dist/main.js --probe <key> [--probe <key>…]   # the named probes once
-node portal/apps/scheduler/dist/main.js --schedule <key> # one schedule now (a manual run, audited)
-#   add --no-store to a one-shot to skip writing probe results (no database at all, so it needs
+#   add --no-store to a probe one-shot to skip writing probe results (no database at all, so it needs
 #   CONTENT_SOURCE=fs: with published content, CONTENT_SOURCE=db, it can't load the probes)
 ```
 
+In the pod the same flags run the bundle:
+`kubectl -n adminforge exec deploy/adminforge -c api -- node portal/apps/scheduler/dist/main.js --once`.
+
 One-shots print keys, statuses, reason codes, counts, report row counts and delivery statuses — never messages,
 details, recipients or item contents, which can hold tenant data. A schedule one-shot exits 1 unless the run
-succeeded; a probe one-shot prints a summary line and exits 0.
+succeeded; a probe one-shot prints a summary line and exits 0. Their events (`schedule.updated`, `probe.updated`, …)
+reach browsers through the `schedule_events` signal, which the API picks up within a second.
 
 ## The one-shot module
 

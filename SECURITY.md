@@ -123,7 +123,7 @@ the reason.
   stylesheet, the emergency-stop state and the event stream. At most 5 event streams per session.
 - Every state-changing request needs the per-session `X-AdminForge-CSRF` header (constant-time compare).
 - Microsoft tokens never reach the browser. The MSAL cache is sealed with AES-256-GCM (`TOKEN_CACHE_KEY`), with the
-  partition key as associated data, and stored in Postgres.
+  partition key as associated data, and stored in the database.
 - Sign-out deletes the session and both token partitions and goes through Entra's end-session endpoint; the
   signed-out page never signs the person back in automatically.
 
@@ -332,8 +332,8 @@ job's delegated tokens travel sealed (AES-256-GCM, bound to the job id and times
 every event of its answer over it, and the API uses nothing it can't verify. Redirects are refused. Scripts are pinned
 by SHA-256 and run in single-use `pwsh` workers with an allow-listed environment; tokens reach the worker on stdin.
 Workers start with `-SettingsFile ps/powershell.config.json`, which keeps PowerShell's own script-block, module and
-transcription logging out of the journal (it logged module source at warning level). The service reads only
-`<env>.runner.env` (the shared key). Write jobs pass the API's emergency stop and protected-object guard before any
+transcription logging out of the log (it logged module source at warning level). The runner container gets only
+the shared key (`RUNNER_SHARED_KEY`), never the rest of the configuration. Write jobs pass the API's emergency stop and protected-object guard before any
 token is minted.
 
 Read-mode jobs use Read-app tokens, some of which can write (Exchange `Exchange.Manage`, SharePoint
@@ -361,65 +361,54 @@ the inputs every item shares (`inputsTemplate` — the reason, a message), redac
 per-item runs don't record inputs. History (runs, schedule runs,
 probe results, report files) is purged after its retention period; the audit log is never purged.
 
-## Host and network
+## Deployment, storage and network
 
-- Caddy terminates TLS on `:8443` with its own CA (`tls internal`); its admin API is off. The API listens on
-  `127.0.0.1` and trusts `X-Forwarded-*` only from loopback. Security headers: CSP (`script-src 'self'`,
-  `frame-ancestors 'none'`; nothing in the web bundle may need `eval` — Zod's eval probe is switched off before
-  anything validates, and `tests/e2e/prod/csp-no-eval.spec.ts` fails the production build on any violation), HSTS,
-  `nosniff`, `no-referrer`, a `Permissions-Policy` that turns off camera, microphone, geolocation, payment and USB,
-  `no-store` on API and auth responses; rate limits on every route and tighter ones on sign-in and arming (sign-in and
-  anything without a valid session count per client address, never per cookie; `TRUST_PROXY=true`, which would let
-  anyone forge the address, is refused in production). Production source maps are kept out of what's served
-  (`portal/apps/web/sourcemaps/`), and the example Caddyfile drops the `Via` header.
+AdminForge runs as one pod on Kubernetes (ADR-017; `portal/deploy/kubernetes`) and keeps all state in one SQLite file
+on a PersistentVolume (ADR-016).
+
+- **TLS** is the Ingress's. The API listens on the pod's interface on port 3300 behind the Service and trusts
+  `X-Forwarded-*` only from `TRUST_PROXY` (the ingress controller's pod network; `true`, which would let anyone forge
+  the address, is refused in production). Security headers: CSP (`script-src 'self'`, `frame-ancestors 'none'`;
+  nothing in the web bundle may need `eval` — Zod's eval probe is switched off before anything validates, and
+  `tests/e2e/prod/csp-no-eval.spec.ts` fails the production build on any violation), HSTS, `nosniff`, `no-referrer`, a
+  `Permissions-Policy` that turns off camera, microphone, geolocation, payment and USB, `no-store` on API and auth
+  responses; rate limits on every route and tighter ones on sign-in and arming (sign-in and anything without a valid
+  session count per client address, never per cookie). Production source maps are kept out of what's served
+  (`portal/apps/web/sourcemaps/`).
 - Request logs carry the signed-in user's object id, never query values on `/api` (parameter names only), cookies,
   auth codes or the CSRF header. The public `/readyz` answer never names configuration keys or commands.
-- The services connect to Postgres as `adminforge_app`, not the owner: row access only, no DDL outside the run queue's
-  own `pgboss` schema, insert/select only on the audit log (on top of its append-only triggers), per-role statement,
-  lock and idle-in-transaction limits and a connection cap; production refuses to start (fail closed) on a role —
-  `current_user` or `session_user` — that is a superuser or `BYPASSRLS`, can change audit events, belongs to the audit
-  table's owner, can create in `public` or holds a `pg_*_server_*` role. Migrations run as a **non-superuser owner**
-  (`adminforge_owner`) through `DATABASE_MIGRATION_URL`, kept with `POSTGRES_PASSWORD` in owner files (`*.owner.env`)
-  that the services' configuration never reads — though code running as the services' Unix account can still read
-  them (a dedicated account is what separates them). Passwords are set as client-side SCRAM verifiers in sessions that
-  log no statements, so the server log never holds one. The container's superuser can sign in over its local socket
-  only (`pg_hba.conf` rejects it over TCP); databases are closed to `PUBLIC`; foreign keys and status CHECKs hold in the
-  database; approval decisions are append-only there — rebinding only to the decider's own session, deletion only with
-  the run or schedule, trigger functions on a fixed `search_path` (`docs/operations.md` → Postgres hardening;
-  `pnpm db:harden`).
-- Backups (`adminforge-backup.timer`) are encrypted to an off-host GPG key (`AF_BACKUP_GPG_RECIPIENT`) and refuse to
-  run without one unless plaintext is accepted explicitly (`AF_BACKUP_ALLOW_PLAINTEXT=1`). They never include
-  `<env>.admin.env`, the database owner's credentials (owner files and owner keys in older env files) or stray copies,
-  and include Caddy's private keys only when encrypted. They never contain sessions, pending sign-ins or the token
-  cache (table definitions only; a restore signs everyone out). Copy them off the host. The backup unit gets the same
-  hardening drop-in.
-- Configuration lives outside the repository in layered files, all mode 600 in a 700 directory:
-  `<env>.env` (runtime), `<env>.admin.env` (provisioner and live-test credentials, CLI only), `<env>.host.env`
-  (the services' own database), `<env>.owner.env` / `<env>.host.owner.env` (database owner and superuser, migrations
-  and database scripts only) and `<env>.runner.env` (runner key only). The services and `pnpm dev` use separate
-  databases, so a developer's API never picks up production jobs.
+- **The pod:** one replica (`Recreate`); both containers non-root with fixed uids (10001 api, 10002 runner), a
+  read-only root file system, no capabilities, no privilege escalation, RuntimeDefault seccomp — the restricted Pod
+  Security Standard; no service-account token (the pod never talks to the Kubernetes API). The runner is a sidecar on
+  the pod's loopback: nothing outside the pod can reach it, and it gets only `RUNNER_SHARED_KEY`. A NetworkPolicy
+  allows ingress to the HTTP port (from the ingress controller, in the overlay) and egress to DNS and 443 — never the
+  cloud instance metadata service, so the pod can't borrow the node's identity.
+- **The database file.** SQLite has no roles: whoever can write the file can do anything to it, including dropping the
+  append-only triggers. So the file itself is guarded: no other user may write its folder, the file and its `-wal`/`-shm`
+  are 0600 (tightened at every start; a volume's `fsGroup` may add the pod's own group) and owned by the API's user,
+  symlinks are resolved before anything is checked, and it must be on a local file system — production refuses to start otherwise (statfs
+  refuses NFS, SMB/Azure Files and FUSE, where SQLite's locking corrupts databases). The volume is ReadWriteOncePod (one
+  pod can ever mount it) on block storage the cloud encrypts at rest; nothing else in the cluster mounts it except the
+  one-off loader pod an operator starts while AdminForge is stopped. Inside the file, triggers keep audit events
+  append-only and approval decisions append-only and final (rebinding only to the decider's own session, deletion only
+  with the run or schedule), and foreign keys and status CHECKs hold — against the application's own mistakes, not
+  against someone with the volume. Deleted sessions and tokens are overwritten (`secure_delete`).
+- **Configuration** comes from the environment: the `adminforge-env` Secret (made from the env file, without the
+  admin-only keys — provisioner and test-account credentials never reach the cluster) and the ConfigMap, which wins
+  for the pod's layout (a copied env file can't move the database off the volume). Protect the Secret with the
+  cluster's RBAC and encryption at rest: it holds `TOKEN_CACHE_KEY` and the apps' credentials. On a workstation the
+  env files stay mode 600 in a 700 directory: `<env>.env` (runtime) and `<env>.admin.env` (CLI and live tests only).
+  A developer's `pnpm dev` uses a database file of its own (`~/.local/share/adminforge/dev.db`).
+- **Backups:** volume snapshots, and `adminforge db backup` — a consistent copy without sessions, pending sign-ins or
+  the token cache (a restore signs everyone out), checked before it is written, mode 600, not encrypted: stream it out
+  of the pod and encrypt it there with a key whose private half is not in the cluster (`portal/deploy/kubernetes/
+README.md` → Backups).
 - `/readyz` reports the run worker and scheduler from their heartbeats (cached 5 s, rate-limited), and every Microsoft
   call is logged as one structured line (path template, status, duration, throttling, request id) for tracing by
   Reference. The Reference (correlation id) is always generated by the API, never taken from the browser.
+- Show-once secrets never leave the API process: the run worker is part of it, so they are never written anywhere, not
+  even sealed.
 - Mock sign-in (`AUTH_MODE=mock`) only starts with fixture data, a loopback address and no credentials configured.
-- The systemd user units load a hardening drop-in with the seccomp-based restrictions that user units enforce
-  (`NoNewPrivileges`, `SystemCallFilter=@system-service`, `RestrictAddressFamilies`, `RestrictNamespaces`, …).
-- **Run AdminForge under an account of its own.** File permissions (600/700) protect secrets from other users, not from
-  other processes of the same user. The account that runs AdminForge must not run other network-facing services and
-  must not be in the `docker`, `sudo`, `lxd` or `adm` groups: membership of `docker` is root on the host (and a
-  superuser on any Postgres container), which would undo every boundary above. Run Postgres where that account can't
-  administer it (a dedicated cluster, or rootless containers under the AdminForge account).
-  `portal/deploy/install-service-account.sh` does this on a single host while Postgres stays in Docker under the
-  owner. The api, worker and scheduler run as the `adminforge` system account, and the runner as `adminforge-runner`.
-  Neither account is in docker, sudo, adm or lxd. Both run in sandboxed system units: no capabilities, no Docker
-  socket, and only their own state directory is writable. The configuration in `/etc/adminforge` holds documented keys
-  only, without admin, test-account or database-owner keys. The runner's account can't read it: systemd hands the
-  runner its own `RUNNER_*` file, and `InaccessiblePaths` hides the API's configuration and state. A per-unit
-  `InaccessiblePaths` alone would not do, because a process of the same user can reach another's files through
-  `/proc/<pid>/root`. Write-mode PowerShell therefore sees the runner's shared key, but not the API's secrets. The
-  optional loopback firewall (`--firewall`, nftables by uid) limits both accounts to Postgres, the runner, the API,
-  the proxy and the DNS stub on this host. Until the script has been applied, a process running as the owner's account
-  can reach the database as superuser (Postgres finding C1).
 
 ## Threats and mitigations
 
@@ -445,8 +434,8 @@ probe results, report files) is purged after its retention period; the audit log
 | A name typed in the portal phishes email or Teams recipients     | Single-line plain-text names without links or markup; Markdown escaped in Teams; "Scheduled in AdminForge by …"; approval channels excluded                                           |
 | Readers seeing app-permission data                               | Report files and probe rows need Operator by default (service announcements on News and changes are the documented exception)                                                         |
 | A news feed used to reach internal hosts or to inject markup     | Feed hosts are a code allow-list (https, public addresses pinned at connect, redirects only within it); no DTDs/entities; linear plain-text reduction; links on the source's own host |
-| Neighbour process on the host reads secrets                      | Admin credentials split out; runner gets only its key; 600/700 permissions; seccomp hardening — holds only if no other service runs as the same account (see Host and network)        |
-| Developer server consumes production jobs                        | Separate databases via the `host` overlay                                                                                                                                             |
+| Another workload in the cluster reads secrets or the database    | Admin credentials never reach the cluster; runner gets only its key; non-root pod, RWOP volume, NetworkPolicy, no service-account token (see Deployment, storage and network)         |
+| Developer server consumes production jobs                        | A developer's API uses its own database file; the production file is only on the pod's volume                                                                                         |
 | Content gives the Write app tier-0 scopes                        | Provisioning ceiling: role management, app credentials, consent grants, `Directory.AccessAsUser.All` and tenant policies need `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`                 |
 | Content gives the automation identity sensitive reads            | Mail, files, sites, chats, calendars, BitLocker keys and similar need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`                                                                      |
 | Someone adds an owner, secret or assignment to an AdminForge app | `provision status` fails on unexpected privilege                                                                                                                                      |
@@ -456,7 +445,7 @@ probe results, report files) is purged after its retention period; the audit log
 | Provisioning pointed at someone's real account                   | Only an `af-…` account with the "AdminForge validation" marker (or "AF Tester" name) is managed; any other is refused before a password, role or exclusion changes                    |
 | One person approves their own request with the approver fixture  | Accepted in test labels only (see Known gaps); refused where automation writes are allowed; enabled only on request (`--enable --approver`); Portal.Reader + Approver only            |
 | An `optional` datasource hides a denial                          | Never for a missing role, the request policy, a licence, sign-in or arming anywhere in the chain; suppressed errors are recorded, and a scheduled report fails `report_incomplete`    |
-| A compromised service rewrites the audit log                     | The services' database role can't update, delete or truncate audit events, or alter tables                                                                                            |
+| A compromised service rewrites the audit log                     | Not prevented (SQLite has no roles); detected by the hash chain against its checkpoints in the container log shipped off the cluster (`adminforge audit verify`)                      |
 
 ## Known gaps and accepted risks
 
@@ -506,26 +495,21 @@ Tracked in `docs/backlog.md`:
 
 - The session id is not rotated when write access is turned on (a cookie stolen while read-only could ride a later
   arm by the real user). Mitigated by the cookie flags and expiry; rotation needs runs and pending secrets re-keyed.
-- The audit chain is unkeyed: someone with database write access could rewrite and re-hash its tail. Each verification
-  writes the verified tail (`seq`, `hash`) to the services' journal as an external checkpoint; forward the journal off
-  the host so the anchor doesn't share the database's fate.
-- Definitions loaded from the database are trusted as published (not re-validated on load), and the services'
-  database role can insert and update them; `publish`'s review check is a process control on a local ref, not a
+- **The database file is the boundary (ADR-016).** With Postgres the services' role could not drop the audit log's
+  append-only triggers; with SQLite, anything that can write the file — the API process itself, or someone with the
+  volume — can rewrite rows and drop triggers. The chain is unkeyed, so a rewritten tail can be re-hashed. Each
+  verification writes the verified tail (`seq`, `hash`) to the API's log as an external checkpoint: ship the container
+  logs off the cluster so the anchor doesn't share the database's fate, and compare with `adminforge audit verify`.
+- Definitions loaded from the database are trusted as published (not re-validated on load), and the API process can
+  insert and update them; `publish`'s review check is a process control on a local ref, not a
   security boundary. Two-person review needs branch protection and a second code owner on the repository.
 - Approval gates exclude a group's members and a principal, not a service principal's owners.
 - CSP allows inline **styles** (`style-src 'unsafe-inline'`) because Radix and Monaco inject them; scripts stay
   `'self'` only, so CSS injection can't execute code.
-- User units can't isolate the filesystem on hosts that restrict unprivileged user namespaces (Ubuntu 24.04). Until
-  `portal/deploy/install-service-account.sh` has moved the services to their system accounts, write-mode PowerShell
-  (FullLanguage) and any process of the same account can read the services' configuration. After it, the runner's
-  account can read only its own env file (`RUNNER_SHARED_KEY`). The owner's account is in the `adminforge` group, so
-  the backup can read the report files, and it can read `/etc/adminforge` too; it already holds the originals in
-  `~/.config/adminforge`.
 - The Read and Write apps authenticate with client secrets (certificates are supported for the automation identity
-  only), and one key (`TOKEN_CACHE_KEY`) seals both the token cache and run-secret hand-offs. Blobs name their key
+  only), and one key (`TOKEN_CACHE_KEY`) seals the token cache, including schedules' grant tokens. Blobs name their key
   (key id), so it can be rotated with `TOKEN_CACHE_PREVIOUS_KEYS` without signing everyone out.
 - A compromised service can still record a forged approval decision (the database keeps decisions append-only and the
-  audit log records each one, but neither knows who clicked); approval integrity rests on the API process. Likewise
-  the owner files only keep the owner's credentials out of the services' configuration: code running as the
-  services' Unix account can read them.
-- Browsers must trust Caddy's local CA for LAN access; use a certificate from your own CA and a DNS name for wider use.
+  audit log records each one, but neither knows who clicked); approval integrity rests on the API process.
+- Not yet verified on a real cluster: Pod Security admission of the manifests, the storage class's behaviour (zonal
+  disks), the Ingress's handling of Server-Sent Events (docs/backlog.md).

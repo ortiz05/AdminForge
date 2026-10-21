@@ -2,12 +2,15 @@
 
 Administrator tooling for AdminForge: checks the local configuration, provisions the Entra ID and Azure objects an
 environment needs, validates, tests and publishes `portal/content`, scaffolds new definitions and records synthetic
-fixtures. Run it from the repository root as `pnpm adminforge <command>` (`tsx portal/tools/cli/src/index.ts`).
+fixtures. Run it from the repository root as `pnpm adminforge <command>` (`tsx portal/tools/cli/src/index.ts`). The
+app image carries a bundle of it (`dist/adminforge.js`, built by `tsup`) as `adminforge`, for the commands that act on
+the cluster's database: `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge <command>`.
 
 Configuration comes from the env files outside the repository (CLAUDE.md non-negotiable 1), read by
 `@adminforge/config` `loadEnv` in layers: `~/.config/adminforge/<env>.env` (or `$ADMINFORGE_ENV_FILE`), then
 `<env>.admin.env` (provisioner and live-test credentials — the CLI is the only reader besides the live tests), then
-`<env>.$ADMINFORGE_ENV_OVERLAY.env` if set; the process environment wins over all files. The CLI never prints secrets,
+`<env>.$ADMINFORGE_ENV_OVERLAY.env` if set; the process environment wins over all files (in the pod it is the only
+source: the `adminforge-env` Secret and the ConfigMap). The CLI never prints secrets,
 ids or UPNs from the configuration or the tenant: output names keys, objects and states (provisioning headers also
 show the environment label and redirect origin), and the secrets it creates go straight into the env files.
 
@@ -18,14 +21,16 @@ Every command exits 0 on success and 1 when it finds a problem or fails. A throw
 changes nothing in the tenant or in a database.
 
 Keys every command reads from the process environment: `ADMINFORGE_ENV` (which `<env>.env`; `--env <name>` sets it),
-`ADMINFORGE_ENV_FILE` (an explicit file), `ADMINFORGE_ENV_OVERLAY` (a third layer, e.g. `host`), `ADMINFORGE_DEBUG`.
+`ADMINFORGE_ENV_FILE` (an explicit file), `ADMINFORGE_ENV_OVERLAY` (a third layer of per-deployment overrides),
+`ADMINFORGE_DEBUG`.
 Every configuration key is documented in `config/example.env`.
 
 ### `env check [--for <purposes>]`
 
 - **Does:** compares the layered env files with `config/example.env` and prints each key's name and state (set,
-  default, missing, invalid), keys `example.env` doesn't know (typos), admin keys sitting in the runtime file, and
-  readiness for each purpose: `provision`, `portal`, `schedules`, `validation`.
+  default, missing, invalid), keys `example.env` doesn't know (typos), admin keys sitting in the runtime file, keys
+  of the Postgres releases that are still set (`DATABASE_URL`, `RUN_WORKER_IN_PROCESS`, …: nothing reads them, remove
+  them), and readiness for each purpose: `provision`, `portal`, `schedules`, `validation`.
 - **Options:** `--for` — comma-separated purposes, or `all` (default), that decide the exit code.
 - **Reads:** every key in `config/example.env`. Never prints a value.
 - **Changes:** nothing. **Safe:** yes. **Exit 1:** a selected purpose is not ready.
@@ -162,14 +167,18 @@ Every configuration key is documented in `config/example.env`.
 ### `publish [--env <name>] [--dry-run] [--allow-unreviewed]`
 
 - **Does:** runs the `validate` and `test` checks; requires reviewed content — committed, and the commit on
-  `origin/main` as last fetched — unless `--allow-unreviewed` (recorded in the audit event); then writes new
-  definition versions to Postgres (idempotent by sha256, all-or-nothing), sends `NOTIFY definitions_changed` and
-  appends a `content.published` audit event.
+  `origin/main` as last fetched; in the app image, where there is no checkout, the record `build-images.sh` wrote
+  (`/app/BUILD.json`) — unless `--allow-unreviewed` (recorded in the audit event); then brings the database file's
+  schema up to date, writes new definition versions (idempotent by sha256, all-or-nothing), sends the
+  `definitions_changed` signal (the running API drops those cache entries) and appends a `content.published` audit
+  event.
 - **Options:** `--env` (default `dev`), `--dry-run` (show what would be published and whether it would be refused),
   `--allow-unreviewed`.
-- **Reads:** `DATABASE_URL`, content, git state.
-- **Changes:** the definitions and audit tables of `DATABASE_URL` — use the dev database, never the services' `host`
-  overlay. **Safe:** only with `--dry-run`. **Exit 1:** nothing could be published, or a version was refused.
+- **Reads:** `DATABASE_PATH`, content, git state (or `BUILD.json`).
+- **Changes:** the definitions and audit tables of the file at `DATABASE_PATH` — on a workstation your dev database; a
+  deployment's only from inside its pod (`kubectl -n adminforge exec deploy/adminforge -c api -- adminforge
+publish`). **Safe:** only with `--dry-run` (which may still migrate the schema). **Exit 1:** nothing could be
+  published, or a version was refused.
 
 ### `new <kind> <section>/<name> [--template <template>] [--owner <team>] [--force]`
 
@@ -195,10 +204,54 @@ Every configuration key is documented in `config/example.env`.
 
 ### `audit verify [--env <name>]`
 
-- **Does:** re-walks the audit log's hash chain in `DATABASE_URL` (`ADMINFORGE_ENV_OVERLAY=host` checks the services'
-  database). `--env` defaults to `dev`.
-- **Reads:** `DATABASE_URL`.
+- **Does:** re-walks the audit log's hash chain in the database file at `DATABASE_PATH`, opened read-only. For a
+  deployment, run it in the pod (`kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify`) and
+  compare its tail with the `audit chain checkpoint` lines in the logs you forward off the cluster. `--env` defaults
+  to `dev`.
+- **Reads:** `DATABASE_PATH`.
 - **Changes:** nothing. **Safe:** yes. **Exit 1:** the chain is broken.
+
+### `db backup <-|file --plaintext> [--env <name>]`
+
+- **Does:** a consistent copy of the database (SQLite's online backup; the API keeps working) without credential rows
+  (sessions, sign-in round trips, the token cache, leases, signals), rebuilt so nothing deleted survives, checked
+  (integrity, audit chain) and written mode 600. `-` writes the copy to stdout and messages to stderr, so it can leave
+  the pod and be encrypted on the operator's machine:
+  `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge db backup - | gpg --encrypt --recipient <key> > …`.
+  The copy is not encrypted, so writing it to a file needs `--plaintext` (it refuses otherwise). After a restore from it
+  everyone signs in again, and creators consent again to schedules that run with their access.
+- **Reads:** `DATABASE_PATH`.
+- **Changes:** writes only the new file. **Safe:** yes. **Exit 1:** a file without `--plaintext`, no database, or the
+  copy failed its checks.
+
+### `db sign-out-everyone --yes [--schedule-grants] [--env <name>]`
+
+- **Does:** the emergency step that ends every session at once (docs/operations.md → Emergency): deletes every
+  session, pending sign-in and session token, and records one `sessions.signed_out_everyone` audit event with the
+  counts. The running API reads sessions from the database on every request, so open pages show "signed out" at their
+  next request — no restart. `--schedule-grants` also deletes the sealed tokens of schedules that run with their
+  creator's access (their creators consent again). In the pod:
+  `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge db sign-out-everyone --yes`.
+- **Reads:** `DATABASE_PATH`.
+- **Changes:** the sessions, sign-in round trips and token cache tables; nothing in the tenant. **Safe:** no — it
+  signs everyone out (hence `--yes`). **Exit 1:** no `--yes`, or no database.
+
+### `db import-postgres [--to <file>] [--from-env <KEY>] [--dry-run] [--env <name>]`
+
+- **Does:** the one-time move from the Postgres releases: reads the old database in one read-only snapshot and copies
+  settings, preferences, saved views, definitions, schedules and their grants, runs with steps and events, approvals,
+  schedule history, probe results, News and changes, and the audit log into a new SQLite file; re-verifies the audit
+  chain and checks its tail equals Postgres'. Not copied: signed-in sessions and sign-in round trips (everyone signs
+  in again) and session token partitions; schedules' sealed grant tokens are kept, so keep the same
+  `TOKEN_CACHE_KEY`. Refuses a target that already holds data, and a database older than the last Postgres release.
+  The steps around it (stop the old services, put the file on the volume) are in
+  `portal/deploy/kubernetes/README.md` → Moving the data from the Postgres host.
+- **Options:** `--to` (the new file, default `DATABASE_PATH`), `--from-env` (the variable that holds the Postgres URL,
+  default `DATABASE_URL` — read from the env files or the environment, never typed on the command line),
+  `--dry-run` (check the source and print the row counts, write nothing).
+- **Reads:** the Postgres URL key, `DATABASE_PATH`.
+- **Changes:** the new SQLite file only; nothing in Postgres or the tenant. **Safe:** yes for Postgres and the tenant.
+  **Exit 1:** the source can't be read, the target holds data, or the copied chain doesn't match.
 
 ## Module layout
 
@@ -209,6 +262,7 @@ src/
   index.ts            commander wiring; builds the contexts from the env files; error → one line + exit code
   commands/           one module per command — option handling, output, and the order of steps
     env.ts  validate.ts  test.ts  publish.ts  new.ts  fixtures.ts  audit.ts
+    db.ts             db backup · db sign-out-everyone · db import-postgres (the only module that may use the pg driver)
     provision.ts      provision entra · test-identities · status
     test-fixtures.ts  the opt-in licensed test fixtures within test-identities and status; --remove-fixtures
     azure-test.ts     provision azure-test (and its block in provision status)
@@ -217,11 +271,11 @@ src/
     check.ts          the offline validate check (also the publish gate)
     lint.ts           pure rules: bare datasource names, declaration order, script sha256 pins
     playbook-tests.ts runs playbook/runbook tests: blocks through the engine
-    review-state.ts   git: is the content committed and on origin/main?
+    review-state.ts   git: is the content committed and on origin/main? (in the image: BUILD.json)
     scopes.ts         declared vs. granted vs. provisioned permissions (validate --scopes)
     scaffold.ts       YAML templates for `new`
     sanitize.ts       fixture sanitizer for `fixtures record`
-    api-bridge.ts     the API modules the CLI reuses (definition store, datasource runner, audit writer)
+    api-bridge.ts     the API modules the CLI reuses (database, migrations, definition store, audit writer, backup)
   env/
     env-check.ts      pure rules behind `env check`
   provision/          provisioning: settings, clients, catalog, and desired → plan → apply per area
@@ -290,7 +344,11 @@ pnpm --filter @adminforge/tests exec vitest run --project unit unit/cli
   `automation-ceiling`, …).
 - **Content commands** run against temporary content directories with injected stores, engines, git state and fetch
   (`content.test.ts`, `publish-*.test.ts`, `news-feeds.test.ts`, `script-pins.test.ts`, the lint rule tests).
-- **Configuration and plumbing**: `env-check*.test.ts`, `env-command.test.ts` (temporary env files only — never
-  `~/.config`), `redirect-origins.test.ts`, `audit-verify.test.ts`, `describe-failure.test.ts`.
+- **Configuration and plumbing**: `env-check*.test.ts` (`env-check-retired-keys` for the Postgres keys),
+  `env-command.test.ts` (temporary env files only — never `~/.config`), `redirect-origins.test.ts`,
+  `audit-verify.test.ts`, `review-state-image.test.ts`, `describe-failure.test.ts`.
+- **Database commands** run against temporary SQLite files in the `api` project: `tests/api/db-backup-db.test.ts`
+  and `tests/api/import-postgres.test.ts` (the only test that needs a Postgres — `TEST_POSTGRES_URL`, or the
+  `DATABASE_URL` an older env file still has; it skips without one).
 
 No test reaches the network, the tenant or a shared database; fixtures are synthetic (`example.com`, generated GUIDs).

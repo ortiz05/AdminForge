@@ -24,7 +24,7 @@ rendered and executed by a generic engine. It manages real tenants, so the way w
 | 10  | [Git and pull requests](10-git-and-pull-requests.md)                            | Branches, the commit message format (enforced), PR size, review and merge            | 30 min |
 | 11  | [Documentation](11-documentation.md)                                            | Which docs each kind of change must update, and how we write them                    | 30 min |
 | 12  | [Working with Claude Code](12-claude-code.md)                                   | The skills, reviewer agents and hooks that keep changes consistent                   | 30 min |
-| 13  | [Releases and operations](13-releases-and-operations.md)                        | How a merged change reaches the host, and what contributors never do there           | 20 min |
+| 13  | [Releases and operations](13-releases-and-operations.md)                        | How a merged change reaches the cluster, and what contributors never do there        | 20 min |
 | —   | [Checklists](checklists.md) · [Glossary](glossary.md) · [Templates](templates/) | First day/week, PR author and reviewer, definition of done; the vocabulary           |        |
 
 ## The short version
@@ -72,7 +72,7 @@ These guides explain and connect the sources of truth; when they disagree, the s
 | [`docs/adr/`](../adr/) and [`docs/decisions.md`](../decisions.md)                     | Why things are the way they are                          |
 | [`docs/extending.md`](../extending.md) and [`.claude/skills/`](../../.claude/skills/) | How each extension point is done                         |
 | [`tests/README.md`](../../tests/README.md)                                            | Test projects, fixtures, e2e                             |
-| [`docs/operations.md`](../operations.md)                                              | Running the host                                         |
+| [`docs/operations.md`](../operations.md)                                              | Running AdminForge                                       |
 
 ## Getting help
 

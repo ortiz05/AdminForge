@@ -39,9 +39,9 @@ The `validating-against-a-tenant` skill (`.claude/skills/`) is the step-by-step 
   which headless Chrome can't complete. `provision test-identities` adds the validation user — only that user — to
   the campaign's exclusions and leaves the rest of the campaign (state, who it targets, snooze) as it is;
   `provision status` checks it. If a live sign-in lands on the nudge anyway it fails at once and says so.
-- A running stack whose URL is `PUBLIC_BASE_URL`: `pnpm dev` (with `RUN_WORKER_IN_PROCESS=true` and
-  `SCHEDULER_IN_PROCESS=true` if no worker/scheduler service runs) or the host services (`portal/deploy/README.md`).
-  Playbook checks need a run worker.
+- A running stack whose URL is `PUBLIC_BASE_URL`: `pnpm dev` against your dev database (the API is also the run worker
+  and the scheduler, so playbook and schedule checks work), or a deployment's Ingress URL
+  (`portal/deploy/kubernetes/README.md`).
 - System Google Chrome (`channel: 'chrome'`).
 
 ## Configuration
@@ -55,8 +55,8 @@ values.
 | ----------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PUBLIC_BASE_URL`                                                                   | suite, scripts | The portal origin the browser signs in to (default `http://localhost:5173`)                                                                                                                 |
 | `AF_LIVE_OUT`                                                                       | suite, scripts | Output directory for results and screenshots (default `~/.cache/adminforge/live`, i.e. `$XDG_CACHE_HOME/adminforge/live`; kept 0700; refused inside the repository, also through a symlink) |
-| `AF_LIVE_INSECURE_TLS=1`                                                            | suite          | Accept a private CA, e.g. Caddy `tls internal` for LAN access: `PUBLIC_BASE_URL=https://<lan-name>:8443 AF_LIVE_INSECURE_TLS=1 pnpm test:live`                                              |
-| `API_PORT`                                                                          | scripts        | The scripts call the API directly on the `PUBLIC_BASE_URL` host and scheme at this port (default 3001), so they target a dev stack, not the TLS proxy                                       |
+| `AF_LIVE_INSECURE_TLS=1`                                                            | suite          | Accept a certificate from a private CA, e.g. a test cluster's Ingress: `PUBLIC_BASE_URL=https://adminforge.example.com AF_LIVE_INSECURE_TLS=1 pnpm test:live`                               |
+| `API_PORT`                                                                          | scripts        | The scripts call the API directly on the `PUBLIC_BASE_URL` host and scheme at this port (default 3001), so they target a dev stack, not the Ingress                                         |
 | `AF_TEST_USER_UPN`, `AF_TEST_USER_PASSWORD`                                         | both           | The validation user (written by `provision test-identities`)                                                                                                                                |
 | `AF_TEST_USER_TOTP_SECRET`                                                          | both           | Base32 TOTP seed (written by the MFA bootstrap)                                                                                                                                             |
 | `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`, `AF_TEST_APPROVER_TOTP_SECRET` | both           | The approver fixture "AF Tester 2" (written by `provision test-identities` and `register-test-user-mfa.ts --approver`; `testApproverCredentials`)                                           |
@@ -77,7 +77,7 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
   placeholders (`'identity.user?id=@user:AF-Test-User-01'`; a literal id works but stays in your shell history); params are
   never printed, and a placeholder that doesn't resolve fails that page only.
 - **`check-user-schedule.ts [--report <id>] [--approver] [--needs-sign-in]`** — "Run as: Me" end to end (ADR-014) on
-  a deployed portal (`PUBLIC_BASE_URL=https://<lan-address>:8443 AF_LIVE_INSECURE_TLS=1` for the host services): the
+  a deployed portal (`PUBLIC_BASE_URL` = its Ingress URL, plus `AF_LIVE_INSECURE_TLS=1` for a private CA): the
   validation user creates a portal report schedule that runs as its creator (default report
   `identity.groups-without-owners`), checks a run before signing in is skipped, signs in for it through Entra (the
   consent round trip, a fresh sign-in), runs it now, checks the run succeeded, its file opens for the creator and the
@@ -88,15 +88,15 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
   few minutes. One ✓/✗ line per check, no ids or names; the schedule is always deleted.
 - **`check-accuracy.ts [<definition id substring>…]`** — live accuracy (docs/enterprise-scenarios.md › Live accuracy):
   runs the datasources of the list pages, entity pages, KPIs and reports whose answers the test fixtures make known,
-  as the validation user through the deployed portal (`PUBLIC_BASE_URL=https://<lan-address>:8443
-AF_LIVE_INSECURE_TLS=1` for the host services), and compares them with the fixture catalogue (imported from
+  as the validation user through the deployed portal (`PUBLIC_BASE_URL` = its Ingress URL, plus
+  `AF_LIVE_INSECURE_TLS=1` for a private CA), and compares them with the fixture catalogue (imported from
   `portal/tools/cli/src/provision/*-fixture-*`) and an independent Graph read (the automation identity, read-only;
   the provisioner only where it can't read). One line per check: ✓ match, ✗ mismatch (field, expected vs shown),
   ≈ documented difference (with the Microsoft reason), · not knowable (not published here, no permission). Exit code 1
   on an unexplained mismatch. Masked: AF-Test names only. Definitions not published on the instance show as not
   knowable — re-run after `pnpm adminforge publish`.
 - **`run-playbook.ts <playbook> '<inputs JSON>' [--confirm-from <stepId>.<field>]`** — signs in (an https
-  `PUBLIC_BASE_URL` is the deployed portal: `PUBLIC_BASE_URL=https://<lan-address>:8443 AF_LIVE_INSECURE_TLS=1`), arms, previews
+  `PUBLIC_BASE_URL` is taken as a deployed portal: its Ingress URL), arms, previews
   (retrying through Graph replication lag) and runs one playbook. Inputs may name the test objects instead of ids —
   placeholders resolve as the validation user through the portal itself, so no ids or addresses go on the command
   line or into the output (also inside arrays):
@@ -120,12 +120,11 @@ AF_LIVE_INSECURE_TLS=1` for the host services), and compares them with the fixtu
 - **`check-placeholders.ts @<kind>:<name>[#field]…`** — resolves placeholders and prints ok / why not per placeholder,
   never the value. Run it before a playbook when a test object is new (directory and SharePoint search can lag).
 - **`run-schedule-once.ts --schedule <key> [--deliver none|sender]`** and **`--probe <key>… [--no-store]`** — runs a
-  schedule or probes once **as the automation identity** through the scheduler service's own one-shot module
+  schedule or probes once **as the automation identity** through the scheduler's own one-shot module
   (`portal/apps/scheduler/src/one-shot.ts`, the same code and status lines as `node dist/main.js --schedule`),
-  against the **dev** database of the env file. It refuses `ADMINFORGE_ENV_OVERLAY=host`, a `DATABASE_URL` set in the process
-  environment, and a dev database that is also the services' (where `<env>.host.env` exists and resolves to the same
-  `DATABASE_URL`; the URLs are compared, never printed). It refuses **playbook schedules** — use `run-playbook.ts`,
-  which previews first. Delivery never
+  against the **dev** database file of the env file. It refuses any `ADMINFORGE_ENV_OVERLAY` and a `DATABASE_PATH` set
+  in the process environment (a deployment's file). It refuses **playbook schedules** — they would queue a real run
+  for the dev API's worker; use `run-playbook.ts`, which previews first. Delivery never
   reaches a person: `--deliver none` (default) blanks every recipient list and Teams webhook, so email and Teams report
   `not_configured`; `--deliver sender` sends the email to `AF_MAIL_SENDER` itself (the report mailbox mails itself) and
   still never posts to Teams. Prints the run status, reason codes, file row counts and delivery statuses. A report
@@ -139,7 +138,7 @@ AF_LIVE_INSECURE_TLS=1` for the host services), and compares them with the fixtu
   to send **as** that mailbox, again only to the sender (expect `refused`: the automation identity may send only as
   the report mailbox). `--sender-name` checks a mailbox before `AF_MAIL_SENDER` is configured. Both accept only test
   mailboxes (display name `AF-Test-…`; `--sender-name` also the mailbox `AF_MAIL_SENDER` names), so mail is never sent
-  as a real person's mailbox. Exit code 1 when either expectation fails. It uses no database, so `ADMINFORGE_ENV_OVERLAY=host` (the services' configuration) is fine.
+  as a real person's mailbox. Exit code 1 when either expectation fails. It uses no database.
 
 `register-test-user-mfa.ts` and `verify-api-live.ts` take an optional failure-screenshot path; the default is
 `<AF_LIVE_OUT>/<script>-failure.png`; a path given on the command line is refused inside the repository too.

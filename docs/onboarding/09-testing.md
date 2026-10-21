@@ -13,7 +13,7 @@ imports a test library. Add a **new** test file for new behaviour rather than ap
 | ---------------------------------------------------- | ---------------------------------------------------------- | ---------------------- |
 | Pure logic in a package or app                       | `tests/unit/<package>/<topic>.test.ts`                     | vitest `unit`          |
 | An API route or service                              | `tests/api/<area>.test.ts` (`app.inject`, memory stores)   | vitest `api`           |
-| Postgres behaviour (transactions, locks, migrations) | `tests/api/<area>-pg.test.ts` (skips without Postgres)     | vitest `api`           |
+| Database behaviour (transactions, triggers, queries) | `tests/api/<area>-db.test.ts` (a temporary SQLite file)    | vitest `api`           |
 | A React component or coded page                      | `tests/component/<area>/<Component>.test.tsx` (jsdom, axe) | vitest `component`     |
 | Content logic (a transform, a rule)                  | `tests/content/<topic>.test.ts`                            | vitest `content`       |
 | A transform at enterprise size (the 250 ms budget)   | `tests/content/content-at-scale-<topic>.test.ts`           | vitest `scale`         |
@@ -35,9 +35,10 @@ pnpm adminforge test [pattern]                                   # playbook/runb
 pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester/run.ps1   # Pester (PowerShell 7.4+)
 ```
 
-Run the focused project while you work; run `pnpm test` and the relevant e2e spec before you push. Start Postgres
-(`pnpm db:up`) first, or the `*-pg` suites skip without telling you much. CI doesn't run Pester — if you touched the
-runner or a script, run it yourself and say so in the PR.
+Run the focused project while you work; run `pnpm test` and the relevant e2e spec before you push. The `*-db` suites
+need nothing running: each makes a migrated SQLite file of its own in a temporary directory (`tests/api/db.ts`) and
+never skips. Only `tests/api/import-postgres.test.ts` (the one-time importer) needs a Postgres (`TEST_POSTGRES_URL`) and
+skips without one. CI doesn't run Pester — if you touched the runner or a script, run it yourself and say so in the PR.
 
 ## What a good test covers
 
@@ -79,6 +80,10 @@ they cover:
   They run in the `scale` project, after the others and one file at a time; a busy machine (another suite, background
   agents) can push one over — rerun that file alone before suspecting a regression.
 - `tests/e2e/prod/csp-no-eval.spec.ts` — the production build under the API's `script-src 'self'`: no violation.
+- `tests/guards/sqlite-only.test.ts` — runtime code is SQLite-only: no `pg` or `pg-boss`, no Postgres-only SQL, no
+  `async` transaction function (the one-time importer excepted).
+- `tests/guards/kubernetes-manifests.test.ts` — the deployment keeps one replica, `Recreate`, a ReadWriteOncePod
+  volume, a locked-down pod and the runner on the pod's loopback.
 
 A new guard earns its place only if it fails without the fix: prove that once (for the production bundle, build the
 old code into a scratch `--outDir` and serve it with `vite preview --outDir … --port 4174`, which the prod config
@@ -106,8 +111,8 @@ through DevTools, which ignores the page's CSP, so a control evaluates an inline
 - **Look at every new or changed image** before committing it; a baseline is a reviewed artefact, not a byproduct.
   `--update-snapshots` rewrites only images that differ by more than the 1 % tolerance, so after changing a new spec's
   fixture, delete its images and run it twice (the first run writes, the second must pass).
-- `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. Don't run `pnpm build` in the checkout the
-  services run from: the API serves that `dist/` to everyone at once.
+- `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. Run it whenever you need to: production runs
+  the app image, so a local build never reaches it.
 
 ## Live validation
 
@@ -118,7 +123,7 @@ results as counts and statuses.
 
 ## Definition of "tested"
 
-- [ ] The focused vitest project(s) you touched pass with Postgres running; `pnpm guard` passes
+- [ ] The focused vitest project(s) you touched pass; `pnpm guard` passes
 - [ ] New behaviour has new tests; refusals and roles covered; regression test for a bug fix
 - [ ] Content: `pnpm adminforge validate` + `pnpm adminforge test` clean
 - [ ] UI: component test (axe) and e2e with screenshots in both themes, reviewed

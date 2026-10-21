@@ -118,8 +118,8 @@ a code owner's own changes need another engineer's review by agreement (a known 
 - Writes only on the `AF-Test-*` objects provisioning created (`pnpm adminforge provision test-identities`): dry run →
   run → compensating playbook → check `/audit` ([`tests/live/README.md`](../../tests/live/README.md)).
 - Live-test output and screenshots stay outside the repository (`AF_LIVE_OUT`).
-- Don't run `adminforge provision entra`, `publish` to a shared database, or anything on the host unless a code owner
-  asked you to ([Releases and operations](13-releases-and-operations.md)).
+- Don't run `adminforge provision entra`, `publish` to a shared database, or anything against the cluster unless a
+  code owner asked you to ([Releases and operations](13-releases-and-operations.md)).
 - Don't paste tenant output into AI tools, issues or chats. Summaries with counts and statuses are fine.
 
 ## If you find a vulnerability or leak

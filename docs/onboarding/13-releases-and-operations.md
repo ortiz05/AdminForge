@@ -1,41 +1,50 @@
 # 13. Releases and operations
 
-How a merged change reaches the running AdminForge, who does it, and what contributors never do on the host.
-The procedures themselves are in [`docs/operations.md`](../operations.md) and
-[`portal/deploy/README.md`](../../portal/deploy/README.md).
+How a merged change reaches the running AdminForge, who does it, and what contributors never do to the deployment.
+The procedures themselves are in [`portal/deploy/kubernetes/README.md`](../../portal/deploy/kubernetes/README.md) and
+[`docs/operations.md`](../operations.md).
 
 ## Merging is not deploying
 
-A merge to `main` changes nothing that is running. Each kind of change goes live through its own deliberate step, done
-by a **code owner** (or, for configuration, whoever administers the host):
+A merge to `main` changes nothing that is running. AdminForge runs as one Kubernetes pod from two images (ADR-017),
+and each kind of change goes live through its own deliberate step, done by a **code owner** (or, for configuration,
+whoever administers the cluster):
 
-| What changed               | How it goes live                                                                                                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Content (`portal/content`) | `git fetch` and a clean checkout of `origin/main`, then `ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish` (try `--dry-run` first); services pick it up in seconds (`NOTIFY`) |
-| Code (apps, packages)      | An upgrade: install with the frozen lockfile, build, migrate, publish, restart the units ([operations → Upgrade](../operations.md#upgrade))                                      |
-| Permissions                | `pnpm adminforge validate --scopes`, then `pnpm adminforge provision entra` (changes the tenant)                                                                                 |
-| Runner modules             | `pnpm --filter @adminforge/runner modules:install` when `portal/apps/runner/modules.lock.json` changed                                                                           |
-| Configuration keys         | Set in the host's env file outside the repository (documented in `config/example.env`), then restart the affected units                                                          |
+| What changed               | How it goes live                                                                                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Content (`portal/content`) | Content ships in the app image: build and deploy it (below), then `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge publish` (try `--dry-run` first); no restart  |
+| Code (apps, packages)      | An upgrade: build and push the images, put the new tags or digests in the overlay, `kubectl apply -k` ([Kubernetes → Upgrade](../../portal/deploy/kubernetes/README.md#5-upgrade)) |
+| Permissions                | `pnpm adminforge validate --scopes`, then `pnpm adminforge provision entra` (changes the tenant)                                                                                   |
+| Runner modules             | Installed into the runner image from `portal/apps/runner/modules.lock.json` when it is built: rebuild and deploy                                                                   |
+| Configuration keys         | Set in the `adminforge-env` Secret, made from the env file outside the repository (keys documented in `config/example.env`), then `kubectl rollout restart deploy/adminforge`      |
 
-A full deploy of a reviewed commit, in order ([operations → Upgrade](../operations.md#upgrade) has the commands):
-push to `origin/main` → `git pull` on the host → `pnpm install --frozen-lockfile` → `pnpm build` → migrate the dev
-**and** the services' database (`ADMINFORGE_ENV_OVERLAY=host`) → `publish --dry-run`, read it, then `publish` →
-restart the four units → `/readyz` 200 on the loopback and LAN addresses, no new errors in the journal. Retired
-definitions show as `− retire` in the dry run; check that's what the change meant.
+A full deploy of a reviewed commit, in order ([Kubernetes → Upgrade](../../portal/deploy/kubernetes/README.md#5-upgrade)
+has the commands): push to `origin/main` → `git fetch` and check out that commit → `build-images.sh --registry … --push`
+(it records whether the content is reviewed) → a volume snapshot or `adminforge db backup` when the release changes the
+schema → the new tags or digests in the overlay → `kubectl apply -k` (`Recreate` stops the old pod; the new one
+migrates the database and starts) → `adminforge publish --dry-run` in the pod, read it, then `publish` → `/readyz`
+answers `ok` for `db`, `worker` and `scheduler`, no new errors in the container log. Retired definitions show as
+`− retire` in the dry run; check that's what the change meant.
 
-The CLI talks to your **dev** environment unless told otherwise: anything aimed at the host's database needs
-`ADMINFORGE_ENV_OVERLAY=host`. `publish` re-runs `validate` and the playbook tests and refuses content that isn't
-committed and on `origin/main` as last fetched — it never fetches for you. `--allow-unreviewed` exists for emergencies
-only; it is audited and must be followed by the reviewed change.
+On your machine the CLI talks to your **dev** database file. The cluster's database is on a volume only the pod can
+mount, so anything aimed at it runs in the pod with `kubectl exec`. `publish` re-runs `validate` and the playbook tests
+and refuses unreviewed content — in the pod, an image `build-images.sh` didn't record as built from a commit merged to
+`origin/main` (as last fetched) with clean content. `--allow-unreviewed` exists for emergencies only; it is audited and must be followed
+by the reviewed change.
+
+Until the cluster takes over, the old host keeps running the last Postgres release; its data moves once with
+`adminforge db import-postgres` ([Kubernetes → Moving the data](../../portal/deploy/kubernetes/README.md#moving-the-data-from-the-postgres-host-once)). Leave that
+host's checkout and services alone unless a code owner asks.
 
 ## What your PR must tell the person deploying it
 
 In the PR's **Risk and rollout** section (and the commit body):
 
-- a **migration** (and that it only adds — migrations must be safe to apply before the old processes restart);
+- a **migration** (and that it only adds — the API applies it at start, and a rollback runs the previous image on the
+  newer schema);
 - **new configuration keys** and their safe defaults;
 - **new permissions** (Graph/ARM scopes, app roles) and whether provisioning must run;
-- whether content must be **published**, the runner's modules reinstalled, or a unit restarted;
+- whether content must be **published**, the runner image rebuilt, or the pod restarted;
 - anything that switches something off by design (e.g. a new version of a playbook a write-capable schedule runs needs
   a second approval again);
 - how to undo it.
@@ -45,11 +54,11 @@ In the PR's **Risk and rollout** section (and the commit body):
 - The changelog's `## Unreleased` collects entries as PRs merge. A code owner cuts a release by renaming it to
   `## <version> — <date>` (Semantic Versioning: minor for features, patch for fixes, major for breaking changes) and
   tagging that commit `v<version>`. (Releases so far were recorded only in the changelog; tag from the next release on.)
-- Deploy from a reviewed commit — ideally a tag — in a checkout the services can't write to, never from a working copy
-  someone is editing: the API serves the web app from that checkout's `portal/apps/web/dist` on every request (a build
-  is live at once), and the units run the `dist/` they find in their working directory (live at the next restart).
-- **Rolling back code:** check out the previous release, `pnpm install --frozen-lockfile`, build, reinstall runner
-  modules if the lock file differs, restart. Migrations only add, so older code runs on the newer schema.
+- Build the images from a reviewed commit — ideally a tag — never from a working copy someone is editing: the app image
+  carries the built web app, the server code and the content, so what is in the image is what runs and what
+  `publish` can publish. A local `pnpm build` never reaches production.
+- **Rolling back code:** put the previous release's image tags or digests back in the overlay and `kubectl apply -k`.
+  Migrations only add, so older code runs on the newer schema.
 - **Rolling back content:** published versions only move forward — an older version can't be republished. Revert the
   change in git, bump the version, review, and publish; or retire the definition (`status: retired`).
 
@@ -57,22 +66,20 @@ In the PR's **Risk and rollout** section (and the commit body):
 
 - **Emergency stop:** Admin → Settings → Emergency stop pauses all changes and/or all automation, audited; Approvers and
   Admins can pause, only Admins resume ([operations → Emergency](../operations.md#emergency-switch-adminforge-off)).
-- **Audit:** every state change is in a hash-chained, append-only log; `pnpm adminforge audit verify` checks the chain
-  (with `ADMINFORGE_ENV_OVERLAY=host` for the host's database).
-- **Self-monitoring:** `/readyz` reports degraded when the worker or scheduler goes quiet; schedule failures alert the
-  configured recipients.
+- **Audit:** every state change is in a hash-chained, append-only log; `adminforge audit verify` checks the chain (for
+  the cluster, in the pod: `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify`).
+- **Self-monitoring:** `/readyz` reports degraded when the run worker or the scheduler (both in the API process) goes
+  quiet; schedule failures alert the configured recipients.
 
 ## What contributors never do
 
-- Run `pnpm dev`, tests or builds against the **host services' database** or env overlay.
-- Run `pnpm build` (or the root `pnpm typecheck`) inside the checkout the services run from — the web app it builds
-  is served to everyone immediately, and the server code goes live at the next restart. That includes building to
-  run `pnpm test:e2e:prod`: do that in your own checkout.
-- Restart, stop or reconfigure the host's units, edit its env files or Caddyfile, prune its Docker images, or touch its
-  backups — unless a code owner asked for that specific action.
+- Point `DATABASE_PATH` (for `pnpm dev`, tests or the CLI) at a **deployment's** database file, or copy one to your
+  machine.
+- `kubectl exec` into the pod, restart, scale or re-apply the Deployment, change its Secrets or overlay, push images,
+  or touch its volume, snapshots or backups — unless a code owner asked for that specific action.
 - Run `pnpm adminforge provision entra` or `publish` against a shared environment on your own initiative.
-- Read, copy or print the host's configuration files. `pnpm adminforge env check` prints names and states only — use
-  that.
+- Read, copy or print the installation's configuration (the env file, the `adminforge-env` Secret).
+  `adminforge env check` prints names and states only — use that.
 
 If you think production needs any of these, ask a code owner and say why; include the run or error **reference**.
 

@@ -60,8 +60,7 @@ parallel agents — and stays consistent only with clear boundaries:
   the coordinating session (agents return their changelog lines instead).
 - **Schema and engine first.** A field content will use (a probe's `remedy`) lands before the agents that write
   content with it; an agent that needs a generic engine or policy change stops and asks instead of making it.
-- **Ports and the host are shared.** Only one agent runs the dev server, e2e or Playwright at a time; none builds in
-  the checkout the services run from.
+- **Ports are shared.** Only one agent runs the dev server, e2e or Playwright at a time.
 - **Review the result as one change.** Run `content-reviewer` and `security-reviewer` over the whole diff after the
   agents finish (they find what each agent couldn't see — a query limit, a stale-target write), fix, then run the full
   suite once more before committing.
@@ -73,9 +72,9 @@ parallel agents — and stays consistent only with clear boundaries:
   env file contents or tenant output into the conversation; ask for counts and statuses when it works against a tenant.
 - Don't ask Claude to bypass a hook, a guard or a failing test (`--no-verify`, skipping tests, loosening a rule to get
   green). If a rule is wrong, change the rule in its own reviewed PR.
-- Don't let a session run provisioning, `adminforge publish` to a shared database, deploys, restarts or anything on
-  the AdminForge host unless a code owner asked for that specific action — an earlier "deploy it" doesn't cover the
-  next change. On the host, a `pnpm build` in the services' checkout is a deploy of the web app (it's served at once).
+- Don't let a session run provisioning, `adminforge publish` to a shared database, image pushes, deploys, restarts or
+  anything against the cluster unless a code owner asked for that specific action — an earlier "deploy it" doesn't
+  cover the next change.
 - Commits from a session follow the [commit convention](10-git-and-pull-requests.md#commit-messages) like any other
   (the hook checks them). Keep a `Co-Authored-By` trailer when Claude wrote a substantial part.
 - Long-running work can use worktrees (`.claude/worktrees/` is git-ignored); clean them up when done.

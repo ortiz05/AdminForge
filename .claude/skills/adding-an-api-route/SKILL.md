@@ -26,11 +26,17 @@ need **no** new route — check that first.
 4. Outbound calls only via `ctx.outbound.execute(identity, call)` — never `fetch` Microsoft directly (that would bypass
    the read/write policy, tokens, CAE handling, and provenance).
 5. Audit every state change: `ctx.audit.append({ ...auditActor(ctx, request, session), action, target…, result })`.
-6. DB changes: edit `src/db/schema.ts`, `pnpm --filter @adminforge/api db:generate`, `db:migrate`; never edit applied
-   migrations.
+6. DB changes (one SQLite file, ADR-016): edit `src/db/schema.ts` (drizzle `sqlite-core`), `pnpm --filter
+@adminforge/api db:generate`, review the SQL in `drizzle/` (the API applies it at start; `db:migrate` by hand);
+   migrations only add, never edit applied ones. Write transactions are `writeTx(db, (tx) => …)` (`BEGIN IMMEDIATE`)
+   and **synchronous** — `.get()`/`.all()`/`.run()` inside, never `await`; no Postgres-only SQL (`ILIKE`,
+   `DISTINCT ON`, `::casts`, `FOR UPDATE`) — `tests/guards/sqlite-only.test.ts` refuses both. An append-only table gets
+   `BEFORE UPDATE`/`DELETE` triggers like `drizzle/0001_append_only.sql`. State another process changes reaches
+   browsers through a signal (`ctx.database.signals`), published after the commit.
 7. Config: new keys in `src/config.ts` (zod) **and** `config/example.env` with a comment.
-8. Tests: `tests/api/<area>.test.ts` with `app.inject` (memory stores) and DB-backed tests that skip when Postgres is
-   down; unit tests in `tests/unit/api/`.
+8. Tests: `tests/api/<area>.test.ts` with `app.inject` (memory stores) and DB-backed `tests/api/<area>-db.test.ts` on
+   a temporary SQLite file (`tests/api/db.ts` `testDatabasePath()`; they never skip); unit tests in
+   `tests/unit/api/`.
 9. Check: `pnpm --filter @adminforge/api typecheck`, api + unit projects, `pnpm guard`, `pnpm lint`.
 10. Never loosen the Content-Security-Policy (`helmet` in `src/app.ts`): `script-src` stays `'self'` — no
     `'unsafe-eval'` or `'unsafe-inline'` for scripts (styles keep `'unsafe-inline'`, an accepted risk in

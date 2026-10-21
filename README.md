@@ -20,7 +20,7 @@ schedules, synthetic probes, and KQL configuration checks are declarative conten
 - **Azure Virtual Desktop**: host pools and capacity, session hosts at fleet scale (health, drain mode, agents), user
   sessions, connection failures from Log Analytics; drain mode, messages and sign-outs (armed).
 - **Automation**: playbooks (dry-run preview → confirm → run; approvals; bulk; show-once secrets), runbooks,
-  schedules on this host (automation identity), synthetic probes and KQL checks, Query Studio, reports with
+  schedules (automation identity), synthetic probes and KQL checks, Query Studio, reports with
   CSV/XLSX export, audit (hash-chained), appearance and settings.
 - **News and changes**: a breaking-news view of what Microsoft is changing in the services AdminForge manages —
   your tenant's Message Center and Microsoft 365 / Azure service health, plus Azure Updates, the Microsoft 365 Roadmap,
@@ -33,7 +33,7 @@ Licensing gaps are explained in the UI ("Requires …") and tracked in `docs/lic
 
 | Path                 | Contents                                                                                                                                               |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `portal/`            | Everything needed to run AdminForge: apps (web, api, scheduler, runner), packages, content, CLI, deploy files                                          |
+| `portal/`            | Everything needed to run AdminForge: apps (web, api, scheduler, runner), packages, content, CLI, Kubernetes deployment (`portal/deploy/kubernetes`)    |
 | `tests/`             | Every test and test-only dependency (unit, component, api, content, e2e incl. visual baselines, live, guards, runner, fixtures); see `tests/README.md` |
 | `tooling/`           | Developer tooling (lint, CI bundle budget, commit-message check)                                                                                       |
 | `config/example.env` | Every configuration key, documented. Real values live outside the repo.                                                                                |
@@ -42,10 +42,10 @@ Licensing gaps are explained in the UI ("Requires …") and tracked in `docs/lic
 ## Prerequisites
 
 - **Node.js 24** (`.nvmrc`) and **pnpm 11.10.0** (`packageManager` in `package.json`; `corepack enable` picks it up).
-- **Docker** with Compose, for the dev PostgreSQL (`pnpm db:up`, `portal/deploy/docker-compose.dev.yml`).
 - **PowerShell 7.4+** (`pwsh`) for the runner (Exchange, Teams, SharePoint) and its Pester tests.
 - **Google Chrome** installed on the system: Playwright uses `channel: 'chrome'` and downloads no browser.
-- **Caddy** (optional) for TLS when other machines on the LAN use the portal (`portal/deploy/README.md`).
+- **Docker**, `kubectl` and a Kubernetes cluster only to build and deploy the images (`portal/deploy/kubernetes/README.md`).
+  Development needs neither: the database is a SQLite file the API creates itself.
 
 ## Quick start
 
@@ -55,17 +55,16 @@ cp config/example.env ~/.config/adminforge/dev.env   # fill in tenant settings (
 # provisioner credentials go in ~/.config/adminforge/dev.admin.env (mode 600; CLI and live tests only)
 pnpm install                                         # also points git at .githooks (pre-commit guard tests)
 git config core.hooksPath .githooks                  # same, explicitly (needed if install ran outside a git checkout)
-pnpm --filter @adminforge/api init:local             # generates the dev DB URL, token-cache key, local defaults
-pnpm db:up && pnpm db:harden && pnpm --filter @adminforge/api db:migrate   # non-superuser roles, then tables
+pnpm --filter @adminforge/api init:local             # dev database file (DATABASE_PATH), token-cache key, local defaults
 pnpm adminforge env check                            # key names and states only, never values
 pnpm adminforge provision entra                      # Read/Write/Automation apps, groups, consent (idempotent)
 pnpm adminforge provision status                     # every provisioned object ✓/✗ plus live token checks
 pnpm dev                                             # http://localhost:5173
 ```
 
-Playbook runs and schedules in `pnpm dev` need `RUN_WORKER_IN_PROCESS=true` and `SCHEDULER_IN_PROCESS=true` in the env
-file. Never point `pnpm dev` at the host services' database: they use their own through the `host` overlay
-(`portal/deploy/README.md`), so the two never consume each other's runs.
+The API creates and migrates the database file (`~/.local/share/adminforge/dev.db`) when `pnpm dev` starts, and it is
+also the run worker and the scheduler, so playbook runs and schedules work without anything else running. That file is
+yours alone; never point `DATABASE_PATH` at a deployment's file.
 
 No tenant handy? This runs everything on synthetic data, in memory, ignoring the env file:
 
@@ -73,8 +72,8 @@ No tenant handy? This runs everything on synthetic data, in memory, ignoring the
 ADMINFORGE_ENV_FILE=/dev/null PUBLIC_BASE_URL=http://localhost:5173 AUTH_MODE=mock DATA_MODE=fixtures pnpm dev
 ```
 
-To run AdminForge as services on this host (API + web, run worker, scheduler, PowerShell runner), see
-`portal/deploy/README.md`.
+AdminForge is deployed to Kubernetes as one pod (the API with its run worker and scheduler, and the PowerShell runner
+as a sidecar) with its database on a PersistentVolume: see `portal/deploy/kubernetes/README.md`.
 
 ## Tests
 
@@ -96,9 +95,9 @@ agents in `.claude/agents/`, and `docs/extending.md` explains the workflow. The 
 - `SECURITY.md` — security model and policy
 - `docs/architecture.md` — architecture: apps, identities, data flow
 - `docs/access.md` — access: sign-in, portal roles, permissions
-- `docs/operations.md` — operating AdminForge on this host
+- `docs/operations.md` — operating AdminForge
 - `docs/troubleshooting.md` — troubleshooting
-- `portal/deploy/README.md` — host services, systemd units, Caddy
+- `portal/deploy/kubernetes/README.md` — the Kubernetes deployment: images, Secrets, deploy, upgrade, backups
 - `docs/extending.md`, `docs/widgets.md` — extending AdminForge with Claude Code; widget reference
 - `docs/adr/`, `docs/decisions.md`, `docs/licensing-review.md`, `docs/backlog.md`
 - `tests/README.md`, `tests/live/README.md` — test projects and live validation

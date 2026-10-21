@@ -12,10 +12,10 @@ portal/packages/schemas/src/api*.ts         contract: zod request/response schem
 portal/apps/api/src/routes/<area>.ts        HTTP: parse → guard → call the service → reply. No business rules.
 portal/apps/api/src/<feature>/service.ts    rules: roles beyond Reader, validation against content, audit, events
 portal/apps/api/src/<feature>/store.ts      persistence interface + in-memory implementation (tests, mock mode)
-portal/apps/api/src/<feature>/pg-store.ts   Postgres implementation (Drizzle)
+portal/apps/api/src/<feature>/sqlite-*.ts   SQLite implementation (Drizzle sqlite-core): sqlite-store.ts, …
 portal/apps/api/src/<feature>/module.ts     wiring: builds the service from AppContext (called in buildApp)
 portal/apps/api/src/db/schema.ts            tables; migrations generated into portal/apps/api/drizzle/
-tests/api/<area>.test.ts                    app.inject() against memory stores; *-pg.test.ts for Postgres paths
+tests/api/<area>.test.ts                    app.inject() against memory stores; *-db.test.ts on a temporary SQLite file
 tests/unit/api/<topic>.test.ts              the pure rules
 docs/api.md                                 the contract for people
 ```
@@ -88,13 +88,17 @@ api.put('/admin/emergency', async (request) => {
 
 - Writes to our own database use conditional updates (expected `version`/`sha256`) so two people or two processes
   can't silently overwrite each other; the loser gets a 409 with a "reload" hint.
-- Multi-step invariants (count, then insert) run in one transaction, with an advisory lock if a cap must hold under
-  concurrency.
+- Multi-step invariants (count, then insert) run in one write transaction: `writeTx(db, (tx) => …)` (`db/client.ts`)
+  is `BEGIN IMMEDIATE`, which takes the write lock up front, so no other writer — in this process or another — runs
+  between the count and the insert (`schedules/sqlite-store.ts` `insertPortalSchedule`). The function is
+  **synchronous**: use the builders' `.get()`, `.all()` and `.run()` inside it and never `await`
+  (`tests/guards/sqlite-only.test.ts` refuses an `async` transaction function). Send signals after it has committed.
 - Schema changes: edit `src/db/schema.ts`, run `pnpm --filter @adminforge/api db:generate`, review the SQL in
-  `drizzle/`, and add a test. Migrations **only add** (they're applied before the old processes restart) and are
-  **never edited** once applied anywhere. A new append-only table also gets its grants in
-  `portal/deploy/db/app-role-grants.sql` (the services' role can't update or delete it). Mention the migration in the
-  PR's "Risk and rollout".
+  `drizzle/`, and add a test. Migrations **only add** (an older image may have to run on the newer schema after a
+  rollback) and are **never edited** once applied anywhere; the API applies them at start. A new append-only table
+  gets `BEFORE UPDATE` / `BEFORE DELETE` triggers that `RAISE(ABORT, …)`, as in `drizzle/0001_append_only.sql`, with a
+  test like `tests/api/db-triggers-db.test.ts`. SQLite has no roles, so the triggers stop the application, not
+  someone with the volume. Mention the migration in the PR's "Risk and rollout".
 - Tenant writes are never made from a route: they are `mode: write` steps of published content, executed by the run
   worker. Anything else that writes on someone's behalf calls `ctx.outbound.assertWritable(...)` first (emergency
   stop → 503 `writes_paused`, protected objects → 403 `protected_object`).
@@ -125,11 +129,12 @@ await ctx.audit.append({
 
 ### 7. Events
 
-`ctx.events.publish({ type: '<subject>.<event>', data })` reaches the Server-Sent Event streams of **this** API
-process. Events raised in the worker or the scheduler reach browsers only through the relayed Postgres `NOTIFY`
-channels (`run_events`, `definitions_changed`, `schedule_events`) — use one of those, or add a relay, for state that
-changes outside the API. Data carries keys and flags only; the browser refetches through the normal, authorised
-endpoints.
+`ctx.events.publish({ type: '<subject>.<event>', data })` reaches the Server-Sent Event streams of the API process —
+which includes the run worker and the scheduler. Another process that changes state (the CLI's `publish`, a scheduler
+one-shot) reaches browsers only through a signal in the database (`ctx.database.signals`, `db/signals.ts`:
+`definitions_changed`, `schedule_events`), which the API polls every 500 ms — use one of those, or add a channel, for
+state that changes outside the API process. Data carries keys and flags only; the browser refetches through the
+normal, authorised endpoints.
 
 ### 8. Responses
 
@@ -164,8 +169,9 @@ standards](05-coding-standards.md#configuration)).
 `tests/api/` builds the app with memory stores and a mock session (`tests/api/support/app.ts` — `buildTestApp`,
 `sessionFor`; the shared test people in `tests/api/support/people.ts`; feature harnesses such as
 `tests/api/schedules-helpers.ts` build on them), then calls it with `app.inject`. Cover: the happy path, each refusal code, each role
-(including "a Reader is refused"), concurrent-change conflicts, and the audit event. Postgres-specific behaviour
-(transactions, locks, migrations) goes in a `*-pg.test.ts` that skips without a database. See [Testing](09-testing.md).
+(including "a Reader is refused"), concurrent-change conflicts, and the audit event. Database behaviour
+(transactions, triggers, migrations, queries) goes in a `*-db.test.ts` on a temporary SQLite file
+(`tests/api/db.ts` `testDatabasePath()`); it runs everywhere. See [Testing](09-testing.md).
 
 ## Before you open the PR
 
@@ -176,7 +182,7 @@ standards](05-coding-standards.md#configuration)).
 - [ ] Audit event per state change (awaited); new security refusal codes in `AUDITED_DENIALS`; SSE event if browsers
       show the state
 - [ ] Rate limit if it's expensive or sends data out
-- [ ] Migration additive, tested, grants updated for append-only tables
+- [ ] Migration additive and tested; append-only tables have their triggers
 - [ ] `docs/api.md`: endpoint index and route count, section, rate-limit row, roles table if access changed;
       `docs/access.md` if who-can-do-what changed
 - [ ] Tests: happy path, refusals, roles, conflicts, audit

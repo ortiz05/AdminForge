@@ -9,8 +9,9 @@ description: Use when verifying AdminForge changes against a real Microsoft tena
 
 Configuration lives in `~/.config/adminforge/<env>.env` (never in the repo; never print values). A dedicated validation
 user (`AF_TEST_USER_UPN`) signs in automatically, answering MFA from a TOTP seed. Its credentials and the provisioner's
-live in the admin-only `<env>.admin.env` next to the env file (read by the CLI and the live tests, never by the
-services).
+live in the admin-only `<env>.admin.env` next to the env file (read by the CLI and the live tests, never by the API or
+the cluster). `init:local` gives the env file a dev database of its own (`DATABASE_PATH=~/.local/share/adminforge/dev.db`);
+`pnpm dev` creates and migrates it and is also the run worker and the scheduler.
 
 ## Setup (once per tenant)
 
@@ -37,15 +38,16 @@ permission on the provisioner (table in `tests/live/README.md` → Licensed test
 
 ## Checks
 
-- API end to end (SSO, overview, arm, logout): `pnpm db:up`, start the API, then
+- API end to end (SSO, overview, arm, logout): start the API (`pnpm dev`), then
   `pnpm exec tsx tests/live/scripts/verify-api-live.ts`.
 - Full sweep (every page, Query Studio, schedules, read-mode refusals, reversible writes, audit chain):
-  `pnpm test:live` — prerequisites and env knobs in `tests/live/README.md`. Against the host services behind Caddy:
-  `PUBLIC_BASE_URL=https://<lan-address>:8443 AF_LIVE_INSECURE_TLS=1 NODE_EXTRA_CA_CERTS=<caddy root.crt> pnpm test:live`.
+  `pnpm test:live` — prerequisites and env knobs in `tests/live/README.md`. Against a deployment, `PUBLIC_BASE_URL` is
+  its Ingress URL (`PUBLIC_BASE_URL=https://adminforge.example.com pnpm test:live`; add `AF_LIVE_INSECURE_TLS=1` for a
+  certificate from a private CA).
 - Credentials for provisioning and the test user live in `<env>.admin.env` (the CLI and live tests read it; the
   services never do). Don't put them back in `<env>.env` — `adminforge env check` flags that.
-- Never run `pnpm dev` against the services' database: the host services use the `host` overlay
-  (`<env>.host.env`); dev uses the database in `<env>.env`.
+- Never point `DATABASE_PATH` at a deployment's database file: dev uses its own (`<env>.env`); the cluster's is on a
+  volume only its pod mounts.
 - In a browser test: `openPortalSession()` / `armWriteAccess()` from `tests/live/lib/portal-session.ts`; preview → run →
   poll through `tests/live/lib/runs.ts`; credentials via `testUserCredentials(env)`. Print everything through
   `tests/live/lib/mask.ts` (`mask`, `maskError`); files go to `AF_LIVE_OUT` (default `~/.cache/adminforge/live`, never
@@ -54,7 +56,8 @@ permission on the provisioner (table in `tests/live/README.md` → Licensed test
   `@user:`, `@group:`, `@mailbox:` (email address), `@dl:` (email address), `@team:` (group id), `@site:` (site id;
   `#webUrl` for the URL) followed by the `AF-Test-*` name. `check-placeholders.ts` checks they resolve.
 - Schedules and probes as the automation identity: `tests/live/scripts/run-schedule-once.ts` with `--schedule <id>`
-  or `--probe <id>…`. Dev database only (it refuses `ADMINFORGE_ENV_OVERLAY=host`); delivery is suppressed by default,
+  or `--probe <id>…`. Dev database only (it refuses an env overlay and a `DATABASE_PATH` from the process environment);
+  delivery is suppressed by default,
   or `--deliver sender` mails `AF_MAIL_SENDER` itself — never a person, never a Teams channel.
 - Writes: **only** against `AF-Test-*` users/groups/resources that provisioning created. Dry run first, then run,
   then run the compensating playbook; check `/audit` (chain verified).

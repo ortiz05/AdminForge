@@ -56,8 +56,8 @@ Chrome log every violation in the console, where it hides real problems.
 - Styles may be inline (Radix and Monaco inject them; `style-src 'unsafe-inline'` is an accepted risk) — scripts may
   not.
 - `tests/e2e/prod/csp-no-eval.spec.ts` loads a page of the production build under the same policy and fails on any
-  violation; run `pnpm build && pnpm test:e2e:prod` when you add a dependency or change bundling (in your own checkout —
-  never the one the services run from, whose `dist/` is served live).
+  violation; run `pnpm build && pnpm test:e2e:prod` when you add a dependency or change bundling (a local build never
+  reaches production, which runs the app image).
 
 ## URL state
 

@@ -1,14 +1,14 @@
 ---
 name: adding-a-schedule-or-probe
-description: Use when asked to schedule something to run on the AdminForge host (a recurring report, check, scheduled action, synthetic test), add monitoring, a configuration/compliance check, an alert threshold, or a KQL query that should run unattended.
+description: Use when asked to schedule something to run unattended in AdminForge (a recurring report, check, scheduled action, synthetic test), add monitoring, a configuration/compliance check, an alert threshold, or a KQL query that should run unattended.
 ---
 
 # Adding a schedule or probe
 
 ## Overview
 
-Schedules (`portal/content/schedules/`) run on this host via `portal/apps/scheduler` as the **automation identity**
-(app-only; ADR-011) — never as a person. Probes (`portal/content/probes/`) are synthetic tests and configuration
+Schedules (`portal/content/schedules/`) are run by the scheduler inside the API process (`portal/apps/api/src/schedules`;
+ADR-016) as the **automation identity** (app-only; ADR-011) — never as a person. Probes (`portal/content/probes/`) are synthetic tests and configuration
 checks that write time-series results shown on `/monitoring`.
 
 ## Report schedules: often no content at all
@@ -111,8 +111,10 @@ minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every`
    `// af:` comment); **validate:** `pnpm adminforge validate`, content tests, `pnpm guard`.
 9. **Try it once live (read-only):** against the dev database, as the automation identity, with delivery kept away
    from people — `pnpm exec tsx tests/live/scripts/run-schedule-once.ts` with `--probe <id>` or `--schedule <id>`
-   (`--deliver sender` mails only `AF_MAIL_SENDER` itself; see `tests/live/README.md`). Then check `/monitoring`. On
-   the host, the scheduler's own one-shot is in `portal/deploy/README.md`.
+   (`--deliver sender` mails only `AF_MAIL_SENDER` itself; see `tests/live/README.md`). Then check `/monitoring`. The
+   plain one-shots, `pnpm --filter @adminforge/scheduler exec tsx src/main.ts --probe <id>` / `--schedule <id>`
+   (`portal/apps/scheduler/README.md`), deliver reports to the configured recipients; in a deployment a code owner
+   runs them in the pod.
 
 ## Common mistakes
 

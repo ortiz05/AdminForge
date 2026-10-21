@@ -14,7 +14,7 @@ The vitest projects are defined in `vitest.config.ts`; each one maps to a folder
 | `component` | `component/<area>/`           | jsdom (`component/setup.ts`)                   | React components: `ui` primitives, widgets, web pages, Query Studio; `axe` checks via `component/axe.ts`                                      |
 | `api`       | `api/`                        | node (`api/setup.ts`), files run one at a time | BFF routes through Fastify `inject` with a mock session; DB-backed suites (see below)                                                         |
 | `content`   | `content/`                    | node                                           | Every definition in `portal/content` validates; widget configs; focused tests for content-specific logic                                      |
-| `guards`    | `guards/`                     | node                                           | No secrets or tenant-specific values in committable files; design tokens only in UI code                                                      |
+| `guards`    | `guards/`                     | node                                           | No secrets or tenant-specific values in committable files; design tokens only in UI code; SQLite-only runtime; Kubernetes manifests           |
 | `live`      | `live/**/*.test.ts` (none)    | node                                           | Reserved; the live suite is Playwright (`live/README.md`)                                                                                     |
 | `scale`     | `SCALE` in `vitest.config.ts` | node                                           | Transforms and native helpers at enterprise size under the 250 ms wall-clock budget — run by `pnpm test` after the others, one file at a time |
 | `perf`      | `perf/**/*.test.ts`           | node                                           | Enterprise-scale budgets against a synthetic 100k-user tenant — `pnpm test:perf` only ([`perf/README.md`](perf/README.md))                    |
@@ -31,10 +31,11 @@ Example: `pnpm --filter @adminforge/tests exec vitest run --project component co
 
 ### API tests and the database
 
-API tests use in-memory stores by default. The DB-backed suites (`*-pg.test.ts`, `pg-stores`, `definitions-db`, part of `views`) use
-`TEST_DATABASE_URL` as-is, or create and migrate a separate `adminforge_test` database next to the `DATABASE_URL` from
-your env file (so test rows never reach the dev audit chain). When Postgres isn't reachable they skip. Start it with
-`pnpm db:up`.
+API tests use in-memory stores by default. The DB-backed suites (`*-db.test.ts`, `db-stores`, part of `views`) each run
+on a migrated SQLite file of their own in a fresh temporary directory (`api/db.ts` `testDatabasePath()`), never your
+dev database or a deployment's, so test rows never reach a real audit chain. They need nothing running and never skip.
+The one exception is `import-postgres.test.ts` (the one-time importer): it needs a Postgres to create a throwaway
+database in — `TEST_POSTGRES_URL`, or the `DATABASE_URL` an older env file still has — and skips without one.
 
 ## Shared helpers
 
@@ -45,11 +46,11 @@ writing a new fake, look here.
 
 ### Generic (`lib/`)
 
-| Module               | What it's for                                                                                                   | Imported by                                                                        |
-| -------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `lib/repo.ts`        | `repoRoot`, `committableFiles()`, `readText()`, `parseEnvFile()`, `localEnvFiles()`                             | guards, content, api, unit (api, cli, connectors, deploy, engine, runner, tooling) |
-| `lib/clock.ts`       | `Clock` (settable `now`) and `FakeClock` (also the scheduler's `Timers`: timeouts fire as it advances), `flush` | `api/helpers.ts` (as `Clock`), `support/scheduler.ts` (as `FakeClock`)             |
-| `lib/kql-columns.ts` | `analyzeKql()`: static column types of a Resource Graph query (computed booleans arrive as 1/0)                 | content (`resource-graph-booleans`)                                                |
+| Module               | What it's for                                                                                                   | Imported by                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `lib/repo.ts`        | `repoRoot`, `committableFiles()`, `readText()`, `parseEnvFile()`, `localEnvFiles()`                             | guards, content, api, unit (api, cli, connectors, engine, runner, tooling) |
+| `lib/clock.ts`       | `Clock` (settable `now`) and `FakeClock` (also the scheduler's `Timers`: timeouts fire as it advances), `flush` | `api/helpers.ts` (as `Clock`), `support/scheduler.ts` (as `FakeClock`)     |
+| `lib/kql-columns.ts` | `analyzeKql()`: static column types of a Resource Graph query (computed booleans arrive as 1/0)                 | content (`resource-graph-booleans`)                                        |
 
 ### Shared across projects (`support/`)
 
@@ -72,7 +73,7 @@ writing a new fake, look here.
 | `api/schedules-helpers.ts`        | `schedulesApp()`: fake content, jobs and outbound, `FakeClock` timers, temporary artifacts directory                              | schedules*, probes, news, emergency, artifact, query, schedule-editor tests |
 | `api/portal-schedules-helpers.ts` | Report definitions, delivery configuration and `portalApp()` for the Reports catalogue and portal schedules                       | portal-schedules-*, reports-catalog                                         |
 | `api/content-helpers.ts`          | `setupContent()` (a private copy of `fixtures/content/platform/`), `fixturesApp()`, `liveApp()`, `TEST_USERS`                     | content-routes, datasources*, advanced-*, export, admin, views              |
-| `api/db.ts`                       | `testDatabaseUrl()` (migrated `adminforge_test`, or null to skip), `resetTables()`                                                | DB-backed suites (`*-pg`, pg-stores, …)                                     |
+| `api/db.ts`                       | `testDatabasePath()` (a migrated SQLite file in a fresh temporary directory), `resetTables()`                                     | DB-backed suites (`*-db`, db-stores, …)                                     |
 | `api/runner-fake.ts`              | Reads a runner job request and builds the runner's signed answers                                                                 | runner-port tests                                                           |
 | `api/setup.ts`                    | Project setup: `NODE_ENV=test`                                                                                                    | vitest `api` project                                                        |
 
@@ -107,8 +108,11 @@ Used by the live suite (`live/e2e/`) and scripts (`live/scripts/`) only, never i
 ## Guards
 
 `guards/no-tenant-data.test.ts` scans every committable file (tracked plus untracked-but-not-ignored) for secrets and
-tenant-specific values; `guards/design-tokens.test.ts` rejects raw colours and arbitrary Tailwind values in UI code. They
-run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` sets `core.hooksPath`, or run
+tenant-specific values; `guards/design-tokens.test.ts` rejects raw colours and arbitrary Tailwind values in UI code;
+`guards/sqlite-only.test.ts` keeps runtime code SQLite-only (no `pg` or `pg-boss`, no Postgres-only SQL, no `async`
+transaction functions — the one-time importer excepted); `guards/kubernetes-manifests.test.ts` keeps the deployment's
+shape (one replica, `Recreate`, a ReadWriteOncePod volume, non-root, read-only root file systems, the runner on the
+pod's loopback, nothing installation-specific in the base). They run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` sets `core.hooksPath`, or run
 `git config core.hooksPath .githooks`). Never bypass them with `--no-verify`.
 
 ## Fixtures

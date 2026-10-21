@@ -11,6 +11,22 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Kubernetes deployment** (ADR-017, `portal/deploy/kubernetes`): the app image (API, web, `adminforge` CLI,
+  content; non-root, read-only root file system), the runner as the pod's sidecar on loopback, kustomize base (one
+  replica, `Recreate`, a ReadWriteOncePod PVC, NetworkPolicy without the metadata service, no service-account token)
+  and an example overlay (Ingress with unbuffered Server-Sent Events, storage class, TRUST_PROXY), a loader pod for
+  putting a database file on the volume, and `build-images.sh`, which records in the image whether its content was
+  reviewed (`adminforge publish` in the pod reads that instead of git).
+- `adminforge db backup <-|file --plaintext>`: a consistent copy of the database without sessions, sign-ins or
+  tokens, checked (integrity, audit chain), mode 600 from its first byte; `-` streams it to stdout for encryption off
+  the cluster, and a plaintext file needs `--plaintext`.
+- `adminforge db import-postgres`: the one-time move from a Postgres release — every table but sessions, from one
+  snapshot, into a new SQLite file; the audit chain is re-verified and its tail must equal Postgres'.
+- `adminforge env check` names configuration keys of the Postgres releases that nothing reads any more.
+- `adminforge db sign-out-everyone --yes [--schedule-grants]`: the emergency step that ends every session at once
+  (sessions, pending sign-ins and their tokens; audited) while the portal keeps running — it replaces truncating the
+  Postgres tables by hand.
+
 - **Azure Virtual Desktop**, a parent section of its own: Overview, Host pools (capacity: hosts taking new sessions,
   slots in use, autoscale, Start VM on Connect), Session hosts (health, drain mode, agent and OS; Resource Graph, paged
   — thousands of hosts), User sessions (per pool or host, by UPN) and Connections (Log Analytics: success rate,
@@ -309,6 +325,24 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- **One SQLite file on a persistent volume holds all state** (ADR-016; supersedes ADR-004): better-sqlite3 with
+  synchronous `BEGIN IMMEDIATE` write transactions, a new migration baseline with the append-only triggers, and SQLite
+  replacements for what Postgres provided — the `run_jobs` queue (pg-boss), `leases` (advisory locks; a run's lock now
+  tells its holder when it lapses), `signals` (LISTEN/NOTIFY across processes). Configuration: `DATABASE_PATH` and
+  `DATABASE_BUSY_TIMEOUT_MS` replace `DATABASE_URL`, the pool and timeout keys, `DATABASE_MIGRATION_URL`,
+  `POSTGRES_PASSWORD` and the owner files. The API migrates the database at startup; production refuses a database
+  file others can read or write, or one on NFS, SMB/Azure Files or FUSE.
+- **The API is the run worker and the scheduler** — one process owns the database. The worker service and the
+  scheduler service are gone (and `RUN_WORKER_IN_PROCESS` / `SCHEDULER_IN_PROCESS` with them); the scheduler app runs
+  one-shots only. Show-once secrets never leave the API process.
+- Development needs no Docker database: `init:local` writes `DATABASE_PATH=~/.local/share/adminforge/dev.db`, and
+  every database-backed test suite runs on a temporary file (none skips).
+- Probe remedies follow the move to Kubernetes: `probes.portal-readiness` 1.0.4 tells a degraded portal (runs or
+  schedules not processed) from one that can't be reached, and points at the api container's log, the database volume
+  and the Ingress; `probes.portal-tls-certificate` 1.0.4 at the Ingress's certificate; eleven reachability checks
+  (Graph, ARM, Intune, Entra, Exchange, SharePoint, Teams, the Microsoft 365 portal) at the cluster's outbound network
+  instead of "this host".
+
 - **Docs and skills for extending consistently:** CLAUDE.md non-negotiables 12–14 (no eval in the browser; checks
   explain themselves; Resource Graph limits, live checks, retire don't delete) and the deploy runbook (a build in the
   services' checkout is served at once); `docs/extending.md` covers new parent sections and retiring content; the
@@ -492,6 +526,10 @@ adminforge-<process>`) and a configurable pool size (`DATABASE_POOL_MAX` [10]); 
 
 ### Removed
 
+- The host deployment (ADR-008, superseded by ADR-017): the systemd units and their hardening drop-ins, Caddy's
+  configuration, `install-service-account.sh`, `install-units.sh`, the Postgres container (`pnpm db:up` / `db:down`),
+  `pnpm db:harden` and the role scripts, and the encrypted backup timer. Postgres, pg-boss and the Postgres migrations.
+
 - **Function Apps and Azure Arc-enabled Kubernetes retired** (not needed for now): their pages, report and weekly
   schedule (turned off), triage runbook, trigger-sync playbook, the example HR-sync connection and probe, and Log
   Analytics' "Function App errors" query. The generic `functionHealth` probe kind and `function` datasource stay;
@@ -508,6 +546,11 @@ adminforge-<process>`) and a configurable pool size (`DATABASE_POOL_MAX` [10]); 
   `AF_QUERY_SOURCES` (above). A content test keeps active definitions from linking to retired ones.
 
 ### Security
+
+- The database's protection moves from Postgres roles to the file (ADR-016): 0600 file, 0700 folder, local block
+  storage only, a volume only one pod can mount. The audit log's triggers no longer hold against the service itself
+  (SQLite has no roles); the hash chain and its checkpoints — now in the api container's log, to be shipped off the
+  cluster — remain the tamper evidence. Deleted sessions and tokens are overwritten in the file (`secure_delete`).
 
 - **Dedicated service accounts** (Postgres finding C1): `portal/deploy/install-service-account.sh` (dry run by default;
   `--apply`, `--release`, `--rollback` and `--sync-config` need root) moves the api, worker and scheduler from the

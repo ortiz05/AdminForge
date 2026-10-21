@@ -196,7 +196,9 @@ nothing refused, lists p95 0.8 s). Measured above; dashboards and reports that c
     `throttledRetries`. The Read app's Graph budget is shared by every process, so slots × processes is what
     Microsoft sees.
   - **A busy event loop** (`eventLoopDelay` p99 above ~250 ms, transform timeouts, the API process near one full
-    core): add API processes behind the proxy — each has its own slots, cache and event loop.
+    core): the API is one process by design (it owns the SQLite file and is also the run worker and the scheduler,
+    ADR-016), so more processes are not an option — find the heavy transform or dashboard (the `microsoft call` lines
+    and the datasource timings name it) and move the work to the source (filters, counts, snapshots).
   - **Heavy dashboards opened by many people** (the same crawl for every engineer): tenant-wide snapshots and counts
     at the source ([backlog](backlog.md)) — more slots or processes don't make a crawl of 100k objects faster.
 - **Re-measure** with `pnpm test:perf` after content changes and `tests/perf/load.ts` (`--sessions`, `--think`,

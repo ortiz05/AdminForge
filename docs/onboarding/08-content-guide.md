@@ -1,7 +1,7 @@
 # 8. Content guide
 
 Most of AdminForge is **content**: YAML definitions in `portal/content`, validated against schemas, reviewed in git,
-published to Postgres, and rendered or executed by the generic engine (ADR-005). This is where most contributions
+published to the database, and rendered or executed by the generic engine (ADR-005). This is where most contributions
 happen. Each kind has a Claude Code skill with the detailed rules — this page is the common ground.
 
 ## The kinds
@@ -13,7 +13,7 @@ happen. Each kind has a Claude Code skill with the detailed rules — this page 
 | report     | `reports/<section>/`                                             | An exportable page; appears in the Reports catalogue automatically                      | `adding-a-page-or-report`    |
 | playbook   | `playbooks/<section>/`                                           | A change: inputs → dry-run preview → confirm → steps (read and write)                   | `adding-a-playbook`          |
 | runbook    | `runbooks/<section>/`                                            | A guided procedure of playbooks and manual steps                                        | `adding-a-playbook`          |
-| schedule   | `schedules/<job group>/` (`reports/`, `probes/`, `maintenance/`) | Something that runs on the host as the automation identity                              | `adding-a-schedule-or-probe` |
+| schedule   | `schedules/<job group>/` (`reports/`, `probes/`, `maintenance/`) | Something that runs unattended as the automation identity                               | `adding-a-schedule-or-probe` |
 | probe      | `probes/`                                                        | A synthetic check or KQL configuration check, run by schedules                          | `adding-a-schedule-or-probe` |
 | connection | `connections/`                                                   | Your own Entra-secured API or Azure Function AdminForge may call (not Microsoft's APIs) | `adding-a-service-connector` |
 | feed       | `feeds/`                                                         | A source for News and changes                                                           | `add-news-feed`              |
@@ -168,8 +168,8 @@ pnpm guard
 # then look at it in mock mode: /p/<id>
 ```
 
-Content reaches the running services only through `pnpm adminforge publish`, run by a code owner from a reviewed commit
-on `main` ([Releases and operations](13-releases-and-operations.md)).
+Content reaches the running portal only through `adminforge publish`, run by a code owner in the pod from an image built
+from a reviewed commit on `main` ([Releases and operations](13-releases-and-operations.md)).
 
 ## Before you open the PR
 

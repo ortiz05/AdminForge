@@ -1139,8 +1139,10 @@ apps, tenant}` — `contentSource` is `fs` or `db`; `writeStepUp` is how arming 
 | `emergency.changed`   | `{target, paused}` — changes or automation paused or resumed                      | everyone                                                         |
 
 `run.updated` carries no log or progress lines — those are only on the run's own stream,
-[`GET /api/runs/:id/events`](#get-apirunsidevents). Schedule and probe events come from the scheduler process through
-Postgres `NOTIFY schedule_events`; run events through `NOTIFY run_events`.
+[`GET /api/runs/:id/events`](#get-apirunsidevents). The run worker and the scheduler run in the API process, so their
+events are delivered in-process; schedule and probe events from a scheduler one-shot (another process) arrive through
+the `schedule_events` signal in the database, and `definitions.changed` after `adminforge publish` through the
+`definitions_changed` signal, each within about a second.
 
 ## Health
 
@@ -1152,14 +1154,14 @@ Both are unauthenticated, not rate limited, `Cache-Control: no-store`.
 
 #### `GET /readyz`
 
-- Readiness: the database answers, plus the background components' heartbeats (`heartbeat:worker`,
-  `heartbeat:scheduler`, written every 30 s; `stale` after 2 minutes of silence).
+- Readiness: the database file can be read, plus the heartbeats of the run worker and the scheduler — both run in the
+  API process (`heartbeat:worker`, `heartbeat:scheduler`, written every 30 s; `stale` after 2 minutes of silence).
 - 200 `{status: "ok", checks: {db: "ok", worker: "ok", scheduler: "ok"}}`.
 - 200 `{status: "degraded", checks: {db: "ok", worker: ok|stale|missing, scheduler: ok|stale|missing}}` — the API
   works, but runs or schedules are not being processed. If the heartbeats cannot be read, `degraded` with only
   `{db: "ok"}`.
 - 200 `{status: "ok", checks: {db: "memory"}}` without a database (in-memory dev).
-- 503 `not_ready` when the database does not answer.
+- 503 `not_ready` when the database can't be read.
 - Answered from a state cached for 5 s and limited to 60 requests per minute per client.
 
 #### Static SPA

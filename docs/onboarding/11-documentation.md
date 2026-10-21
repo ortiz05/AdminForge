@@ -14,7 +14,7 @@ it isn't finished (CLAUDE.md rule 11). This page says which docs each kind of ch
 | `docs/architecture.md`                                               | Processes, identities, data, content flow — as deployed                      |
 | `docs/api.md`                                                        | The HTTP contract: conventions, every endpoint, codes, limits, roles         |
 | `docs/access.md`                                                     | Portal roles, groups, what each app may do, separation of duties             |
-| `docs/operations.md`                                                 | Running the host: start/stop, publish, upgrade, backups, emergency, rotation |
+| `docs/operations.md`                                                 | Running AdminForge: restart, publish, upgrades, backups, emergency, rotation |
 | `docs/troubleshooting.md`                                            | Every error code people meet, what it means, what to do                      |
 | `docs/widgets.md`                                                    | Widget reference for content authors                                         |
 | `docs/news.md`                                                       | News and changes: sources, classification, egress                            |
@@ -71,7 +71,7 @@ codes, keys, permissions). Code owners turn `Unreleased` into a version when the
   `avery@example.com` and placeholder GUIDs — never a real tenant.
 - **One source of truth.** Link instead of copying; when you must repeat a fact, say where the source is.
 - **Tables for reference, prose for reasoning, numbered steps for procedures.** Mermaid for diagrams.
-- **No installation-specific remarks in repo docs** (this host's quirks, a tenant's state). They belong in operator
+- **No installation-specific remarks in repo docs** (an installation's quirks, a tenant's state). They belong in operator
   notes outside the repository.
 - Docs are Markdown formatted by Prettier (`pnpm format`); keep lines under the 110-column print width.
 

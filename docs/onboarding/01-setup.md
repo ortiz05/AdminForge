@@ -9,7 +9,6 @@ checks on your commits as CI does. You don't need a Microsoft tenant for any of 
 | --------------------- | ------------------------------- | ------------------------------------------------------------------------------------- |
 | Node.js               | 24 (`.nvmrc`)                   | Everything in `portal/` and `tests/`. `nvm use` or `fnm use` picks it up.             |
 | pnpm                  | 11.10.0 (`packageManager`)      | The workspace. `corepack enable` installs the pinned version — don't install another. |
-| Docker with Compose   | current                         | The dev Postgres (`pnpm db:up`) and the DB-backed API tests                           |
 | Google Chrome         | current, installed system-wide  | Playwright uses `channel: 'chrome'` and never downloads a browser                     |
 | PowerShell (`pwsh`)   | 7.4+                            | Only if you work on the PowerShell runner (Exchange, Teams, SharePoint) or its tests  |
 | VS Code (recommended) | with the Red Hat YAML extension | `.vscode/settings.json` maps content files to their JSON schemas (autocomplete)       |
@@ -50,24 +49,21 @@ and content work.
 
 ## Give yourself a local database
 
-The DB-backed API tests and `pnpm dev` against a tenant need Postgres. Configuration lives **outside** the repository:
+`pnpm dev` against a tenant keeps its state in a SQLite file of your own — no Docker, no database server.
+Configuration lives **outside** the repository:
 
 ```bash
 install -d -m 700 ~/.config/adminforge
 cp config/example.env ~/.config/adminforge/dev.env && chmod 600 ~/.config/adminforge/dev.env
 pnpm --filter @adminforge/api init:local   # fills missing keys and replaces the CHANGE_ME placeholders: your dev database
-                                           # URL, token-cache key, local defaults; the container's superuser password goes
-                                           # to dev.owner.env (never prints values)
-pnpm db:up                                 # Postgres 18 in Docker on 127.0.0.1:55432
-pnpm db:harden                             # your own non-superuser role for adminforge_dev / adminforge_test (idempotent)
-pnpm --filter @adminforge/api db:migrate
+                                           # file (DATABASE_PATH=~/.local/share/adminforge/dev.db), token-cache key,
+                                           # local defaults (never prints values)
 pnpm adminforge env check                  # key names and states only — it never prints values
 ```
 
-The API tests migrate their own `adminforge_test` database next to the one in your env file, so test rows never mix
-with your dev data. You connect as `adminforge_dev`, which owns both databases and is never a superuser (the
-container's superuser is for `docker exec` only; see `docs/operations.md` → Postgres hardening). When Postgres isn't running, those suites **skip silently** — start it (`pnpm db:up`)
-before you rely on an API test run.
+The API creates the file (mode 600, in a 700 directory) and applies the migrations when it starts;
+`pnpm --filter @adminforge/api db:migrate` does the same by hand. The DB-backed API tests don't use it: each suite makes
+a migrated file of its own in a temporary directory, so they run everywhere and never skip ([Testing](09-testing.md)).
 
 ## Prove everything works
 
@@ -84,9 +80,8 @@ pnpm adminforge test                # playbook and runbook tests
 All of it should pass on a fresh clone of `main`. If something fails, it's either your setup (see below) or a real
 bug — say so in the team channel rather than working around it.
 
-`pnpm typecheck` and `pnpm build` go through turbo and (re)build packages' `dist/` folders. That's fine on your
-machine; on a machine where AdminForge services run from the same checkout, use `pnpm -r run typecheck` instead and
-never build there ([Releases and operations](13-releases-and-operations.md)).
+`pnpm typecheck` and `pnpm build` go through turbo and (re)build packages' `dist/` folders. That's fine anywhere:
+production runs the app image, never a checkout ([Releases and operations](13-releases-and-operations.md)).
 
 ## Working against a real tenant (later)
 
@@ -98,24 +93,22 @@ tenant** (never production) and a portal role there ([`docs/access.md`](../acces
   ever pasted into chat, issues, commits, prompts or logs.
 - `pnpm adminforge provision status` shows what is provisioned. Provisioning itself (`provision entra`) changes the
   tenant — only code owners run it.
-- Against a tenant, playbook runs and schedules in `pnpm dev` need `RUN_WORKER_IN_PROCESS=true` and
-  `SCHEDULER_IN_PROCESS=true` in your env file.
-- **Never** point `pnpm dev` at the host services' database (the `host` overlay); the two would consume each other's
-  runs.
+- Against a tenant, `pnpm dev` runs playbooks and schedules itself: the API is also the run worker and the scheduler.
+- **Never** point `DATABASE_PATH` at a deployment's database file; yours is `~/.local/share/adminforge/dev.db`.
 - Live writes happen only on the `AF-Test-*` objects that `pnpm adminforge provision test-identities` created, in the
   order dry run → run → compensating playbook → check `/audit`. See [`tests/live/README.md`](../../tests/live/README.md)
   and the `validating-against-a-tenant` skill.
 
 ## When setup fails
 
-| Symptom                                                  | Fix                                                                             |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `pnpm` says the version doesn't match `packageManager`   | `corepack enable`, then open a new shell                                        |
-| Commits go through without the guard tests running       | `git config core.hooksPath .githooks`                                           |
-| Playwright can't find a browser                          | Install Google Chrome system-wide; Playwright doesn't download one here         |
-| `pnpm db:up` fails on the env file                       | Create `~/.config/adminforge/dev.env` and run `init:local` (above)              |
-| `env check` says DATABASE_URL still contains `CHANGE_ME` | Run `pnpm --filter @adminforge/api init:local` again                            |
-| `PUBLIC_BASE_URL` error on `pnpm dev`                    | It has no default — pass it as in the mock-mode one-liner                       |
-| A page is blank in mock mode                             | Its datasource has no fixture; see [Testing → fixtures](09-testing.md#fixtures) |
-| No autocomplete in content YAML                          | `pnpm --filter @adminforge/schemas build` (the schemas are generated)           |
-| Anything else                                            | [`docs/troubleshooting.md`](../troubleshooting.md), then the team channel       |
+| Symptom                                                | Fix                                                                             |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `pnpm` says the version doesn't match `packageManager` | `corepack enable`, then open a new shell                                        |
+| Commits go through without the guard tests running     | `git config core.hooksPath .githooks`                                           |
+| Playwright can't find a browser                        | Install Google Chrome system-wide; Playwright doesn't download one here         |
+| `env check` says DATABASE_PATH contains `CHANGE_ME`    | Run `pnpm --filter @adminforge/api init:local` again                            |
+| `env check` names `DATABASE_URL` and other old keys    | Keys of the Postgres releases: nothing reads them — remove them                 |
+| `PUBLIC_BASE_URL` error on `pnpm dev`                  | It has no default — pass it as in the mock-mode one-liner                       |
+| A page is blank in mock mode                           | Its datasource has no fixture; see [Testing → fixtures](09-testing.md#fixtures) |
+| No autocomplete in content YAML                        | `pnpm --filter @adminforge/schemas build` (the schemas are generated)           |
+| Anything else                                          | [`docs/troubleshooting.md`](../troubleshooting.md), then the team channel       |

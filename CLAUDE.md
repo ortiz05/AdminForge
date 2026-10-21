@@ -2,27 +2,29 @@
 
 AdminForge is an admin portal for Entra ID, Microsoft 365, Intune, Defender, and Azure. Engineers sign in with SSO and
 work through **delegated** permissions (read-only by default; "armed" write access is time-boxed and step-up
-authenticated). Unattended schedules run on this host as a separate **automation identity**. Most features are
-**declarative content** (YAML) rendered and executed by a generic engine.
+authenticated). Unattended schedules run as a separate **automation identity**. Most features are **declarative
+content** (YAML) rendered and executed by a generic engine. It is deployed as one Kubernetes pod with all state in one
+SQLite file on a PersistentVolume (ADR-016, ADR-017).
 
 Extending AdminForge is meant to be done with Claude Code: use the project skills in `.claude/skills/` — one per
 extension point — and the reviewer agents in `.claude/agents/`.
 
 ## Layout
 
-| Path                    | What                                                                                                 |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- |
-| `portal/apps/web`       | React SPA: shell, `/p/$key` content renderer, playbook drawer, runs, schedules, Query Studio         |
-| `portal/apps/api`       | BFF (Fastify): auth, sessions, request policy, datasource executor, definitions, runs, schedules API |
-| `portal/apps/scheduler` | Cron service on this host (automation identity): probes, KQL checks, reports, playbooks, news feeds  |
-| `portal/apps/runner`    | PowerShell runner (Exchange/Teams/SharePoint) — pinned scripts, forwarded delegated tokens           |
-| `portal/packages/*`     | `design-tokens`, `ui`, `widgets`, `schemas`, `expressions`, `connectors`, `engine`, `config`         |
-| `portal/content`        | Pages, dashboards, reports, playbooks, runbooks, schedules, probes, connections, feeds, scripts, nav |
-| `portal/tools/cli`      | `adminforge` CLI (env check, provision, new, validate, test, publish, fixtures)                      |
-| `tests/`                | **All** tests and test-only deps (unit, component, api, content, e2e, live, guards, fixtures)        |
-| `docs/`                 | ADRs, `api.md`, `widgets.md`, `news.md`, `licensing-review.md`, `backlog.md`, `extending.md`         |
-| `docs/onboarding/`      | Engineer onboarding: setup, conventions for code, API, web, content, tests, git, docs, security      |
-| `config/example.env`    | Every configuration key, documented. Real values live outside the repo.                              |
+| Path                       | What                                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `portal/apps/web`          | React SPA: shell, `/p/$key` content renderer, playbook drawer, runs, schedules, Query Studio          |
+| `portal/apps/api`          | BFF (Fastify), also the run worker and the scheduler: auth, request policy, datasources, runs, SQLite |
+| `portal/apps/scheduler`    | Scheduler one-shots (`--once`, `--probe`, `--schedule`); the scheduler itself runs in the API         |
+| `portal/apps/runner`       | PowerShell runner (Exchange/Teams/SharePoint), the pod's sidecar — pinned scripts, delegated tokens   |
+| `portal/packages/*`        | `design-tokens`, `ui`, `widgets`, `schemas`, `expressions`, `connectors`, `engine`, `config`          |
+| `portal/content`           | Pages, dashboards, reports, playbooks, runbooks, schedules, probes, connections, feeds, scripts, nav  |
+| `portal/tools/cli`         | `adminforge` CLI (env check, provision, new, validate, test, publish, audit, db, fixtures)            |
+| `portal/deploy/kubernetes` | Images (`build-images.sh`), kustomize base and example overlay, the deployment runbook (`README.md`)  |
+| `tests/`                   | **All** tests and test-only deps (unit, component, api, content, e2e, live, guards, fixtures)         |
+| `docs/`                    | ADRs, `api.md`, `widgets.md`, `news.md`, `licensing-review.md`, `backlog.md`, `extending.md`          |
+| `docs/onboarding/`         | Engineer onboarding: setup, conventions for code, API, web, content, tests, git, docs, security       |
+| `config/example.env`       | Every configuration key, documented. Real values live outside the repo.                               |
 
 ## Non-negotiables
 
@@ -74,8 +76,8 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Dev (no tenant needed)         | `ADMINFORGE_ENV_FILE=/dev/null PUBLIC_BASE_URL=http://localhost:5173 AUTH_MODE=mock DATA_MODE=fixtures pnpm dev` → http://localhost:5173 |
 | Check the env file             | `pnpm adminforge env check` (key names and states only, never values)                                                                    |
 | Provisioning status            | `pnpm adminforge provision status` (every provisioned object ✓/✗ plus live token checks)                                                 |
-| Database migrations            | `pnpm --filter @adminforge/api db:migrate`                                                                                               |
-| Dev against the tenant         | `pnpm db:up && pnpm --filter @adminforge/api db:migrate && pnpm dev` (config from the env file; see below)                               |
+| Database migrations            | `pnpm --filter @adminforge/api db:migrate` (optional: the API migrates its database file at start)                                       |
+| Dev against the tenant         | `pnpm --filter @adminforge/api init:local` once, then `pnpm dev` (config from the env file; see below)                                   |
 | Scaffold content               | `pnpm adminforge new <kind> <section>/<name> [--template list-detail\|dashboard\|report\|entity]`                                        |
 | Validate content               | `pnpm adminforge validate` (add `--scopes` to compare with the app registrations)                                                        |
 | Playbook/runbook tests         | `pnpm adminforge test [pattern]`                                                                                                         |
@@ -84,21 +86,19 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Lint / types                   | `pnpm lint` · `pnpm typecheck`                                                                                                           |
 | Format                         | `pnpm format` (write) · `pnpm format:check` (CI)                                                                                         |
 | Publish content to the DB      | `pnpm adminforge publish [--dry-run]` (runs validate + tests; needs committed content on `origin/main`, else `--allow-unreviewed`)       |
-| Deploy to this host            | Code owners only, when asked: `docs/operations.md` › Upgrade (install, build, migrate dev + host, publish, restart, `/readyz`)           |
+| Deploy to Kubernetes           | Code owners only, when asked: `portal/deploy/kubernetes/README.md` › Upgrade (build and push images, apply, publish, `/readyz`)          |
 | Live smoke (validation tenant) | `pnpm exec tsx tests/live/scripts/verify-api-live.ts` · full sweep: `pnpm test:live` (see `tests/live/README.md`)                        |
 
 Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and never touches a
-shared database; `PUBLIC_BASE_URL` has no default and must be set. Against the tenant, playbook runs and schedules need
-`RUN_WORKER_IN_PROCESS=true` and `SCHEDULER_IN_PROCESS=true` in the env file. The host services (`portal/deploy`) use
-their own database through the `host` overlay (`<env>.host.env`), so `pnpm dev` never consumes their runs — never point
-dev at the services' database. Provisioner and live-test credentials live in `<env>.admin.env` (CLI and live tests
-only).
+database file; `PUBLIC_BASE_URL` has no default and must be set. Against the tenant, `init:local` writes
+`DATABASE_PATH=~/.local/share/adminforge/dev.db` into the env file; the API creates and migrates that file at start and
+is also the run worker and the scheduler — no Docker, nothing else to start. Never point `DATABASE_PATH` at a
+deployment's file. Provisioner and live-test credentials live in `<env>.admin.env` (CLI and live tests only). System
+Chrome is used by Playwright (no browser download).
 
-Postgres for dev runs in Docker on `127.0.0.1:55432` (`pnpm db:up`). System Chrome is used by Playwright (no browser
-download).
-
-On this host the API serves `portal/apps/web/dist` straight from the checkout (`WEB_DIST_DIR`): a `pnpm build` here
-changes what production serves at once (server code at the next restart). Build only as part of a deploy.
+Production runs the app image (API, built web app, CLI, content), so a local `pnpm build` never reaches it; content
+goes live only through `adminforge publish` in the pod. Until the cluster takes over, the old host keeps running the
+last Postgres release: leave its checkout and services alone unless a code owner asks.
 
 ## Commits and pull requests
 
@@ -113,7 +113,7 @@ session that spans several features commits each on its own (shared files such a
 - `pnpm adminforge validate` and `pnpm adminforge test` are clean for content changes.
 - The focused vitest project(s) you touched pass; `pnpm guard` passes; `pnpm lint` is clean for your files.
 - UI changes: screenshot them (Playwright, steel + daylight) and look at the images. Web dependencies or bundling:
-  `pnpm build && pnpm test:e2e:prod` (on this host, only as part of a deploy — see above).
+  `pnpm build && pnpm test:e2e:prod`.
 - The reviewer agents that apply (`content-reviewer`, `security-reviewer`, `design-reviewer`) ran and their findings
   are fixed or answered.
 - Report licence/permission needs you discovered, and what you could only check against fixtures.

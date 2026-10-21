@@ -18,8 +18,10 @@ scripts (needs a read-only allow-list decision), one certificate/PEM implementat
 - [ ] Rotate the session id when write access is turned on (`auth/arm-routes.ts`): issue a new sid, re-key both
       token-cache partitions, and re-key `runs.session_hash` and pending show-once secrets in one transaction, so a
       cookie stolen while read-only can't ride a later arm.
-- [ ] Anchor the audit chain outside the database: periodically write an HMAC (key outside Postgres) of the head hash
-      to a file or the journal, and verify against it, so a database writer can't rewrite the tail.
+- [ ] Anchor the audit chain outside the database: periodically write an HMAC (key outside the database file — a
+      Secret only the checker reads) of the head hash to the log, and verify against it, so whoever can write the file
+      can't rewrite the tail. More pressing since ADR-016: SQLite has no roles, so the append-only triggers no longer
+      hold against the service itself.
 - [ ] Re-validate definitions loaded from the database (`definitions/db-store.ts`): schema-parse and re-hash on load
       (cached by sha256), refusing rows that don't match.
 - [x] Response-size cap in `createHttpClient` (`OUTBOUND_MAX_BYTES`, streamed).
@@ -91,17 +93,12 @@ scripts (needs a read-only allow-list decision), one certificate/PEM implementat
 - [ ] Move Read-app pages that need `Exchange.Manage`, `AllSites.FullControl` or Teams to a narrower identity.
 - [ ] Decide whether `UserAuthenticationMethod.ReadWrite.All` (TAPs for admins) belongs in the tier-0 list.
 - [ ] `provision entra` retires stale extra client secrets (status flags them today; nothing removes them).
-- [ ] Re-issue the automation identity's credential as a certificate on this host (`AF_AUTOMATION_CERT_PATH`); move
-      `AF_AUTOMATION_*` to an env file only the scheduler and worker read.
-- [ ] **High.** Run AdminForge as a dedicated system user with system units (filesystem isolation:
-      `ProtectSystem=strict`, `ProtectHome`, `ReadWritePaths`), which user units can't enforce on Ubuntu 24.04 — not in
-      the `docker`/`sudo`/`lxd`/`adm` groups, with no other services under it, and with Postgres it can't administer.
-      Until then any process of the same account can read the configuration (SECURITY.md → Host and network).
-
-## Platform evaluation (2026-10-16): not yet done
-
-Found by the organization and security evaluation; the fixed findings are in CHANGELOG.md.
-
+- [ ] Re-issue the automation identity's credential as a certificate (`AF_AUTOMATION_CERT_PATH`, the
+      `adminforge-automation-cert` Secret). The scheduler and the run worker are the API process now (ADR-016), so a
+      separate configuration for them is no longer possible.
+- [x] ~~Run AdminForge as a dedicated system user with system units~~ — superseded 2026-10-20 by ADR-017: the pod
+      runs as fixed non-root uids with a read-only root file system and no capabilities; the host deployment is
+      retired.
 - [ ] Per-user limits: active and queued runs, open run streams (`/api/events` is capped at 5 per session), and rate
       limits keyed by user rather than IP for signed-in routes.
 - [ ] Bulk-action links can carry `$label`s that are shown next to the real targets: resolve display names in the
@@ -113,15 +110,16 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [ ] Session management for users: list and end your other sessions; front-channel logout.
 - [ ] Connection operations declared `mode: read` may POST and are callable without arming: require GET, or a reviewed
       `readPost: true`.
-- [ ] Publishing through its own database role (insert on `definitions` only) and a named publisher/approver on each
-      row; today the services' role can insert and update definitions and schedule approval columns.
+- [ ] A named publisher/approver on each definition row. (A publishing database role is no longer possible: SQLite has
+      no roles, ADR-016 — the API process can insert and update definitions and schedule approval columns.)
 - [ ] Runner modules: record a SHA-256 per package in `modules.lock.json` and verify it at install and at runner start;
       check Authenticode signatures; pin the runner's base images by digest; install runtimes to root-owned paths.
 - [ ] Alerting on AdminForge itself: probe sweeps and the backup notify on failure; a readiness check from another
       host; probes for backup freshness and disk space.
 - [ ] CI: SAST (CodeQL), SBOM, secret scanning (gitleaks), a runner image build, and a job that runs the runner's
-      read-mode guards against the pinned modules (today those tests skip without them); skipped Postgres or module
-      tests should fail when `CI=true`.
+      read-mode guards against the pinned modules (today those tests skip without them); skipped importer or module
+      tests should fail when `CI=true`. The app image too, with the manifests checked (`kubectl kustomize` +
+      kubeconform) — see "SQLite on a PersistentVolume" below.
 - [ ] Runs waiting on a `wait` step stay `running` and aren't version-checked on wake-up; approval `excludes` doesn't
       cover a service principal's owners.
 - [ ] Datasource transforms on the API thread are also a denial-of-service lever (any Reader, varying parameters to
@@ -695,3 +693,33 @@ First run of `tests/live/scripts/check-accuracy.ts` against the host services (d
 - [ ] Connector retry waits (`connectors/src/types.ts` `defaultSleep`) don't listen to the abort signal, so a feed's
       timeout can't cut a `Retry-After` wait short; collection order and the run budget limit the effect for now.
 - [ ] `news.updated` events carry counts over all items, including ones a reader may not see (counts only, no content).
+
+## SQLite on a PersistentVolume, Kubernetes (2026-10-20): not yet verified
+
+ADR-016/017 (`docs/plans/2026-10-20-sqlite-on-pvc.md`). Built and tested here: every database-backed suite on SQLite,
+the importer against a synthetic Postgres and the dev database (679 audit events, chain and tail identical), the app
+image with `docker run` (migrate, `/readyz`, publish, backup). Not checked, because no cluster exists yet:
+
+- [ ] Apply the example overlay on the real cluster (AKS): ReadWriteOncePod with the storage class (and zonal disks:
+      the pod must land in the disk's zone), the `restricted` Pod Security admission, NetworkPolicy enforcement (needs
+      a policy engine — Azure NPM, Cilium or Calico), the startup probe's margin for migrations, image pulls.
+- [ ] Server-Sent Events through the real Ingress (`/api/events`, run streams): no buffering, long reads.
+- [ ] Live validation (`tests/live`) against the Ingress URL; the Read/Write apps' redirect URI for it
+      (`provision entra`).
+- [ ] Move the host's data: `db import-postgres` against the services' database itself (tested on the dev database and
+      a synthetic one), the loader pod, the same `TOKEN_CACHE_KEY`; then retire the host (stop and disable the units,
+      remove the Postgres container and Caddy's CA) — owner's decision, after the cluster has taken over.
+- [ ] Scheduled backups in the cluster: a VolumeSnapshot schedule (Velero / Azure Backup for AKS) and an encrypted
+      off-cluster copy of `adminforge db backup` (today manual: `kubectl exec … db backup - | gpg …`).
+- [ ] Ship the api container's log off the cluster (Container Insights / Log Analytics): the audit chain's checkpoints
+      are tamper evidence only if they outlive the volume.
+- [ ] Pin the base images by digest (`node:24.13.1-bookworm-slim`, the PowerShell image) and drop better-sqlite3's
+      prebuilt binaries for other platforms from the app image.
+- [ ] Faster image builds: copy the package manifests and install before copying the sources (layer cache).
+- [ ] A run whose lock lapsed (its process stalled for more than the 120 s lease) stops at its next checkpoint; a write
+      step already in flight could then run twice if another process took the run over. Re-check the lease right
+      before each write-mode call. Only reachable with two processes consuming the queue, which one pod rules out.
+- [ ] The readiness probe calls `PUBLIC_BASE_URL/readyz` from inside the pod, back through the Ingress: needs the
+      NetworkPolicy's 443 egress and the cluster routing its own Ingress address back (not tried on a cluster).
+- [ ] UI copy: the Schedules page and the navigation's Schedules summary still say jobs run "on this host" — reword
+      together with the visual baselines (`tests/e2e/__screenshots__/automation-visual.spec.ts`).

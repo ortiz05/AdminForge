@@ -42,7 +42,7 @@ modulepreloads, classic scripts — not lazy chunks) and fails over the budget (
 
 | Path                                             | What                                                                                                                                       |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `package.json` (root) scripts                    | The entry points: `lint`, `format`, `typecheck`, `test`, `guard`, `check:bundle`, `test:e2e`, `test:live`, `db:up`, `adminforge`, `live:*` |
+| `package.json` (root) scripts                    | The entry points: `lint`, `format`, `typecheck`, `test`, `guard`, `check:bundle`, `test:e2e`, `test:live`, `build`, `adminforge`, `live:*` |
 | `.githooks/`                                     | `pre-commit` (`pnpm guard`) and `commit-msg`; `pnpm install` sets `core.hooksPath` (see its README)                                        |
 | `.claude/hooks/after-edit.mjs`                   | Claude Code after-edit feedback: Prettier, `adminforge validate`, design tokens (see `.claude/hooks/README.md`)                            |
 | `.github/workflows/ci.yml`                       | CI: audit, `pnpm guard`, lint, format, typecheck, tests, build, `pnpm check:bundle`, e2e                                                   |

@@ -142,8 +142,8 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    - Every Resource Graph or Log Analytics query starts with a `// af:<page id>#<datasource>` line: fixtures match on
      it (`bodyIncludes`).
    - Later datasources may reference earlier ones as `ds.<name>` (declare dependencies above the datasources that use
-     them — `validate` refuses references to later ones and loops; the runtime follows the references, never key order,
-     because published definitions come back from Postgres) — in a datasource's `when`, request and runner
+     them — `validate` refuses references to later ones and loops; the runtime follows the references, never key
+     order) — in a datasource's `when`, request and runner
      `parameters` the prefix is required (a bare `group.id` is undefined there, so the datasource is always skipped;
      `validate` refuses it). Widgets, headers and actions use bare names. A dependency some viewers can't read gets
      `optional: true`: its dependents then see `null` instead of failing (`dependency_failed`) — e.g. Graph's Teams APIs

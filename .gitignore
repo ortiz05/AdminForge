@@ -7,13 +7,22 @@ test-results/
 *.tsbuildinfo
 *.log
 
-# Configuration and secrets never live in the repo (see config/example.env)
+# Configuration and secrets never live in the repo (see config/example.env). Images are built from `git archive HEAD`,
+# so anything committed ships (tests/guards/gitignore-secrets.test.ts).
 .env
 .env.*
+*.env.bak*
 !config/example.env
 *.pem
 *.pfx
+*.p12
+*.key
 .local/
+# Databases: `adminforge db backup --plaintext` or `db import-postgres --to` can leave one in a checkout (ADR-016)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
 
 # Generated
 portal/apps/web/src/routeTree.gen.ts

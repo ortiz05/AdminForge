@@ -57,6 +57,11 @@ never in them) and tagged with it. The app image records in `/app/BUILD.json` wh
 `origin/main` (as last fetched) — the review rule `adminforge publish` enforces; publishing from an image of any other
 commit needs `--allow-unreviewed`, which the audit log records. Pin the pushed digests in your overlay.
 
+The images the builds start from are pinned by digest too (`name:tag@sha256:…` in each `FROM`, and the `# syntax=`
+frontend; `tests/guards/image-digests.test.ts`), so rebuilding a commit gets the same bases. To move to a newer base,
+change tag and digest together — Dependabot's docker ecosystem does that, or by hand with the index digest from
+`docker buildx imagetools inspect <image>:<tag>` — and rebuild.
+
 ## 2. Secrets
 
 The pod gets its configuration as environment variables — nothing is read from files in the image.

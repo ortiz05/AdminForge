@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 #
 # AdminForge app image (ADR-017): the API — which is also the run worker and the scheduler (ADR-016) — the built web
 # app it serves, the `adminforge` CLI (publish, audit verify, db backup / import-postgres) and the content to publish.
@@ -10,10 +10,16 @@
 #
 # Runs as uid/gid 10001 with a read-only root file system; writes only to /var/lib/adminforge (the PersistentVolume:
 # the SQLite database and report files) and /tmp.
-ARG NODE_IMAGE=node:24.13.1-bookworm-slim
+#
+# Base images are pinned by digest, the tag kept beside it (S-37; tests/guards/image-digests.test.ts), and named
+# literally in each FROM so Dependabot's docker ecosystem bumps tag and digest together:
+#   node:24.13.1-bookworm-slim — the multi-platform index (linux/amd64, linux/arm64/v8, linux/ppc64le, linux/s390x),
+#   looked up 2026-10-21. The image is built for the platform of the machine that builds it (README.md →
+#   Requirements › CPU architecture); better-sqlite3 ships prebuilt linux-x64 and linux-arm64 binaries.
+#   docker/dockerfile:1.7 (the `# syntax=` frontend) — pinned the same way.
 
 # ── Build: install, build the four bundles, then keep production dependencies only ─────────────────────
-FROM ${NODE_IMAGE} AS build
+FROM node:24.13.1-bookworm-slim@sha256:a81a03dd965b4052269a57fac857004022b522a4bf06e7a739e25e18bce45af2 AS build
 WORKDIR /src
 RUN corepack enable
 COPY . .
@@ -35,7 +41,7 @@ RUN find . -name node_modules -type d -prune -exec rm -rf {} + \
       ! -name "linux-$(node -p process.arch).node" -exec rm -rf {} +
 
 # ── Runtime ───────────────────────────────────────────────────────────────────────────────────────────
-FROM ${NODE_IMAGE} AS runtime
+FROM node:24.13.1-bookworm-slim@sha256:a81a03dd965b4052269a57fac857004022b522a4bf06e7a739e25e18bce45af2 AS runtime
 ARG ADMINFORGE_COMMIT=unknown
 ARG ADMINFORGE_REVIEWED=false
 RUN groupadd --gid 10001 adminforge \

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.add-app-owner
-version: 1.2.0
+version: 1.3.0
 title: Add app registration owner
 summary: >-
   Makes a user an owner of an app registration. Owners can add credentials and sign in as the app with its
@@ -16,11 +16,13 @@ requires:
   scopes:
     graph: [Application.ReadWrite.All, User.Read.All]
   entraRoles: [Cloud Application Administrator]
+# Typed (high risk): the app's name.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.app.output.displayName }
   message: >-
     ${ 'Make ' & steps.owner.output.userPrincipalName & ' an owner of ' & steps.app.output.displayName
-       & '? Owners can add secrets and change sign-in settings for this app.' }
+       & '? Owners can add secrets and change sign-in settings for this app. Type the app name to confirm.' }
 # An owner can add a secret and act as the app with its API permissions: a second engineer approves, and the new
 # owner may not approve it. The change then runs as the approver.
 approval:

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: azure.remove-role-assignment
-version: 1.0.0
+version: 1.1.0
 title: Remove Azure role assignment
 summary: Removes one Azure RBAC role assignment. Needs approval by a second engineer; refuses to remove your own assignment.
 owner: azure-team
@@ -13,9 +13,17 @@ requires:
   scopes:
     arm: [user_impersonation]
   azureRoles: [Role Based Access Control Administrator]
+# Typed (high risk, and a bulk action): the role's name; in bulk, how many assignments. An assignment whose role can't
+# be read asks for the assignment id instead.
 confirm:
-  type: click
-  message: Remove this role assignment? The principal loses the access it grants within a few minutes.
+  type: typed
+  value: >-
+    ${ steps.role.output.properties.roleName ? steps.role.output.properties.roleName : steps.lookup.output.name }
+  message: >-
+    ${ 'Remove ' & (steps.role.output.properties.roleName ? steps.role.output.properties.roleName : 'this role') & ' from '
+       & steps.lookup.output.properties.principalType & ' ' & steps.lookup.output.properties.principalId & ' at '
+       & steps.lookup.output.properties.scope & '? The principal loses the access it grants within a few minutes. Type '
+       & (steps.role.output.properties.roleName ? 'the role name' : 'the assignment id') & ' to confirm.' }
 approval:
   required: true
   approvers: [Playbook.Approver]
@@ -47,6 +55,17 @@ steps:
     type: assert
     that: ${ $lowercase(steps.lookup.output.properties.principalId) != $lowercase(user.oid) }
     message: This assignment is your own. Ask another administrator to remove it.
+
+  # The role's name, for the confirmation and the plan.
+  - id: role
+    type: arm
+    mode: read
+    describe: Read the role the assignment grants
+    onError: continue
+    request:
+      method: GET
+      path: ${ $join($split(steps.lookup.output.properties.roleDefinitionId, '/')[$ != ''].('/' & $encode($)), '') }
+      apiVersion: "2022-04-01"
 
   - id: delete
     type: arm
@@ -88,12 +107,31 @@ tests:
     user: { oid: 00000000-0000-4000-8000-000000000a01, upn: alex.admin@example.com }
     mocks:
       lookup:
+        name: 30000000-0000-4000-8000-000000000202
         properties:
           roleDefinitionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635
           principalId: 30000000-0000-4000-8000-000000000102
           principalType: User
           scope: /subscriptions/00000000-0000-4000-8000-0000000000a1
+      role: { name: 8e3af657-a8ff-443c-a75c-2fe8c4bcb635, properties: { roleName: Owner } }
     expect:
       status: succeeded
       plan: [delete]
       outputs: { summary: Role assignment removed for principal 30000000-0000-4000-8000-000000000102 at /subscriptions/00000000-0000-4000-8000-0000000000a1. }
+  - name: still plans the removal when the role can't be read
+    inputs: { assignmentId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000203, reason: quarterly access review }
+    user: { oid: 00000000-0000-4000-8000-000000000a01, upn: alex.admin@example.com }
+    mocks:
+      lookup:
+        name: 30000000-0000-4000-8000-000000000203
+        properties:
+          roleDefinitionId: /providers/Microsoft.Management/managementGroups/mg-example/providers/Microsoft.Authorization/roleDefinitions/30000000-0000-4000-8000-000000000301
+          principalId: 30000000-0000-4000-8000-000000000103
+          principalType: Group
+          scope: /subscriptions/00000000-0000-4000-8000-0000000000a1
+    errors:
+      role: { status: 403, code: AuthorizationFailed, message: The client does not have authorization to read the role definition. }
+    expect:
+      status: succeeded
+      plan: [delete]
+      steps: { role: failed }

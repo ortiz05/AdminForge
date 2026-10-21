@@ -120,7 +120,11 @@ const pretty = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(maskS
 const hasOutput = (v: unknown) =>
   v !== undefined && v !== null && !(typeof v === 'object' && Object.keys(v as object).length === 0);
 
-function Children({ items }: { items: RunStep[] }) {
+/** What a failed step says: its message, or (metadata view, S-25) just its code — the message isn't sent. */
+const ErrorText = ({ error, restricted }: { error: NonNullable<RunStep['error']>; restricted: boolean }) =>
+  restricted ? <span className="font-mono text-xs">{error.code}</span> : <>{error.message}</>;
+
+function Children({ items, restricted }: { items: RunStep[]; restricted: boolean }) {
   const done = items.filter((c) =>
     ['succeeded', 'failed', 'skipped', 'cancelled', 'compensated'].includes(c.status),
   ).length;
@@ -144,7 +148,11 @@ function Children({ items }: { items: RunStep[] }) {
               <span className="min-w-0 flex-1 truncate text-fg-2">
                 Item {index !== undefined ? Number(index) + 1 : i + 1}
                 <span className="sr-only">: {view.label}</span>
-                {c.error && <span className="ml-2 text-crit">{c.error.message}</span>}
+                {c.error && (
+                  <span className="ml-2 text-crit">
+                    <ErrorText error={c.error} restricted={restricted} />
+                  </span>
+                )}
               </span>
               {c.childRunId && (
                 <Link
@@ -171,10 +179,13 @@ export function RunTimeline({
   entries,
   initiatorUpn,
   label = 'Steps',
+  restricted = false,
 }: {
   entries: TimelineEntry[];
   initiatorUpn?: string | null;
   label?: string;
+  /** Someone else's delegated run (S-25): errors arrive as codes and references only. */
+  restricted?: boolean;
 }) {
   const now = useNow(5_000);
   const s = timeline();
@@ -231,7 +242,7 @@ export function RunTimeline({
                   role={e.status === 'failed' ? 'alert' : undefined}
                 >
                   <p className="font-medium text-crit">
-                    {r.error.message}
+                    <ErrorText error={r.error} restricted={restricted} />
                     {r.error.status ? (
                       <span className="ml-1.5 font-mono text-xs">({r.error.status})</span>
                     ) : null}
@@ -242,7 +253,7 @@ export function RunTimeline({
                   )}
                 </div>
               )}
-              {e.children.length > 0 && <Children items={e.children} />}
+              {e.children.length > 0 && <Children items={e.children} restricted={restricted} />}
               {r?.childRunId && e.children.length === 0 && (
                 <Link
                   to="/runs/$id"

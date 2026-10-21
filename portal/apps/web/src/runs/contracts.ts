@@ -3,7 +3,7 @@ import { arr, bool, listOf, num, parser, pick, rec, str } from './json';
 /**
  * Runs as the SPA sees them (§7.8, engine `RunRecord` / `StepRecord` / `PlanEntry`):
  *   GET /api/runs?scope=&status=&playbook=&cursor=   → { items: RunSummary[], cursor? }
- *   GET /api/runs/:id                                 → { run, steps, plan }
+ *   GET /api/runs/:id                                 → { run, steps, plan } (`run.access`: full | metadata)
  *   GET /api/runs/:id/events (SSE)                    → run | step | log | progress, with `id` for Last-Event-ID
  */
 
@@ -181,7 +181,14 @@ export interface RunWaiting {
   wakeAt: string | null;
 }
 
+/**
+ * How much of a run the viewer sees (S-25). `metadata`: someone else's delegated run — what ran, who, when, status and
+ * references; its inputs, results, logs and error details stay with the initiator, its approvers and Portal.Admin.
+ */
+export type RunAccess = 'full' | 'metadata';
+
 export interface RunDetailRun extends RunSummary {
+  access: RunAccess;
   inputs: Record<string, unknown>;
   outputs: Record<string, unknown> | null;
   error: RunError | null;
@@ -416,6 +423,7 @@ export function readRunDetail(input: unknown): RunDetail {
   return {
     run: {
       ...summary,
+      access: runRaw.access === 'metadata' ? 'metadata' : 'full',
       inputs: rec(runRaw.inputs),
       outputs:
         runRaw.outputs && typeof runRaw.outputs === 'object'

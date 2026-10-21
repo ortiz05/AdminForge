@@ -36,6 +36,7 @@ import { readApprovalItem } from './approvals';
 import { isTerminal, labelOf, latestSteps, type RunDetail, type StepIndex } from './contracts';
 import { LogView } from './LogView';
 import { PlanView } from './PlanView';
+import { RunDataHidden } from './RunDataHidden';
 import { buildTimeline, RunTimeline, stepIndex } from './RunTimeline';
 import { RunStatusPill } from './status';
 import { MaskedSecret, SecretNotices, SecretPanel } from './SecretPanel';
@@ -101,6 +102,8 @@ function ParkedBanner({
         ? 'awaiting_reauth'
         : run.status;
 
+  // Write access and a fresh sign-in are the initiator's to give; someone who sees only the metadata can't resume it.
+  if (run.access !== 'full' && (status === 'awaiting_arm' || status === 'awaiting_reauth')) return null;
   switch (status) {
     case 'awaiting_arm':
       return (
@@ -190,7 +193,8 @@ function HumanTaskPanels({
       }),
     )
     .filter((x): x is NonNullable<typeof x> => !!x);
-  const manual = pending.filter((t) => t.kind === 'manual');
+  // A manual step waits for one person (who sees the run whole); its instructions aren't shown to anyone else.
+  const manual = run.access === 'full' ? pending.filter((t) => t.kind === 'manual') : [];
   if (!approvals.length && !manual.length) return null;
   const outline = def
     ? def.kind === 'playbook'
@@ -313,6 +317,7 @@ export function RunPage({ id }: { id: string }) {
   }
 
   const terminal = isTerminal(run.status);
+  const full = run.access === 'full';
   const took = elapsed(run.startedAt ?? run.createdAt, run.endedAt, now);
   const done = entries.filter((e) =>
     ['succeeded', 'skipped', 'planned', 'failed', 'compensated'].includes(e.status),
@@ -359,7 +364,8 @@ export function RunPage({ id }: { id: string }) {
               <ArrowClockwiseIcon size={15} aria-hidden />
               Refresh
             </Button>
-            {!terminal && (
+            {/* Only its initiator or a Portal.Admin can cancel a run; both see it whole (S-25). */}
+            {!terminal && full && (
               <ConfirmDialog
                 trigger={
                   <Button>
@@ -380,6 +386,7 @@ export function RunPage({ id }: { id: string }) {
       />
 
       <div className="flex flex-col gap-6">
+        {!full && <RunDataHidden initiator={run.initiator.upn} />}
         {secrets.map((s) => {
           const child = s.runId !== run.id ? detail.children.find((c) => c.id === s.runId) : undefined;
           return (
@@ -463,6 +470,7 @@ export function RunPage({ id }: { id: string }) {
                   entries={entries}
                   initiatorUpn={run.initiator.upn}
                   label={`Steps of ${run.title}`}
+                  restricted={!full}
                 />
               ) : (
                 <p className="text-sm text-fg-3">
@@ -505,11 +513,13 @@ export function RunPage({ id }: { id: string }) {
                 <PlanView plan={detail.plan} title="Changes" />
               </Panel>
             )}
-            <Panel eyebrow="Logs" title="Step output" flush>
-              <div className="px-(--af-pad-panel) pb-(--af-pad-panel)">
-                <LogView logs={logs} steps={detail.steps} live={live} />
-              </div>
-            </Panel>
+            {full && (
+              <Panel eyebrow="Logs" title="Step output" flush>
+                <div className="px-(--af-pad-panel) pb-(--af-pad-panel)">
+                  <LogView logs={logs} steps={detail.steps} live={live} />
+                </div>
+              </Panel>
+            )}
           </div>
 
           <div className="flex min-w-0 flex-col gap-6">
@@ -591,26 +601,28 @@ export function RunPage({ id }: { id: string }) {
                 ]}
               />
             </Panel>
-            <Panel eyebrow="Inputs" title="What it ran with">
-              {Object.keys(run.inputs).length ? (
-                <Facts
-                  items={Object.entries(run.inputs).map(([k, v]) => [
-                    def?.inputs?.[k] ? inputLabel(k, def.inputs[k]!) : humanize(k),
-                    <InputValue
-                      key={k}
-                      value={v}
-                      unit={
-                        def?.inputs?.[k]?.type === 'number'
-                          ? (def.inputs[k] as { unit?: string }).unit
-                          : undefined
-                      }
-                    />,
-                  ])}
-                />
-              ) : (
-                <p className="text-sm text-fg-3">No inputs.</p>
-              )}
-            </Panel>
+            {full && (
+              <Panel eyebrow="Inputs" title="What it ran with">
+                {Object.keys(run.inputs).length ? (
+                  <Facts
+                    items={Object.entries(run.inputs).map(([k, v]) => [
+                      def?.inputs?.[k] ? inputLabel(k, def.inputs[k]!) : humanize(k),
+                      <InputValue
+                        key={k}
+                        value={v}
+                        unit={
+                          def?.inputs?.[k]?.type === 'number'
+                            ? (def.inputs[k] as { unit?: string }).unit
+                            : undefined
+                        }
+                      />,
+                    ])}
+                  />
+                ) : (
+                  <p className="text-sm text-fg-3">No inputs.</p>
+                )}
+              </Panel>
+            )}
             {run.outputs && Object.keys(run.outputs).length > 0 && (
               <Panel eyebrow="Outputs" title={terminal ? 'Result' : 'So far'}>
                 <div className="flex flex-col gap-3">

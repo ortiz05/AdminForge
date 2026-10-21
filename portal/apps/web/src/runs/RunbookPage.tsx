@@ -30,6 +30,7 @@ import { RiskBanner } from '../playbooks/Preflight';
 import { playbookSearch } from '../playbooks/url';
 import { latestSteps, StartRunResponse, type RunDetail, type RunStep, type StepStatus } from './contracts';
 import { ManualStepCard } from './HumanTasks';
+import { RunDataHidden } from './RunDataHidden';
 import { Markdown } from './Markdown';
 import { STEP_STATUS_VIEW, RunStatusPill, StatusGlyph } from './status';
 import { TYPE_LABEL } from './RunTimeline';
@@ -90,18 +91,21 @@ function StepRow({
   record,
   runId,
   scope,
+  full = true,
 }: {
   step: Step;
   record?: RunStep;
   runId?: string;
   scope: Record<string, unknown>;
+  /** Whether the viewer sees the run whole (S-25); a manual step waits for its own person only. */
+  full?: boolean;
 }) {
   const status: StepStatus = record?.status ?? 'pending';
   const view = STEP_STATUS_VIEW[status];
   const label = step.name ?? step.describe ?? step.id;
 
   if (step.type === 'manual') {
-    if (runId && status === 'waiting')
+    if (runId && status === 'waiting' && full)
       return (
         <ManualStepCard
           runId={runId}
@@ -134,7 +138,11 @@ function StepRow({
           </div>
         )}
         {!runId && <p className="text-xs text-fg-3">Start the runbook to work through this checklist.</p>}
-        {record?.error && <p className="text-sm text-crit">{record.error.message}</p>}
+        {record?.error && (
+          <p className="text-sm text-crit">
+            {full ? record.error.message : <span className="font-mono text-xs">{record.error.code}</span>}
+          </p>
+        )}
       </div>
     );
   }
@@ -156,7 +164,7 @@ function StepRow({
         </p>
         {record?.error && (
           <p className="text-sm text-crit">
-            {record.error.message}
+            {full ? record.error.message : <span className="font-mono text-xs">{record.error.code}</span>}
             {record.error.hint && <span className="block text-fg-2">{record.error.hint}</span>}
           </p>
         )}
@@ -381,6 +389,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
               </div>
             </Panel>
           )}
+          {detail && detail.run.access !== 'full' && <RunDataHidden initiator={detail.run.initiator.upn} />}
           {runId && live.query.isError && (
             <QueryError
               title="The run didn’t load"
@@ -415,7 +424,14 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
               </h2>
               {section.body && <TemplatedMarkdown source={section.body} scope={scope} />}
               {(section.steps ?? []).map((step) => (
-                <StepRow key={step.id} step={step} record={byId.get(step.id)} runId={runId} scope={scope} />
+                <StepRow
+                  key={step.id}
+                  step={step}
+                  record={byId.get(step.id)}
+                  runId={runId}
+                  scope={scope}
+                  full={detail?.run.access !== 'metadata'}
+                />
               ))}
             </section>
           ))}

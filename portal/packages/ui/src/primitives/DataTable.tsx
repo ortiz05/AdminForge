@@ -8,7 +8,6 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
-  type PointerEvent,
   type ReactNode,
 } from 'react';
 import {
@@ -41,6 +40,7 @@ import { formatNumber, formatRelative, formatTimestamp, toDate } from '../lib/fo
 import { useHtmlAttribute, useNow } from '../lib/hooks';
 import { STATUS_SEVERITY, type StatusTone } from '../lib/status';
 import { cn } from '../recipes/tv';
+import { titleIfClipped, useOverflowsX } from './data-table-measure';
 import { Badge } from './Badge';
 import { Button } from './Button';
 import { TextField } from './Field';
@@ -242,29 +242,6 @@ export function columnTrack(
   const range = /^minmax\((\d+(?:\.\d+)?)px,\s*(.+)\)$/.exec(c.width);
   if (range && Number(range[1]) < floor) return `minmax(${floor}px, ${range[2]})`;
   return c.width;
-}
-
-const CLIPPABLE = '[data-af-clip], .truncate';
-
-/**
- * Header and cell text that is cut off (`truncate`, or a `data-af-clip` line clamp) gets its full text as a tooltip
- * when the pointer reaches it — measured then, so text that fits carries no redundant title. Only titles set here
- * are touched (`data-af-title`); a cell's own title (a timestamp, an id) stays. Mouse only: keyboard and touch users
- * read the full text in the row's inspector, and screen readers get it from the DOM.
- */
-function titleIfClipped(e: PointerEvent<HTMLElement>) {
-  const target = e.target as HTMLElement;
-  const el =
-    target.closest<HTMLElement>(CLIPPABLE) ??
-    target.closest('[role="columnheader"], [role="gridcell"]')?.querySelector<HTMLElement>(CLIPPABLE);
-  if (!el || (el.title && el.dataset.afTitle === undefined)) return;
-  if (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight) {
-    el.title = el.textContent ?? '';
-    el.dataset.afTitle = '';
-  } else {
-    el.removeAttribute('title');
-    delete el.dataset.afTitle;
-  }
 }
 
 const DEFAULT_FILTER: Record<ColumnKind, ColumnFilterKind> = {
@@ -886,6 +863,16 @@ export function DataTable<T extends RowData>({
 
   // Virtual rows; height follows the density token (the table's own when `density` is set).
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
+  const setScroller = useCallback((el: HTMLDivElement | null) => {
+    scrollRef.current = el;
+    setScrollEl(el);
+  }, []);
+  // A column pinned to the end (row actions) stays at the right edge while the others scroll under it; a hairline
+  // marks its edge only while they do (design review L17: at 1440 px the Users actions were off-screen).
+  const overflowsX = useOverflowsX(scrollEl, template);
+  const pinnedEnd = (c: { pin?: 'start' | 'end' }, surface: string) =>
+    c.pin === 'end' ? cn('sticky right-0', surface, overflowsX && 'border-l border-line') : undefined;
   const rowHeight = useRowHeight(rootEl, density, 40);
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -1073,7 +1060,7 @@ export function DataTable<T extends RowData>({
       )}
 
       <div
-        ref={scrollRef}
+        ref={setScroller}
         role="grid"
         aria-label={label}
         aria-rowcount={showStates ? undefined : filtered + 1}
@@ -1118,7 +1105,8 @@ export function DataTable<T extends RowData>({
                 const headerText = c.headerHidden ? (
                   <span className="sr-only">{c.header}</span>
                 ) : (
-                  <span data-af-clip="" className="truncate">
+                  // Two lines before the ellipsis; cut off, the full text shows on hover (titleIfClipped).
+                  <span data-af-clip="" className="line-clamp-2 leading-tight break-words whitespace-normal">
                     {c.header}
                   </span>
                 );
@@ -1162,6 +1150,7 @@ export function DataTable<T extends RowData>({
                     className={s.th({
                       className: cn(
                         (c.align === 'end' || c.kind === 'number') && 'justify-end',
+                        pinnedEnd(c, 'bg-panel'),
                         dragging === c.id && 'opacity-60',
                         dropTarget === c.id && dragging !== c.id && 'bg-selected',
                       ),
@@ -1317,7 +1306,10 @@ export function DataTable<T extends RowData>({
                         key={c.id}
                         role="gridcell"
                         className={s.td({
-                          className: c.align === 'end' || c.kind === 'number' ? 'justify-end' : undefined,
+                          className: cn(
+                            (c.align === 'end' || c.kind === 'number') && 'justify-end',
+                            pinnedEnd(c, 'bg-inherit'),
+                          ),
                         })}
                       >
                         <Cell col={c} row={row.original} now={now} />

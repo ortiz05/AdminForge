@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.users
-version: 1.2.0
+version: 1.3.0
 title: Users
 summary: >-
   Member and guest accounts — filter by type, sign-in status, licensing, source, department and MFA registration,
@@ -185,7 +185,7 @@ layout:
         map: { Member: Member, Guest: Guest }
         filter: { type: facet, param: userType }
       - { field: department, label: Department, filter: { type: text, param: department } }
-      - { field: jobTitle, label: Job title }
+      - { field: jobTitle, label: Job title, hidden: true }
       - field: licenceState
         label: Licences
         kind: status

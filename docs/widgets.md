@@ -103,11 +103,15 @@ Other column keys: `sortable`, `hidden` (off by default; still in the column cho
 param (server-side filtering). `wrap: true` (text columns): up to two lines before the ellipsis — one in compact
 density — for messages and descriptions.
 
-Text that doesn't fit a cell or header ends in an ellipsis and shows in full on mouse hover (the row's inspector shows
-everything too). Time cells (`relativeTime`, `date`, `datetime`) are never cut off: a `width` narrower than the kind
-needs (112 px for a relative time or a date, 150 for a datetime, 144 for a filterable relative time or date; status
-110, guid 150, identity 160) is raised to it. A `wrap: true` column starts at 200 px. Computed KQL flags with no good
-or bad (`'true'`/`'false'` text) are `enum` columns: `map: { "true": "On", "false": "Off" }`.
+Text that doesn't fit a cell ends in an ellipsis and shows in full on mouse hover (the row's inspector shows
+everything too); a header wraps to two lines first ("Last interactive / sign-in"). When the columns need more room than
+the table has, they scroll sideways under the row-actions column, which stays at the right edge with a hairline. Keep a
+list's default columns within its width at 1440 px — about 1,130 px beside the navigation — and hide the rest
+(`hidden: true`: still in the column chooser and exports). Time cells (`relativeTime`, `date`, `datetime`) are never
+cut off: a `width` narrower than the kind needs (112 px for a relative time or a date, 150 for a datetime, 144 for a
+filterable relative time or date; status 110, guid 150, identity 160) is raised to it. A `wrap: true` column starts at
+200 px. Computed KQL flags with no good or bad (`'true'`/`'false'` text) are `enum` columns:
+`map: { "true": "On", "false": "Off" }`.
 
 A column's `field` is a path into the row and takes `[n]` for a list item (`owners[0].displayName`). Exports (and
 scheduled report files) read every cell with the table's own path reader and `map` lookup, so the file holds what the

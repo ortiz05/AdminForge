@@ -23,8 +23,13 @@ export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)
 export const RELATIVE_DATE_RE = /^(today|now|([+-])(\d+)([hdwmy]))$/;
 export const ISO_DURATION_RE = /^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/;
 const HTTP_URL_RE = /^https?:\/\/\S+$/;
-/** An Azure resource id: `/subscriptions/<id>/…` (a resource group, a resource, anything under a subscription). */
-const RESOURCE_ID_RE = /^\/subscriptions\/[^/]+\//i;
+/**
+ * An Azure resource id, whole: `/subscriptions/<id>/…` (a resource group, a resource, anything under a subscription)
+ * with no empty or dot segment and no `?`, `#`, `%` or backslash — a request path is built from it.
+ */
+const RESOURCE_ID_RE = /^\/subscriptions(\/(?!\.{1,2}(?:\/|$))[^/?#%\\]+){2,}$/i;
+/** A user principal name as a whole value: no slash, backslash, `?` or `%` (a guest's `#EXT#` is fine). */
+const UPN_RE = /^[^\s@/\\?%]+@[^\s@/\\?%]+\.[^\s@/\\?%]+$/;
 
 /**
  * What the value of an entity param — user, group, device, app, resource, subscription — must be, said after
@@ -32,11 +37,12 @@ const RESOURCE_ID_RE = /^\/subscriptions\/[^/]+\//i;
  * playbook inputs share it (security review L3): validation lets a whole request path come from one (S-13).
  */
 export function expectedEntityId(type: string, id: string): string | undefined {
+  const clean = !hasControlChars(id);
   if (type === 'subscription') return GUID_RE.test(id) ? undefined : 'a subscription id (GUID)';
   if (type === 'resource')
-    return RESOURCE_ID_RE.test(id) ? undefined : 'an Azure resource id (/subscriptions/…)';
+    return clean && RESOURCE_ID_RE.test(id) ? undefined : 'an Azure resource id (/subscriptions/…)';
   if (type === 'user')
-    return GUID_RE.test(id) || EMAIL_RE.test(id)
+    return GUID_RE.test(id) || (clean && UPN_RE.test(id))
       ? undefined
       : 'a user object id (GUID) or user principal name';
   return GUID_RE.test(id) ? undefined : `${type === 'app' ? 'an' : 'a'} ${type} object id (GUID)`;

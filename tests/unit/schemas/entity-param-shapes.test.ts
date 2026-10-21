@@ -73,6 +73,51 @@ describe('entity page params are the ids they name', () => {
     expect(await apiIssue(name, raw)).toBeUndefined();
   });
 
+  it.each<[string, string]>([
+    [
+      'resource',
+      '/subscriptions/s/resourceGroups/rg/../../providers/Microsoft.Authorization/roleAssignments/x',
+    ],
+    ['resource', '/subscriptions/s/resourceGroups/rg/.'],
+    ['resource', '/subscriptions/s//resourceGroups/rg'],
+    ['resource', '/subscriptions/s/resourceGroups/rg/'],
+    ['resource', '/subscriptions/s'],
+    ['resource', '/subscriptions/s/resourceGroups/rg?api-version=1'],
+    ['resource', '/subscriptions/s/resourceGroups/rg#x'],
+    ['resource', '/subscriptions/s/resourceGroups/%2e%2e'],
+    ['resource', '/subscriptions/s/resourceGroups\\rg'],
+    ['user', 'avery@example.com/../../applications'],
+    ['user', 'a/b@example.com'],
+    ['user', 'avery%40x@example.com'],
+  ])('%s = %j: the whole value is checked, not only its start', (name, raw) => {
+    expect(checkParam(PARAMS[name]!, raw, NOW)).toMatchObject({
+      error: expect.stringMatching(/^must be an? /),
+    });
+    expect(checkInputValue(PARAMS[name]!, raw, NOW)).toMatchObject({
+      error: expect.stringMatching(/^Expected /),
+    });
+  });
+
+  it('a guest’s UPN (#EXT#) and resource names with dots, spaces and parentheses are ids', () => {
+    for (const [name, raw] of [
+      ['user', 'avery_example.com#EXT#@exampleorg.onmicrosoft.com'],
+      [
+        'resource',
+        '/subscriptions/s/resourceGroups/rg-example(1)/providers/Microsoft.DesktopVirtualization/hostPools/hp pooled/sessionHosts/avd-ex-0001.example.com/userSessions/3',
+      ],
+    ] as const)
+      expect(checkParam(PARAMS[name]!, raw, NOW)).toEqual({ value: raw });
+  });
+
+  it('playbook inputs refuse control characters in a UPN or a resource id too', () => {
+    expect(checkInputValue(PARAMS.user!, 'avery@example.com\u0000', NOW)).toMatchObject({
+      error: expect.any(String),
+    });
+    expect(checkInputValue(PARAMS.resource!, `${RESOURCE}\u007f`, NOW)).toMatchObject({
+      error: expect.any(String),
+    });
+  });
+
   it('control characters and blanks still read "must be an id"', () => {
     expect(checkParam(PARAMS.user!, `${GUID}\t`, NOW)).toEqual({ error: 'must be an id' });
     expect(checkParam(PARAMS.resource!, ' ', NOW)).toEqual({ error: 'must be an id' });

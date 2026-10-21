@@ -15,16 +15,22 @@ Check, citing file:line:
   mask ReauthRequired/NotArmed); automation tokens only on scheduler paths.
 - **Read/write enforcement**: all Microsoft calls go through `ctx.outbound` (no direct `fetch`); read mode stays
   default-deny; new `READ_POSTS` entries are anchored regexes and truly read-only; writes only with `declaredWrite`
-  from published content; arm checks (`isArmed`) on write paths.
+  from published content; arm checks (`isArmed`) on write paths. Content can't set the headers AdminForge owns
+  (`FORBIDDEN_HEADER_NAMES` in `portal/packages/schemas/src/datasource.ts`, also on `$batch` sub-requests), and a
+  Graph write that names a user by UPN or address stays refused (`user_not_by_id`) — the protected-object guard
+  matches object ids only.
 - **Injection**: OData/KQL/path segments built only via the quoting helpers or the server-side filter compiler; no raw
-  param interpolation; runner scripts never interpolate inputs into code; `http` hosts allowlisted.
+  param interpolation; runner scripts never interpolate inputs into code; `http` hosts allowlisted. A new expression
+  helper is classified in the taint analysis (`portal/packages/expressions/src/taint.ts`): only number, boolean,
+  date or new-id results count as safe, and an encoder change needs its own lint tests.
 - **Secrets**: `secretOutputs` respected end to end; nothing secret in fixtures, logs, `config/example.env` values.
 - **Web**: CSRF header on state-changing calls; no `dangerouslySetInnerHTML` with data; open redirects (`safeReturnTo`).
   The CSP stays `script-src 'self'` (`helmet` in `portal/apps/api/src/app.ts`): no `eval`, `new Function` or inline
   script in web code or a new dependency, and libraries that probe eval are configured not to (`disableEvalProbe`);
   run `pnpm build && pnpm test:e2e:prod` (`tests/e2e/prod/csp-no-eval.spec.ts`). Links from content (probe
   `link.href`, markdown, `href` templates) are in-app paths or `https://` — never `//host`, a backslash or
-  `javascript:`.
+  `javascript:`; in the web app they go through `safeUrl` (`portal/packages/ui/src/lib/links.ts`) via `AppLink` /
+  `useNavigateHref` or the widget itself.
 - **Data collected with application permissions** (probe and report rows, scheduled results) reaches only Operators
   unless the definition widens it deliberately: details stay behind `detailsHidden`, and nothing copies item names
   from those rows into a message, title or other field Readers see.

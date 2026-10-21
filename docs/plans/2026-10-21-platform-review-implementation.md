@@ -1,6 +1,6 @@
 # Platform review 2026-10-21 — implementation
 
-> **Status:** in progress (2026-10-21). Implements the four validated review plans
+> **Status:** done (2026-10-21). Implemented the four validated review plans
 > (`2026-10-21-platform-review-{design,organization,functionality,security}.md`, each with a "Validation against
 > feat/sqlite-on-pvc" section) on branch `fix/platform-review`, stacked on `feat/sqlite-on-pvc`. Target platform
 > confirmed by the owner on 2026-10-21: **a Kubernetes cluster on other hardware** (ADR-017 stands).
@@ -93,3 +93,27 @@ edits them; each package reports the text to add instead): `CHANGELOG.md`, `docs
   optional until then).
 - The interim host (`adminforge-sqlite.service`) serves a worktree's build; serving a copied release instead is a host
   change for the owner to approve.
+
+## Outcome (2026-10-21)
+
+Everything above except the deferred table landed on `fix/platform-review` (about 310 commits on `feat/sqlite-on-pvc`,
+not pushed): the 15 wave-1 packages; wave 2 (S-10 keyed audit chain, S-08 session rotation on arm, S-25/S-23 run
+visibility and `readPost`, confirmations rendered by the API, resume re-checks, O-07 helpers, the O-04 ratchet, the
+docs index, the skills kit, the content taxonomy, the registers); then a security, design and content review of the
+whole branch and four packages that fixed what they found (child-playbook writes count as writes, fixture data never
+reaches the runner, one-shots follow the emergency stop, `idempotent: false` requests are sent once, entity page params
+are checked as ids; table write locks, the phone session rail; typed confirmations for medium-risk bulk actions and
+high-risk runbooks, name fallbacks to object ids). CHANGELOG `Unreleased › Platform review`, SECURITY.md, the backlog
+register and the licensing map record it.
+
+Decisions taken during the work, on top of the table above: bulk actions of risk medium or higher confirm by typing
+the count; "asked to approve" (S-25) means a gate the person may decide that is pending and not expired; extending or
+disarming write access keeps the session id; a prearm resume doesn't ask for the typed confirmation again; the App
+Service restart/start/stop playbooks are offered from the App Service security report rather than retired; the size
+ratchet starts from the sizes the review left (`engine.ts` 2,401 lines — moving the resume re-check out is the first
+split).
+
+Verified: `pnpm test` three runs in a row (7,369 tests and 399 scale tests), e2e 190 against baselines regenerated in
+full, the production build's CSP e2e, initial JS 246.5 of 250 KB, `adminforge validate` (420) and `test` (321),
+typecheck, lint and format. Not verified: anything live — the cluster, a tenant, the runner image build; the backlog's
+`live` rows list each check.

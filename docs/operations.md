@@ -19,14 +19,14 @@ The volume `adminforge-data` (ReadWriteOncePod, block storage) is mounted at `/v
 
 Configuration:
 
-| Where                                                                   | Read by                                            | Holds                                                                                                                                             |
-| ----------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Secret `adminforge-env`                                                 | api (every key); runner (`RUNNER_SHARED_KEY` only) | The installation's settings, made from `<env>.env`: tenant, app client ids and secrets, `TOKEN_CACHE_KEY`, `RUNNER_SHARED_KEY`, `PUBLIC_BASE_URL` |
-| ConfigMap `adminforge-config`                                           | api                                                | The pod's layout (`NODE_ENV`, `DATABASE_PATH`, ports, `CONTENT_SOURCE`, `RUNNER_URL`; `TRUST_PROXY` from the overlay). It wins over the Secret    |
-| Secret `adminforge-automation-cert`                                     | api, at `/etc/adminforge/automation`               | Optional: the automation identity's certificate                                                                                                   |
-| Secret `adminforge-tls`                                                 | the ingress controller                             | The Ingress certificate                                                                                                                           |
-| `~/.config/adminforge/<env>.env` (operator's machine, mode 600, in 700) | `kubectl create secret`, the CLI                   | The source of `adminforge-env`                                                                                                                    |
-| `~/.config/adminforge/<env>.admin.env`                                  | CLI and live tests only — never the cluster        | Provisioner credentials, live-test user                                                                                                           |
+| Where                                                                   | Read by                                                                        | Holds                                                                                                                                                                |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Secret `adminforge-env`                                                 | api (every key); runner (`RUNNER_SHARED_KEY` only)                             | The installation's settings, made from `<env>.env`: tenant, app client ids and secrets, `TOKEN_CACHE_KEY`, `AUDIT_CHAIN_KEY`, `RUNNER_SHARED_KEY`, `PUBLIC_BASE_URL` |
+| ConfigMap `adminforge-config`                                           | api                                                                            | The pod's layout (`NODE_ENV`, `DATABASE_PATH`, ports, `CONTENT_SOURCE`, `RUNNER_URL`; `TRUST_PROXY` from the overlay). It wins over the Secret                       |
+| Secret `adminforge-automation-cert`                                     | api, at `/etc/adminforge/automation`                                           | Optional: the automation identity's certificate                                                                                                                      |
+| Secret `adminforge-tls`                                                 | the ingress controller                                                         | The Ingress certificate                                                                                                                                              |
+| `~/.config/adminforge/<env>.env` (operator's machine, mode 600, in 700) | `kubectl create secret`, the CLI                                               | The source of `adminforge-env`                                                                                                                                       |
+| `~/.config/adminforge/<env>.admin.env`                                  | `provision …`, `validate --scopes` and the live tests only — never the cluster | Provisioner credentials, live-test user                                                                                                                              |
 
 The production database exists only on the volume, so commands that act on it run in the pod:
 `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge <command>`. Provisioning, `validate` and the live
@@ -36,8 +36,9 @@ tests run on the operator's machine with the env files. A developer's `pnpm dev`
 ### Changing the configuration
 
 Edit `<env>.env` and check it with `pnpm adminforge env check --for portal,schedules` (key names and states only; it
-also names keys of the Postgres releases to remove). Then replace the Secret and restart: the pod reads the Secret
-only when it starts.
+also names keys of the Postgres releases to remove). Keep the file private (`chmod 600`): the API and the CLI's other
+commands refuse an env file with any group or world permission and name the fix (`env check` doesn't look at the mode).
+Then replace the Secret and restart: the pod reads the Secret only when it starts.
 
 ```sh
 kubectl -n adminforge create secret generic adminforge-env --from-env-file="$HOME/.config/adminforge/prod.env" \
@@ -57,11 +58,20 @@ kubectl -n adminforge logs deploy/adminforge -c api -f               # logs (JSO
 curl -s https://adminforge.example.com/readyz
 ```
 
-A stop gives running playbook steps 10 s to reach a checkpoint (their jobs are queued again) and running schedule jobs
-30 s (then they are recorded as interrupted); the pod has 60 s in all. `/healthz` answers when the process is up (the
-startup and liveness probes; three failures in a row restart the container). `/readyz` also reads the database and the
-heartbeats of the run worker and the scheduler: `ok`; `degraded` (still 200, but `worker` or `scheduler` stopped
-reporting); or 503 `not_ready` (the database can't be read — the pod leaves the Service until it can).
+A stop lets every run finish the step it is on and stop at its next checkpoint: steps get 10 s, then a step still in
+flight is interrupted. The runs stay `running` and their jobs are queued again; after the restart they continue where
+they stopped — an interrupted step is retried, or, if it is `idempotent: false`, the run ends `needs_review` (check the
+target before running it again). Running schedule jobs get 30 s (then they are recorded as interrupted). The API gives
+the whole stop `SHUTDOWN_TIMEOUT_SECONDS` (50 s), then logs what is still open and exits 1; the pod has 60 s in all.
+
+`/healthz` answers when the process is up (the startup and liveness probes; three failures in a row restart the
+container). `/readyz` also reads the database and the heartbeats of the run worker and the scheduler: `ok`; `degraded`
+(still 200: the scheduler made no progress for two minutes — its ticks fail or it lost its lease — or the run worker
+stopped polling its queue; the API itself still serves); or 503 `not_ready` (the database can't be read — the pod
+leaves the Service until it can).
+
+If the pod was down over an hour, each schedule records one skipped run (`schedule_missed`, the time it was due)
+instead of running late. Run it now from its page if you still need the result.
 
 ## Content changes
 
@@ -73,13 +83,17 @@ kubectl -n adminforge exec deploy/adminforge -c api -- adminforge publish --dry-
 kubectl -n adminforge exec deploy/adminforge -c api -- adminforge publish             # the API picks it up within a second
 ```
 
-`publish` runs the same checks as `validate` and the playbook tests and refuses on errors. It writes new versions in
-one transaction and tells the running API (the `definitions_changed` signal); no restart. It also refuses content that
-isn't reviewed. The pod has no git checkout: the image's `/app/BUILD.json` records whether `build-images.sh` found
-`portal/content` committed and its commit on `origin/main` as last fetched (it never fetches: `git fetch` before
-building). `--dry-run` says what would be refused. For an emergency fix, `--allow-unreviewed` publishes anyway and
-records the reasons in the `content.published` audit event — follow it with the reviewed change. (This is a process
-check on a local ref; branch protection on the repository is what makes review mandatory.)
+`publish` runs the same checks as `validate` and the playbook tests and refuses on errors. It writes new versions in one
+transaction and tells the running API (the `definitions_changed` signal); no restart. It also refuses content that isn't
+reviewed. The pod has no git checkout: the image's `/app/BUILD.json` records whether `build-images.sh` found
+`portal/content` committed and its commit on origin's `main` as it fetched it while building
+(`git fetch origin refs/heads/main`; the build stops when it can't), with that `main` commit (`mainCommit`) and origin's
+URL without credentials (`remote`). `--dry-run` says what would be refused, and lists published rows stamped with an
+older content schema version and whether they still pass. For an emergency fix, `--allow-unreviewed` publishes anyway
+and records the reasons in the `content.published` audit event — follow it with the reviewed change. The event also
+records what was published and what it was checked against: `git.commit`, `git.mainCommit` and `git.remote`.
+(`BUILD.json` is written by whoever builds the image, so this is a process check; branch protection on the repository is
+what makes review mandatory.)
 
 If a change adds `requires.scopes`, run `pnpm adminforge validate --scopes` and `pnpm adminforge provision entra`.
 Publishing a new version of a playbook that a write-capable schedule runs switches that schedule off at its next run
@@ -133,17 +147,17 @@ kubectl -n adminforge exec deploy/adminforge -c api -- \
   node portal/apps/scheduler/dist/main.js --schedule maintenance.news-refresh-hourly
 ```
 
-The pod needs outbound https to the feed hosts (www.microsoft.com, api.msrc.microsoft.com,
-techcommunity.microsoft.com, www.powershellgallery.com, learn.microsoft.com, developer.microsoft.com) besides Graph and
-Azure Resource Manager: the NetworkPolicy allows port 443, and an egress firewall in front of the cluster must too.
+The pod needs outbound https to the feed hosts (www.microsoft.com, api.msrc.microsoft.com, techcommunity.microsoft.com,
+www.powershellgallery.com, learn.microsoft.com, developer.microsoft.com) besides Graph and Azure Resource Manager: the
+NetworkPolicy allows port 443 to public addresses, and an egress firewall in front of the cluster must allow them too.
 The tenant feeds need the automation app's ServiceMessage.Read.All and ServiceHealth.Read.All
 (`pnpm adminforge provision entra`) and Reader on the subscriptions. Feed failures and their codes are listed in
 `docs/news.md`.
 
 ## Synthetic transactions
 
-Synthetic monitoring (`/monitoring`, grouped by service; each service's section links to its own checks with
-"Service checks") runs two kinds of M365 checks. **Read-only checks** work as soon as the automation identity has its
+Synthetic monitoring (`/monitoring`, grouped by service; each navigation section's row shows its own checks' status
+and links to them) runs two kinds of M365 checks. **Read-only checks** work as soon as the automation identity has its
 permissions: Exchange Autodiscover, the Outlook (MAPI) and Outlook on the web front doors, the SharePoint front door
 (`AF_SPO_TENANT_NAME`), the Teams web app, the Microsoft 365 web portal, Entra realm discovery for the primary
 domain, an open-incident check per workload (Exchange, SharePoint, OneDrive, Teams, Entra, Intune) and services in
@@ -158,12 +172,14 @@ were collected with the automation identity's application permissions, so only O
 message, the remedy and the link, whose page reads with their own permissions). A dashboard's service checks
 (`probeStatus`) open to the same remedy and link to the detail.
 
-**Synthetic transactions** (ADR-015; `sweep.synthetic-transactions`, every 15 minutes) do what a person does and
-remove what they made: they act **only** on dedicated test objects named in `AF_SYNTHETIC_*` keys (the mail check also
-sends from `AF_MAIL_SENDER`), and do nothing ("not configured", the run succeeds with a note) until those are set. Use
-test objects nobody reads, and scope the identity to them. Runs in which they acted are audited as writes
-(`schedule.run`); turning the schedule off also stops **Run now**. To keep their permissions off the shared automation
-identity, give the sweep a named identity of its own (ADR-014) and grant the scopes below to it:
+**Synthetic transactions** (ADR-015; `sweep.synthetic-transactions`, every 15 minutes) do what a person does and remove
+what they made: they act **only** on dedicated test objects named in `AF_SYNTHETIC_*` keys (the mail check also sends
+from `AF_MAIL_SENDER`), and do nothing ("not configured", the run succeeds with a note) until those are set. Use test
+objects nobody reads, and scope the identity to them. Runs in which they acted are audited as writes (`schedule.run`);
+turning the schedule off also stops **Run now** (`schedule_disabled`). Run now on any other disabled schedule runs it
+but only writes the file — no email, Teams post or notification — to try a schedule before enabling it; `--schedule`
+one-shots deliver as configured. To keep their permissions off the shared automation identity, give the sweep a named
+identity of its own (ADR-014) and grant the scopes below to it:
 
 | Probe                               | Does                                                                                                    | Needs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -232,7 +248,8 @@ for Servers, from Defender for Cloud). Each server opens in the inspector with U
 _Disconnected Arc servers_ (`reports.arc-disconnected-daily`, 06:20 UTC) and _Arc agent and extension health_
 (weekly) run as schedules; five configuration checks (disconnected or expired servers, failed extensions, critical or
 security updates overdue for 30 days, servers not assessed for 3 days, agents six or more releases behind) appear
-under Azure › Configuration checks with what each found, what to do and a link to the list.
+under Synthetic monitoring › Azure (the Azure row's status in the navigation) with what each found, what to do and a
+link to the list.
 
 Everything is filtered, counted and paged in **Azure Resource Graph**: the lists load a page at a time and export up
 to 100,000 rows, the numbers come from `summarize` queries, so thousands of servers cost the same as ten. The fleet
@@ -304,14 +321,16 @@ tables answers "Failed to resolve table" in the probe's result.
 
 ## Sizing for a large tenant
 
-**Design target: about 50 engineers using AdminForge at the same time**, which one API process with the defaults
-serves with about 4× headroom: measured on the 100k-user synthetic tenant, lists and entity pages answer in ~0.15 s
-(p95 ≤ 0.3 s at 15–30 s between page loads), nothing is refused, the event loop stays under 40 ms at p99 and the
-process at 1.1–1.5 GB; 200 engineers at 15 s still see no refusals (lists p95 0.8 s). The api container's memory
-limit is 2 GiB (`portal/deploy/kubernetes/base/deployment.yaml`). If usage grows: refusals or slow lists → raise
-`OUTBOUND_CONCURRENCY` (below); a busy event loop is the limit of this design — one API process, one replica
-(ADR-016); many people opening the crawling dashboards → snapshots ([backlog](backlog.md)). Numbers, method and what
-happens far beyond the target: [performance.md](performance.md#many-engineers-at-once).
+**Design target: about 50 engineers using AdminForge at the same time**, which one API process with the defaults serves
+with about 4× headroom: measured on the 100k-user synthetic tenant, lists and entity pages answer in ~0.15 s (p95 ≤ 0.3
+s at 15–30 s between page loads), nothing is refused, the event loop stays under 40 ms at p99 and the process at 1.1–1.5
+GB; 200 engineers at 15 s still see no refusals (lists p95 0.8 s). The api container's memory limit is 2 GiB, the
+runner's 3 GiB (up to six PowerShell workers at about 0.35 GB each; `portal/deploy/kubernetes/base/deployment.yaml`). At
+most 5 runs per person are queued or running at once (`RUN_MAX_OPEN_PER_USER`), and the run worker works on 8 at a time
+(`RUN_WORKER_CONCURRENCY`). If usage grows: refusals or slow lists → raise `OUTBOUND_CONCURRENCY` (below); a busy event
+loop is the limit of this design — one API process, one replica (ADR-016); many people opening the crawling dashboards →
+snapshots ([backlog](backlog.md)). Numbers, method and what happens far beyond the target:
+[performance.md](performance.md#many-engineers-at-once).
 
 The API's limits for Microsoft calls and page loads (all in the env file; defaults in brackets):
 
@@ -369,11 +388,21 @@ pnpm adminforge validate --scopes     # on your machine; if permissions changed:
 
 Build from a checkout of a reviewed commit on `origin/main` (ideally a tag), not from a working copy someone is
 editing: `build-images.sh` records in the image whether its content was reviewed, and publishing from any other image
-needs `--allow-unreviewed`. `Recreate` stops the old pod before the new one starts (Start, stop, status), and the new
-pod migrates the database before it listens (Database): a short outage. The web app is in the image, so a tab opened
-on the previous build may fail to load a screen it hasn't opened yet (its file is gone) until it is reloaded. The
-runner's PowerShell modules are installed into its image from `portal/apps/runner/modules.lock.json`; a change there
-needs only the new image.
+needs `--allow-unreviewed`. `Recreate` stops the old pod before the new one starts (Start, stop, status: running
+playbooks continue after the restart), and the new pod migrates the database before it listens (Database): a short
+outage. The web app is in the image, so a tab opened on the previous build may fail to load a screen it hasn't opened
+yet (its file is gone) until it is reloaded. The runner's PowerShell modules are installed into its image from
+`portal/apps/runner/modules.lock.json`; a change there needs only the new image. The base images are pinned by digest;
+moving one is a reviewed commit, then an ordinary upgrade.
+
+A release that bumps the content schema version (`CONTENT_SCHEMA_VERSION`; its pull request says so): after the
+upgrade run `publish --dry-run`, which lists the published rows stamped with an older version and whether they still
+pass, then publish again. A row that no longer passes is refused when the API loads it (`definition_unavailable`) until
+the release's content is published.
+
+Once, after upgrading past the fix that stores a run's app identity (`identity_name`, 2026-10-21): cancel and run
+again any queued or parked run of a schedule that names an app identity (ADR-014) — runs created before the fix keep
+the automation identity.
 
 To go back, put the previous tags or digests in the overlay and apply it. If the release changed the schema, also
 restore the snapshot or backup taken before it (Backups); what changed since then is lost.
@@ -437,9 +466,11 @@ brings the schema up to date too. Take a snapshot or a backup before a release t
 and decided approvals (`RETENTION_RUN_DAYS`, 180), schedule run history (`RETENTION_SCHEDULE_RUN_DAYS`, 180), probe
 results (`RETENTION_PROBE_DAYS`, 35), report files (`RETENTION_ARTIFACT_DAYS`, 90), deleted portal schedules without
 history, and News and changes items past their feed's retention. Parked runs and runs that need review are kept, the
-audit log is never purged, and the purge itself is audited (counts only). Every 10 minutes housekeeping deletes the
-tokens of sessions nobody can use any more (the session rows a week later), expired sign-in round trips and signals
-older than an hour.
+audit log is never purged, and the purge itself is audited (counts only). Each pass deletes 2,000 rows (or files) at a
+time with requests let in between and stops after 2 s; the rest continues at the next 10-minute housekeeping pass
+(report files from where it stopped, never following a symbolic link). Freed space goes back to the volume in steps.
+Every 10 minutes housekeeping also deletes the tokens of sessions nobody can use any more (the session rows a week
+later), expired sign-in round trips and signals older than an hour.
 
 **`TOKEN_CACHE_KEY` rotation:** sealed blobs carry the id of the key that sealed them. For a routine rotation put the
 old key in `TOKEN_CACHE_PREVIOUS_KEYS` and a new one (`openssl rand -base64 32`) in `TOKEN_CACHE_KEY`, and update the
@@ -457,7 +488,7 @@ What a restore needs, and how each part is kept:
 | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
 | The database: audit log, runs, approvals, schedules (the portal-created ones exist only here), settings, definitions | `adminforge.db` on the volume                      | Volume snapshots, and logical copies (`adminforge db backup`)     |
 | Report files                                                                                                         | `/var/lib/adminforge/artifacts` on the volume      | Volume snapshots only: a logical copy holds the database alone    |
-| `TOKEN_CACHE_KEY`, the apps' credentials, `RUNNER_SHARED_KEY`                                                        | the `adminforge-env` Secret, made from `<env>.env` | Keep `<env>.env` in your secret store, apart from database copies |
+| `TOKEN_CACHE_KEY`, `AUDIT_CHAIN_KEY` (and earlier audit keys), the apps' credentials, `RUNNER_SHARED_KEY`            | the `adminforge-env` Secret, made from `<env>.env` | Keep `<env>.env` in your secret store, apart from database copies |
 | The automation identity's certificate                                                                                | the `adminforge-automation-cert` Secret            | With the env file                                                 |
 | Never: `<env>.admin.env`                                                                                             | the operator's machine                             | Re-issue the provisioner and validation-user credentials instead  |
 
@@ -472,7 +503,11 @@ The commands are in `portal/deploy/kubernetes/README.md` → Backups.
   it (integrity, the audit chain) before it writes it. It is **not encrypted**: pipe it into `gpg --encrypt` on your
   machine, to a key whose private half is not in the cluster (for example the platform owner's). It reports the
   audit chain's tail on stderr (`tail seq …`): note it with the copy. Taking these copies is manual for now
-  (`docs/backlog.md`).
+  (`docs/backlog.md`). Each copy is recorded in the audit log before it leaves (`database.backup`: account and machine
+  — in the pod the image's user and the pod's name, so note who ran it; `kubectl exec` itself is in the cluster's
+  audit log —, stdout or file, plaintext, bytes, the copy's tail seq); if the event can't be written nothing is written
+  out, so the account running it needs write access to the database. With `AUDIT_CHAIN_KEY` set, a copy verifies only
+  with that key (never in the copy): keep it, and earlier ones, as long as the copies.
 - **Off the cluster:** snapshots stay in the cluster's cloud account. Keep the encrypted copies elsewhere too, on
   storage the cluster can't delete from (an object-lock bucket, for example), and access-controlled. Without
   `TOKEN_CACHE_KEY` the sealed tokens in a snapshot can't be read (everyone signs in again; nothing else is lost).
@@ -497,11 +532,13 @@ The commands are in `portal/deploy/kubernetes/README.md` → Backups.
 
 - **Then** check `/readyz`, and run `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify`:
   for a logical copy its tail is the one the backup reported, and it must agree with the checkpoints in your log store
-  (Audit chain checkpoints).
+  (Audit chain checkpoints). A copy from before `AUDIT_CHAIN_KEY` was set needs `AUDIT_CHAIN_KEYED_SINCE` removed (the
+  API won't start otherwise); it cuts over again at start — pin the new cut-over's seq afterwards.
 
 **Restore drill** — after every release that changes the schema, and at least quarterly. Decrypt the newest logical
 copy on your machine into a scratch file (`drill.db`, mode 600) and verify it, read-only:
-`DATABASE_PATH="$PWD/drill.db" pnpm adminforge audit verify`. Its tail must be the one the backup reported and agree
+`DATABASE_PATH="$PWD/drill.db" pnpm adminforge audit verify` (a keyed copy needs `AUDIT_CHAIN_KEY` and any earlier keys,
+from the env file the Secret is made from). Its tail must be the one the backup reported and agree
 with the checkpoints in your log store; compare the row counts of `audit_events`, `runs`, `schedules` and `definitions`
 (`sqlite3 drill.db 'select count(*) from runs'`) with what you expect, then delete the file. Now and then restore a
 snapshot into a scratch volume too, to prove that your storage's restore works. Record it here.
@@ -518,18 +555,20 @@ refused requests are logged at `info` as "request rejected", failures at `error`
 one-shots (`kubectl exec … node portal/apps/scheduler/dist/main.js …`) print to your terminal, not to the container
 log.
 
-Kubernetes keeps only the current and the previous container's log, and the node rotates them. Ship the containers'
-logs off the cluster (Container Insights / Log Analytics, or your log store): you need them to trace a Reference after
-a restart, and they carry the audit chain's checkpoints.
+Kubernetes keeps only the current and the previous container's log, and the node rotates them. Shipping the api
+container's log off the cluster (Container Insights / Log Analytics, or your log store) is **required**: you need it to
+trace a Reference after a restart, and it carries the audit chain's checkpoints and cut-overs, the anchor that shows a
+rewritten audit log (Audit chain checkpoints).
 
 ## Audit chain checkpoints
 
 The audit log is append-only (triggers in the database) and hash-chained. The triggers stop the application
 rewriting history; they don't stop someone who can write the volume, because SQLite has no roles (ADR-016,
-SECURITY.md → Known gaps). What detects that is the chain and its checkpoints: every verification (the hourly
-`probes.audit-chain`, the Audit page) walks the chain, and the API logs the verified tail as an
-`audit chain checkpoint` line (`seq`, `hash`). Someone who can rewrite the file can re-hash the chain, but not the
-checkpoints already shipped off the cluster.
+SECURITY.md → Known gaps). What detects that is the chain and its checkpoints: every verification logs the verified
+tail as an `audit chain checkpoint` line (`seq`, `hash`). The hourly `probes.audit-chain` re-checks the last verified
+checkpoint and the events after it, and walks the whole chain after a restart, once a day and after any break; the
+Audit page and `adminforge audit verify` always walk all of it. Without a key, someone who can rewrite the file can
+re-hash the chain, but not the checkpoints already shipped off the cluster.
 
 ```sh
 kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify        # prints the tail: seq, hash
@@ -539,6 +578,17 @@ kubectl -n adminforge logs deploy/adminforge -c api | grep 'audit chain checkpoi
 The tail must be the newest shipped checkpoint or come after it. A lower `seq`, or the same `seq` with another hash,
 means the chain was rewritten: snapshot the volume as evidence, restore from a backup and investigate who had write
 access to the volume.
+
+**The key.** Set `AUDIT_CHAIN_KEY` (`openssl rand -base64 32`, a key of its own — not `TOKEN_CACHE_KEY`) in `<env>.env`,
+update the Secret and restart: the API appends a cut-over event and logs an `audit chain cut-over` line (`seq`, `hash`,
+`prevHash`, `keyId`); from there on the chain is HMAC-SHA256, so changing an event needs the key, which is never on the
+volume. Then set `AUDIT_CHAIN_KEYED_SINCE=<that seq>` and restart, which pins the keyed part. Every start logs
+`audit chain keyed` (`since`, `keyId`, `pinned`, `tailSeq`, `tailHash`): the tail must never be lower than the last
+shipped checkpoint, and a new cut-over without a key change means keyed events were removed. Check any shipped line
+with `kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify --checkpoint <seq>:<hash>`. Once
+set, the key can be rotated (Secret and key rotation) but not removed: without it the API doesn't start and the CLI's
+writing commands refuse. Until it is set, `/readyz` (`checks.auditChain: unkeyed`), Admin → Settings and
+`adminforge env check` say the chain is unkeyed.
 
 ## Emergency: switch AdminForge off
 
@@ -616,25 +666,33 @@ AdminForgeSender`. (Granting Entra `Mail.Send` needs `AF_AUTOMATION_ALLOW_WRITE_
 - [ ] Backups: volume snapshots scheduled; logical copies encrypted to an off-cluster key and stored off the cluster;
       restore drill recorded above.
 - [ ] The database volume is block storage (never Azure Files, NFS or FUSE) and its snapshots restore.
-- [ ] The api container's log is shipped off the cluster (it holds the audit chain's checkpoints).
+- [ ] The api container's log is shipped off the cluster (required: its checkpoints and cut-overs are the audit
+      chain's anchor).
+- [ ] `AUDIT_CHAIN_KEY` set (Admin → Settings: "Keyed since event #N"), then `AUDIT_CHAIN_KEYED_SINCE` set to that
+      event (Audit chain checkpoints → The key).
 - [ ] `AF_PROTECTED_APP_IDS` lists the provisioner's client id (AdminForge's own playbooks then refuse to touch it).
 - [ ] Monitoring page green (portal readiness, audit chain, token probes); licence gaps reviewed
       (`docs/licensing-review.md`).
-- [ ] The cluster side: `TRUST_PROXY` is the ingress controller's pod network (never `true`); the NetworkPolicy admits
-      only the ingress controller, and the cluster enforces NetworkPolicies; the namespace enforces the `restricted`
-      Pod Security Standard; only the people who operate AdminForge can read the `adminforge-env` Secret or exec into
-      the pod (RBAC), and Secrets are encrypted at rest.
+- [ ] The cluster side: `preflight.sh` passes and the readiness checklist in `portal/deploy/kubernetes/README.md` is
+      done; `TRUST_PROXY` is the ingress controller's pod network (never `true`); the NetworkPolicy admits only the
+      ingress controller, and the cluster enforces NetworkPolicies; the private addresses the pod needs (the Ingress
+      for the portal-readiness probe, Private Link endpoints) are named in `networkpolicy-private-egress.yaml`; the
+      namespace enforces the `restricted` Pod Security Standard; only the people who operate AdminForge can read the
+      `adminforge-env` Secret or exec into the pod (RBAC), and Secrets are encrypted at rest.
+- [ ] The runner's base image has been moved off the stale MCR PowerShell tag (`portal/deploy/kubernetes/README.md` →
+      CPU architecture).
 
 ## Secret and key rotation
 
-| Secret                                   | How                                                                                                                                                                                                                                                                                                                               | Effect                                              |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Provisioner client secret                | Create a new secret on the provisioner app in Entra, put it in `<env>.admin.env`, delete the old one in Entra. **Do this now if it was ever shared** (for example in a chat).                                                                                                                                                     | None on the cluster (it never reaches it)           |
-| Read / Write / Automation client secrets | Valid 180 days. `provision entra` creates a new one only when the stored one is missing or expired: to rotate early, empty the key (`AF_READ_CLIENT_SECRET=`), run `pnpm adminforge provision entra`, update the Secret, then delete the old credential in Entra. The `probes.app-credential-expiry` probe warns ahead of expiry. | Brief restart                                       |
-| `TOKEN_CACHE_KEY`                        | Old key into `TOKEN_CACHE_PREVIOUS_KEYS`, a new one (`openssl rand -base64 32`) into `TOKEN_CACHE_KEY` in `<env>.env`, update the Secret; drop the old key after `SESSION_ABSOLUTE_HOURS` (→ Database)                                                                                                                            | None (without the old key: everyone signs in again) |
-| Ingress certificate (`adminforge-tls`)   | cert-manager renews it; a certificate you made yourself is replaced before it expires (→ Certificates)                                                                                                                                                                                                                            | None                                                |
-| `RUNNER_SHARED_KEY`                      | A new value (`openssl rand -base64 32`) in `<env>.env`, update the Secret: both containers start with it                                                                                                                                                                                                                          | Brief restart                                       |
-| Live-test user password / TOTP seed      | `pnpm adminforge provision test-identities` (password); re-run `tests/live/scripts/register-test-user-mfa.ts` (TOTP)                                                                                                                                                                                                              | Test tenants only                                   |
+| Secret                                   | How                                                                                                                                                                                                                                                                                                                                                                          | Effect                                                       |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Provisioner client secret                | Create a new secret on the provisioner app in Entra, put it in `<env>.admin.env`, delete the old one in Entra. **Do this now if it was ever shared** (for example in a chat).                                                                                                                                                                                                | None on the cluster (it never reaches it)                    |
+| Read / Write / Automation client secrets | Valid 180 days. `provision entra` creates a new one only when the stored one is missing or expired: to rotate early, empty the key (`AF_READ_CLIENT_SECRET=`), run `pnpm adminforge provision entra`, update the Secret, then delete the old credential in Entra. The `probes.app-credential-expiry` probe warns ahead of expiry.                                            | Brief restart                                                |
+| `TOKEN_CACHE_KEY`                        | Old key into `TOKEN_CACHE_PREVIOUS_KEYS`, a new one (`openssl rand -base64 32`) into `TOKEN_CACHE_KEY` in `<env>.env`, update the Secret; drop the old key after `SESSION_ABSOLUTE_HOURS` (→ Database)                                                                                                                                                                       | None (without the old key: everyone signs in again)          |
+| `AUDIT_CHAIN_KEY`                        | Old key into `AUDIT_CHAIN_PREVIOUS_KEYS`, a new one into `AUDIT_CHAIN_KEY` in `<env>.env`, update the Secret (the API cuts over at start). Keep old keys as long as their events and backups must verify; never keep one that may have leaked. Lost: a new key plus the lost key's id in `AUDIT_CHAIN_LOST_KEY_IDS` — only an id a shipped `audit chain cut-over` line names | Brief restart; a lost key's events can no longer be verified |
+| Ingress certificate (`adminforge-tls`)   | cert-manager renews it; a certificate you made yourself is replaced before it expires (→ Certificates)                                                                                                                                                                                                                                                                       | None                                                         |
+| `RUNNER_SHARED_KEY`                      | A new value (`openssl rand -base64 32`) in `<env>.env`, update the Secret: both containers start with it                                                                                                                                                                                                                                                                     | Brief restart                                                |
+| Live-test user password / TOTP seed      | `pnpm adminforge provision test-identities` (password); re-run `tests/live/scripts/register-test-user-mfa.ts` (TOTP)                                                                                                                                                                                                                                                         | Test tenants only                                            |
 
 ### The provisioner
 

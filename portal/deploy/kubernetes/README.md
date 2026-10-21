@@ -85,8 +85,8 @@ drop the Deployment's `nodeSelector`, and run the runner's Pester suite and a li
   database. Creating or changing pods or the Deployment in the namespace is as strong (a pod can mount the Secret and
   the volume), and changing NetworkPolicies can open the pod's egress. Grant these, and `get` on Secrets, only to the
   people who operate AdminForge. The pod itself never talks to the Kubernetes API (no service-account token).
-- **Secrets encrypted at rest** (etcd encryption or a KMS provider): `adminforge-env` holds `TOKEN_CACHE_KEY` and the
-  apps' credentials.
+- **Secrets encrypted at rest** (etcd encryption or a KMS provider): `adminforge-env` holds `TOKEN_CACHE_KEY`,
+  `AUDIT_CHAIN_KEY` and the apps' credentials.
 
 ### Storage
 
@@ -259,28 +259,32 @@ the runner share one node and its clock, so that window holds by construction.
           value: [{ name: registry-pull }]
   ```
 
-- **A build machine**: amd64, Docker with BuildKit (buildx), a checkout of a reviewed commit (§ 1).
+- **A build machine**: amd64, Docker with BuildKit (buildx), a checkout of a reviewed commit that can fetch from
+  origin (§ 1).
 
 ### Secrets
 
-`adminforge-env` (the installation's settings: tenant, apps, `TOKEN_CACHE_KEY`, `RUNNER_SHARED_KEY`,
-`PUBLIC_BASE_URL`), `adminforge-tls` (the Ingress certificate, or cert-manager) and, with a certificate-based
-automation identity, `adminforge-automation-cert` — made by an AdminForge operator from the env file on their machine
-(§ 2), never from the admin-only file. The cluster's part: Secrets encrypted at rest, `get` on them only for that
-operator (RBAC), and cert-manager if certificates should renew themselves.
+`adminforge-env` (the installation's settings: tenant, apps, `TOKEN_CACHE_KEY`, `AUDIT_CHAIN_KEY` — recommended;
+`env check` warns without it —, `RUNNER_SHARED_KEY`, `PUBLIC_BASE_URL`), `adminforge-tls` (the Ingress certificate, or
+cert-manager) and, with a certificate-based automation identity, `adminforge-automation-cert` — made by an AdminForge
+operator from the env file on their machine (§ 2), never from the admin-only file. The cluster's part: Secrets encrypted
+at rest, `get` on them only for that operator (RBAC), and cert-manager if certificates should renew themselves.
 
 ### Logs
 
-The api container's log (JSON lines on stdout) must be **shipped off the cluster** and kept as long as the audit
-history must be provable: it carries the audit chain's checkpoints (§ Audit log). Measured on the interim host: about
-2 MB a day with nobody signed in (schedules and probes; ~290 bytes a line). Each request and each Microsoft call adds
-a line, so 50 active engineers make some hundreds of MB a day; the kubelet keeps only 5 × 10 MiB per container by
-default, so the shipper must keep up continuously.
+The api container's log (JSON lines on stdout) must be **shipped off the cluster** — a requirement, not an option — and
+kept as long as the audit history must be provable: it carries the audit chain's checkpoints and cut-overs, the anchor
+that shows a rewritten audit log (§ Audit log). Measured on the interim host: about 2 MB a day with nobody signed in
+(schedules and probes; ~290 bytes a line). Each request and each Microsoft call adds a line, so 50 active engineers make
+some hundreds of MB a day; the kubelet keeps only 5 × 10 MiB per container by default, so the shipper must keep up
+continuously.
 
 ### Backups
 
 - **Logical copies** need nothing from the cluster but `pods/exec`: `kubectl exec … adminforge db backup - | gpg …` on
   an operator's machine, kept off the cluster (§ Backups), with the api `/tmp` large enough for one copy (Node size).
+  With `AUDIT_CHAIN_KEY` set, a copy verifies only with that key, which is never in the copy: keep the key (and
+  earlier ones) as long as the copies.
 - **Volume snapshots** (optional, primary where available) need the CSI snapshot support above and a schedule (Velero,
   your platform's backup).
 - Restores and the one-time move use the loader pod (`tools/loader-pod.yaml`): the Deployment scaled to 0, `kubectl cp`.
@@ -320,21 +324,26 @@ new `PUBLIC_BASE_URL` (`pnpm adminforge provision entra`).
       BuildKit).
 - [ ] **Secrets** encrypted at rest; `get` on Secrets, `pods/exec`, and changing pods, the Deployment or
       NetworkPolicies in the namespace only for AdminForge's operators.
-- [ ] **Logs** of the api container shipped off the cluster, kept as long as the audit history must be provable.
-- [ ] **Backups**: an operator's machine with `kubectl` and `gpg`, a place off the cluster for the encrypted copies.
+- [ ] **Logs** of the api container shipped off the cluster (required), kept as long as the audit history must be
+      provable.
+- [ ] **Backups**: an operator's machine with `kubectl` and `gpg`, a place off the cluster for the encrypted copies,
+      and the audit chain key kept as long as them (a keyed copy verifies only with it).
 - [ ] **Old host** ready for the one-time import (a checkout of this release, its Postgres reachable from it).
 
 ## 1. Build and push the images
 
 ```bash
-git fetch origin
+portal/deploy/kubernetes/build-images.sh --dry-run   # fetches origin's main, prints the build record, builds nothing
 portal/deploy/kubernetes/build-images.sh --registry registry.example.com/adminforge --push
 ```
 
 Both images are built from the `HEAD` commit itself (`git archive`: uncommitted, untracked and git-ignored files are
-never in them) and tagged with it. The app image records in `/app/BUILD.json` whether that commit is merged to
-`origin/main` (as last fetched) — the review rule `adminforge publish` enforces; publishing from an image of any other
-commit needs `--allow-unreviewed`, which the audit log records. Pin the pushed digests in your overlay.
+never in them) and tagged with it. The script runs `git fetch origin refs/heads/main` itself (read-only) and stops if it
+can't: the app image records in `/app/BUILD.json` whether that commit is merged to origin's `main` as fetched then —
+the review rule `adminforge publish` enforces. The record holds `commit`, `reviewed`, `mainCommit` (the fetched `main`
+commit), `remote` (origin's URL without credentials) and `contentDir`; `publish` doesn't trust a record without
+`mainCommit`. Publishing from an image of any other commit needs `--allow-unreviewed`, which the audit log records. Pin
+the pushed digests in your overlay.
 
 The images the builds start from are pinned by digest too (`name:tag@sha256:…` in each `FROM`, and the `# syntax=`
 frontend; `tests/guards/image-digests.test.ts`), so rebuilding a commit gets the same bases. To move to a newer base,
@@ -357,11 +366,12 @@ kubectl -n adminforge create secret generic adminforge-env --from-env-file="$HOM
 ```
 
 It must hold at least `PUBLIC_BASE_URL` (the Ingress URL), `AUTH_MODE=entra`, `AF_TENANT_ID`, the Read/Write app
-settings, `TOKEN_CACHE_KEY`, `RUNNER_SHARED_KEY` and, for schedules, the automation identity — `adminforge env check
---for portal,schedules` on the file tells you what is missing. The pod's layout (`DATABASE_PATH`, `API_HOST`, ports,
-`NODE_ENV`, `CONTENT_SOURCE`) comes from the ConfigMap and wins over the Secret, so a copied env file can't move the
-database off the volume. Keys of the Postgres releases (`DATABASE_URL`, `*_IN_PROCESS`, …) are ignored; `env check`
-lists them so you can drop them.
+settings, `TOKEN_CACHE_KEY`, `RUNNER_SHARED_KEY` and, for schedules, the automation identity —
+`adminforge env check --for portal,schedules` on the file tells you what is missing. Add `AUDIT_CHAIN_KEY`
+(`openssl rand -base64 32`, not `TOKEN_CACHE_KEY`; § Audit log): `env check` warns without it, and once set it can be
+rotated but not removed. The pod's layout (`DATABASE_PATH`, `API_HOST`, ports, `NODE_ENV`, `CONTENT_SOURCE`) comes from
+the ConfigMap and wins over the Secret, so a copied env file can't move the database off the volume. Keys of the
+Postgres releases (`DATABASE_URL`, `*_IN_PROCESS`, …) are ignored; `env check` lists them so you can drop them.
 
 The runner gets **only** `RUNNER_SHARED_KEY` from this Secret (never the rest).
 
@@ -394,8 +404,10 @@ kubectl -n adminforge rollout status deploy/adminforge
 ```
 
 The API creates the database file (mode 0600) and applies the migrations before it listens — the startup probe allows
-for that. `GET /readyz` answers `{"status":"ok","checks":{"db":"ok","worker":"ok","scheduler":"ok"}}` once the run
-worker and the scheduler have reported in.
+for that. `GET /readyz` answers
+`{"status":"ok","checks":{"db":"ok","worker":"ok","scheduler":"ok","auditChain":"keyed"}}` once the run worker and the
+scheduler have reported in (`"auditChain":"unkeyed"` until `AUDIT_CHAIN_KEY` is set; it never makes the answer
+`degraded`).
 
 ## 4. Publish content
 
@@ -414,9 +426,11 @@ API (the `definitions_changed` signal) — no restart.
 1. Build and push new images (step 1).
 2. Take a backup or a volume snapshot (§ Backups) when the release changes the schema (`portal/apps/api/drizzle`).
 3. Put the new tags or digests in the overlay and `kubectl apply -k` it. `Recreate` stops the old pod (running
-   playbook steps get 10 s to reach a checkpoint; unfinished jobs are queued again), then the new pod migrates and
-   starts.
-4. Publish the content of the new image (step 4).
+   playbook steps get 10 s to reach a checkpoint; a step still in flight then is interrupted and, after the restart,
+   retried — or the run ends `needs_review` if the step is `idempotent: false`; unfinished jobs are queued again), then
+   the new pod migrates and starts.
+4. Publish the content of the new image (step 4). After a release that bumps the content schema version,
+   `publish --dry-run` lists the published rows stamped with an older one and whether they still pass.
 
 ## Moving the data from the Postgres host (once)
 
@@ -442,7 +456,7 @@ with their creator's access keep their sealed grant tokens. Keep the old host's 
 ## Backups
 
 The database holds history (audit log, runs, approvals, schedules, settings); the Secret holds the keys
-(`TOKEN_CACHE_KEY`, app secrets). Back up both, separately.
+(`TOKEN_CACHE_KEY`, `AUDIT_CHAIN_KEY`, app secrets). Back up both, separately.
 
 - **Volume snapshots** (primary): schedule CSI VolumeSnapshots of `adminforge-data` (AKS: Azure Disk snapshots, e.g.
   with Velero or Azure Backup for AKS). A snapshot is crash-consistent, and SQLite's write-ahead log is built to
@@ -456,6 +470,12 @@ The database holds history (audit log, runs, approvals, schedules, settings); th
     | gpg --encrypt --recipient <key> > "adminforge-$(date -u +%Y%m%dT%H%M%SZ).db.gpg"
   ```
 
+  Each copy is recorded in the audit log before it leaves (`database.backup`: account and machine — in the pod the
+  image's user and the pod's name, so note who ran it; `kubectl exec` itself is in the cluster's audit log —, stdout
+  or file, plaintext, bytes, the copy's tail seq); if the event can't be written nothing is written out, so the
+  account running it needs write access to the database. With `AUDIT_CHAIN_KEY` set, the copy verifies only with that
+  key, which is never in it: keep the key (and earlier ones) as long as the copies.
+
   Restore: decrypt, then the loader pod (as in the data move). After a restore from a logical copy everyone signs in
   again, and creators re-consent schedules that run with their access.
 
@@ -464,12 +484,22 @@ The database holds history (audit log, runs, approvals, schedules, settings); th
 The audit log is append-only in the database (triggers) and hash-chained. The triggers stop the application rewriting
 history; they don't stop someone with write access to the volume (SQLite has no roles — ADR-016). What detects that
 is the chain and its **checkpoints**: the API logs `audit chain checkpoint` lines (the audit-chain probe and the Audit
-page). Forward the container logs off the cluster (Container Insights / Log Analytics, or your log store) and compare
-them with:
+page). Forward the container logs off the cluster (Container Insights / Log Analytics, or your log store) — required —
+and compare them with:
 
 ```bash
 kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify
 ```
+
+With `AUDIT_CHAIN_KEY` in `adminforge-env` the chain is HMAC-keyed from a cut-over the API appends at start, so
+changing an event needs the key; pin it with `AUDIT_CHAIN_KEYED_SINCE` (the seq of the first `audit chain cut-over`
+line). Check a shipped checkpoint or cut-over line:
+
+```bash
+kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify --checkpoint <seq>:<hash>
+```
+
+Setting, rotating and losing the key: `docs/operations.md` → Audit chain checkpoints.
 
 ## Operating
 
@@ -489,7 +519,7 @@ kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify
 | Pod `Pending`: volume node affinity / multi-attach                             | The disk is zonal and the pod was scheduled elsewhere, or the old pod still holds it. Wait for the old pod to end; pin the zone in the overlay.                                                                                                 |
 | `The database in DATABASE_PATH is not safe to use: … network filesystem`       | The storage class is Azure Files/NFS/FUSE. Use a disk class (`managed-csi`) and move the data (loader pod).                                                                                                                                     |
 | `… can be read or written by other users` / `owned by another user`            | The file's mode or owner changed (copied in as another user). With the loader pod, copy it off, delete it and copy it back in (it then belongs to the API's user), `chmod 600`.                                                                 |
-| `/readyz` says `degraded` (`worker` or `scheduler` not `ok`)                   | The process is up but a background loop isn't reporting (look for errors in the log). A restart recovers; report it if it recurs.                                                                                                               |
+| `/readyz` says `degraded` (`worker` or `scheduler` not `ok`)                   | The process is up but made no progress for two minutes: the scheduler's ticks fail or it lost its lease, or the run worker's queue polls fail (look for errors in the log). A restart recovers; report it if it recurs.                         |
 | `The database is busy (another process is writing)` from the CLI               | A long write in the API (retention, a large publish) held the lock past `DATABASE_BUSY_TIMEOUT_MS`. Run the command again.                                                                                                                      |
 | Sign-in loops or `invalid_state`                                               | `PUBLIC_BASE_URL` differs from the Ingress URL, or the apps lack it as a redirect URI (`provision entra`).                                                                                                                                      |
 | Run streams or the event dock never update                                     | The ingress buffers Server-Sent Events: `proxy-buffering: off` and a long read timeout (overlay `ingress.yaml`).                                                                                                                                |

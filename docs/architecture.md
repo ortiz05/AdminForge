@@ -42,12 +42,12 @@ flowchart LR
 
 ## The pod
 
-| Container or process | Entry                                                             | Listens on                      | What it does                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| -------------------- | ----------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api`                | `portal/apps/api` → `dist/main.js` (image `adminforge`)           | `:3300` (Service `adminforge`)  | The backend-for-frontend: serves the built web app, `/auth/*` (sign-in, arming), every `/api` route, `/healthz` and `/readyz`; holds sessions and tokens, runs datasources, streams live updates (SSE), serves report downloads. Also the **run worker** (consumes the `run_jobs` queue, `RUN_WORKER_CONCURRENCY`, default 4, including the runs schedules start) and the **scheduler** (below). Migrates the database at start. |
-| `runner` (sidecar)   | `portal/apps/runner` → `dist/main.js` (image `adminforge-runner`) | `127.0.0.1:3101` (pod loopback) | PowerShell for Exchange, Teams and SharePoint: pinned scripts in single-use `pwsh` workers. Gets only `RUNNER_SHARED_KEY`; never mounts the volume.                                                                                                                                                                                                                                                                              |
-| `adminforge` CLI     | `portal/tools/cli` → `dist/adminforge.js` (app image)             | —                               | `kubectl exec deploy/adminforge -c api -- adminforge …`: `publish`, `audit verify`, `db backup`, `env check`. Opens the same file beside the API (WAL mode, `DATABASE_BUSY_TIMEOUT_MS`).                                                                                                                                                                                                                                         |
-| Scheduler one-shots  | `portal/apps/scheduler` → `dist/main.js` (app image)              | —                               | `--once`, `--probe <key>`, `--schedule <key>`: probes or one schedule now, as the automation identity. A playbook run they start is queued for the API's worker.                                                                                                                                                                                                                                                                 |
+| Container or process | Entry                                                             | Listens on                      | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------- | ----------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api`                | `portal/apps/api` → `dist/main.js` (image `adminforge`)           | `:3300` (Service `adminforge`)  | The backend-for-frontend: serves the built web app, `/auth/*` (sign-in, arming), every `/api` route, `/healthz` and `/readyz`; holds sessions and tokens, runs datasources, streams live updates (SSE), serves report downloads. Also the **run worker** (consumes the `run_jobs` queue, `RUN_WORKER_CONCURRENCY`, default 8, including the runs schedules start; at most `RUN_MAX_OPEN_PER_USER`, 5, open runs per person) and the **scheduler** (below). Migrates the database at start. |
+| `runner` (sidecar)   | `portal/apps/runner` → `dist/main.js` (image `adminforge-runner`) | `127.0.0.1:3101` (pod loopback) | PowerShell for Exchange, Teams and SharePoint: pinned scripts in single-use `pwsh` workers. Gets only `RUNNER_SHARED_KEY`; never mounts the volume.                                                                                                                                                                                                                                                                                                                                        |
+| `adminforge` CLI     | `portal/tools/cli` → `dist/adminforge.js` (app image)             | —                               | `kubectl exec deploy/adminforge -c api -- adminforge …`: `publish`, `audit verify`, `db backup`, `env check`. Opens the same file beside the API (WAL mode, `DATABASE_BUSY_TIMEOUT_MS`).                                                                                                                                                                                                                                                                                                   |
+| Scheduler one-shots  | `portal/apps/scheduler` → `dist/main.js` (app image)              | —                               | `--once`, `--probe <key>`, `--schedule <key>`: probes or one schedule now, as the automation identity. A playbook run they start is queued for the API's worker.                                                                                                                                                                                                                                                                                                                           |
 
 The base manifests (`portal/deploy/kubernetes/base`) fix the pod's layout in a ConfigMap that wins over the
 installation's Secret: `NODE_ENV=production`, `API_HOST=0.0.0.0`, `API_PORT=3300`,
@@ -55,7 +55,9 @@ installation's Secret: `NODE_ENV=production`, `API_HOST=0.0.0.0`, `API_PORT=3300
 `CONTENT_SOURCE=db` and `RUNNER_URL=http://127.0.0.1:3101`. There is one replica with `strategy: Recreate`: SQLite has
 one writer and the volume is ReadWriteOncePod, so a deploy is a short outage. Both containers run non-root with a
 read-only root file system, no capabilities and no service-account token; a NetworkPolicy allows ingress to port 3300
-and egress to DNS and 443, never the cloud metadata service (`SECURITY.md` → Deployment, storage and network).
+and egress to the cluster's DNS and to public addresses on 443 — private and reserved ranges, the cloud metadata
+service included, are refused, and the overlay names the private addresses an installation needs (`SECURITY.md` →
+Deployment, storage and network). Both images start from bases pinned by digest.
 
 ## Request paths
 
@@ -67,12 +69,16 @@ correlation id to Microsoft. Tokens never reach the browser. Outbound calls are 
 (`OUTBOUND_CONCURRENCY`, `OUTBOUND_USER_CONCURRENCY`) and time out after `OUTBOUND_TIMEOUT_MS`.
 
 **Writing.** An Operator arms write access: a second sign-in to the **Write** app with step-up (a Conditional Access
-authentication context when `WRITE_AUTH_CONTEXT` is set, otherwise a fresh sign-in proven by `auth_time`). The write
+authentication context when `WRITE_AUTH_CONTEXT` is set, otherwise a fresh sign-in proven by `auth_time`); arming
+moves the session to a new id and CSRF token, so a cookie copied while read-only never carries write access. The write
 window lasts `WRITE_SESSION_MAX_MINUTES` (default 60) with one extension. Writes exist only as `mode: write` steps in
 published playbooks: the engineer previews (a dry run), confirms, and the API queues the run. The run worker executes
-it with the initiator's delegated tokens (Write tokens only while armed; a run whose write window ended pauses until
-the person arms again). Steps after an approval run as the approver. The worker is part of the API process, so run
-events reach the browser's SSE stream directly.
+it with the initiator's delegated tokens (Write tokens only while armed; a run whose write window ended, or that was
+started before the session was armed, pauses until the person arms and resumes it). Steps after an approval run as the
+approver. A restart doesn't end a run: it stops at a checkpoint, its job is queued again and the next process resumes
+it (a step in flight is retried, or the run ends `needs_review` if it is `idempotent: false`). Someone else's delegated
+run is shown as metadata — what ran, who, when, status — unless the viewer approves it or is a Portal Admin (S-25).
+The worker is part of the API process, so run events reach the browser's SSE stream directly.
 
 **PowerShell.** Exchange, Teams and SharePoint work goes to the runner on the pod's loopback. The API mints delegated
 tokens for the services the script declares, seals them (AES-256-GCM, bound to the job id and request timestamp) and
@@ -113,8 +119,8 @@ stays taken until the job itself ends, at most two minutes more.
 **heartbeats** in `settings`: `ok`, `degraded` (still 200: the API serves, but the scheduler or the run worker isn't
 working) or 503 `not_ready`. The scheduler beats from its ticks — after each one that went through while it holds the
 lease — so a scheduler whose ticks fail goes stale after two minutes although the process answers; `GET
-/api/schedules` reports the same (`scheduler: { state, at }`). The run worker still beats on a 30-second timer, which
-shows only that the process runs (`docs/backlog.md`).
+/api/schedules` reports the same (`scheduler: { state, at }`). The run worker beats from its queue polls — after each
+one that went through — so a worker whose polls fail goes stale the same way. Both write at most every 30 seconds.
 
 Every 10 minutes the API removes expired sessions' tokens, sign-in round trips and signals older than an hour; every 6
 hours it applies **retention** (`RETENTION_*`). Each purge — report files and News and changes items included —
@@ -146,16 +152,16 @@ All state is one SQLite file, `DATABASE_PATH` (ADR-016): better-sqlite3 in WAL m
 `portal/apps/api/src/db/schema.ts`; migrations: `portal/apps/api/drizzle/`, applied by the API at start. Write
 transactions are synchronous `BEGIN IMMEDIATE` (`writeTx`), so writers are serialised, also across processes.
 
-| Area         | Tables                                                           | Notes                                                                                                                                                                |
-| ------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sign-in      | `sessions`, `preauth`, `token_cache`                             | Only the session id's hash is stored; the MSAL cache is sealed with AES-256-GCM (`TOKEN_CACHE_KEY`). Deleted rows are overwritten (`secure_delete`).                 |
-| Content      | `definitions`                                                    | Published versions (key, version, SHA-256); `publish` sends the `definitions_changed` signal.                                                                        |
-| Runs         | `runs`, `run_steps`, `run_step_events`, `approvals`, `run_jobs`  | `run_jobs` is the queue: at most one queued and one active job per run, leases, retries with backoff. Show-once secrets stay in the API's memory, never in the file. |
-| Schedules    | `schedules`, `schedule_grants`, `schedule_runs`, `probe_results` | Schedules are synced from content; a one-shot's events reach browsers through the `schedule_events` signal.                                                          |
-| News         | `news_items`, `news_feed_state`                                  | News and changes: one row per source item (headline, short excerpt, citation, facts) and per feed (last run, ETag).                                                  |
-| Audit        | `audit_events`                                                   | Append-only (SQLite triggers), hash-chained; `correlation_id` ties events to the Reference users see. The chain's checkpoints in the container log detect tampering. |
-| Preferences  | `user_prefs`, `settings`, `saved_views`                          | Theme, density, pins; appearance; saved table views.                                                                                                                 |
-| Coordination | `signals`, `leases`                                              | Signals between processes (they replace Postgres LISTEN/NOTIFY; kept an hour) and named leases (the scheduler's leadership, per-run locks).                          |
+| Area         | Tables                                                           | Notes                                                                                                                                                                                                                                       |
+| ------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sign-in      | `sessions`, `preauth`, `token_cache`                             | Only the session id's hash is stored; the MSAL cache is sealed with AES-256-GCM (`TOKEN_CACHE_KEY`). Deleted rows are overwritten (`secure_delete`).                                                                                        |
+| Content      | `definitions`                                                    | Published versions (key, version, SHA-256, content schema version); `publish` sends the `definitions_changed` signal. Each row is re-validated against its kind's schema when loaded; one that fails is refused (`definition_unavailable`). |
+| Runs         | `runs`, `run_steps`, `run_step_events`, `approvals`, `run_jobs`  | `run_jobs` is the queue: at most one queued and one active job per run, leases, retries with backoff. Show-once secrets stay in the API's memory, never in the file.                                                                        |
+| Schedules    | `schedules`, `schedule_grants`, `schedule_runs`, `probe_results` | Schedules are synced from content; a one-shot's events reach browsers through the `schedule_events` signal.                                                                                                                                 |
+| News         | `news_items`, `news_feed_state`                                  | News and changes: one row per source item (headline, short excerpt, citation, facts) and per feed (last run, ETag).                                                                                                                         |
+| Audit        | `audit_events`                                                   | Append-only (SQLite triggers), hash-chained — HMAC-keyed from a cut-over once `AUDIT_CHAIN_KEY` is set; `correlation_id` ties events to the Reference users see. The chain's checkpoints in the container log detect tampering.             |
+| Preferences  | `user_prefs`, `settings`, `saved_views`                          | Theme, density, pins; appearance; saved table views.                                                                                                                                                                                        |
+| Coordination | `signals`, `leases`                                              | Signals between processes (they replace Postgres LISTEN/NOTIFY; kept an hour) and named leases (the scheduler's leadership, per-run locks).                                                                                                 |
 
 The triggers stop the application rewriting history; they don't stop someone who can write the volume — SQLite has no
 roles, so the file is guarded instead (0600, local block storage only; `SECURITY.md`).
@@ -184,15 +190,16 @@ In development, `CONTENT_SOURCE=fs` (the default outside production) serves `por
 ## Configuration
 
 Nothing tenant-specific is in git. Every key is documented in `config/example.env`. On a workstation, real values live
-in `~/.config/adminforge/` (mode 700, files mode 600); `portal/packages/config/src/index.ts` layers the files, lowest
-precedence first:
+in `~/.config/adminforge/` (mode 700, files mode 600: the API and the CLI — all but `env check` — refuse an env file
+other users can read, and name the `chmod`); `portal/packages/config/src/index.ts` layers the files, lowest precedence
+first:
 
-| Layer | File                                    | Read by                                   | Holds                                                                                                                            |
-| ----- | --------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | `<env>.env` (or `$ADMINFORGE_ENV_FILE`) | API, scheduler one-shots, CLI, `pnpm dev` | Runtime settings and app credentials. `<env>` is `$ADMINFORGE_ENV`, default `dev`.                                               |
-| 2     | `<env>.admin.env`                       | CLI and live tests only                   | Provisioner and live-test credentials. The API drops these keys even if they appear in layer 1.                                  |
-| 3     | `<env>.$ADMINFORGE_ENV_OVERLAY.env`     | Processes that set the overlay            | Per-deployment overrides.                                                                                                        |
-| 4     | Process environment                     | Everyone                                  | In the pod, everything: the `adminforge-env` Secret and the `adminforge-config` ConfigMap (the ConfigMap wins). CI. Always wins. |
+| Layer | File                                    | Read by                                                    | Holds                                                                                                                            |
+| ----- | --------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `<env>.env` (or `$ADMINFORGE_ENV_FILE`) | API, scheduler one-shots, CLI, `pnpm dev`                  | Runtime settings and app credentials. `<env>` is `$ADMINFORGE_ENV`, default `dev`.                                               |
+| 2     | `<env>.admin.env`                       | `provision …`, `validate --scopes` and the live tests only | Provisioner and live-test credentials. The API drops these keys even if they appear in layer 1.                                  |
+| 3     | `<env>.$ADMINFORGE_ENV_OVERLAY.env`     | Processes that set the overlay                             | Per-deployment overrides.                                                                                                        |
+| 4     | Process environment                     | Everyone                                                   | In the pod, everything: the `adminforge-env` Secret and the `adminforge-config` ConfigMap (the ConfigMap wins). CI. Always wins. |
 
 Empty values count as unset. The runner reads only its process environment: in the pod `RUNNER_SHARED_KEY` from the
 Secret, `RUNNER_HOST` and `RUNNER_PORT`. `pnpm adminforge env check` reports key names and states, never values, and

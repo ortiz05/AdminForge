@@ -42,12 +42,15 @@ outcome. Decisions taken in that review:
 - **CSP:** `script-src 'self'` only; `style-src` keeps `'unsafe-inline'` because Radix and Monaco inject style
   elements and attributes at runtime. Accepted risk: CSS injection can't execute script.
 - **Retention:** finished runs and schedule history 180 days, probe results 35 days, report files 90 days (configurable;
-  the audit log is never purged); applied by the API every 6 hours and audited.
+  the audit log is never purged); applied by the API every 6 hours and audited, 2,000 rows at a time and at most 2 s a
+  pass (the rest at the next 10-minute housekeeping pass), so it never holds requests for long.
 - **Delivery:** email through Graph `sendMail` as the automation identity from `AF_MAIL_SENDER`; Teams through
   Workflows webhooks on Microsoft hosts only; recipients and webhooks are always `${ env.X }` configuration. Failure
   alerts fire only when no retry is left. Approval requests notify `AF_APPROVALS_EMAIL` / `AF_APPROVALS_TEAMS_WEBHOOK`.
-- **Self-monitoring:** the run worker and the scheduler (both in the API process since ADR-016) write heartbeats; `/readyz` reports `degraded` when either goes quiet,
-  which the portal-readiness probe catches. `probes.audit-chain` re-walks the audit chain hourly. Every Microsoft call
+- **Self-monitoring:** the run worker and the scheduler (both in the API process since ADR-016) write heartbeats when
+  they make progress (the scheduler from its ticks, the run worker from its queue polls); `/readyz` reports `degraded`
+  when either goes quiet, which the portal-readiness probe catches. `probes.audit-chain` checks the events since the
+  last verified checkpoint hourly, and the whole chain at start, once a day and after any break. Every Microsoft call
   is logged as one structured line (template path, status, duration, throttling, request id). OpenTelemetry export is
   optional and not built.
 - **Backups:** `adminforge-backup.timer` (daily, 14 days) with a recorded restore drill (docs/operations.md).
@@ -77,7 +80,8 @@ outcome. Decisions taken in that review:
     admin-only keys, and a ConfigMap — and `pnpm dev` has a database file of its own.)
   - Failed browser navigations (sign-in, arming, report downloads) land on a public problem page with only a code,
     reference and Microsoft code in the URL; the copy lives in the web app.
-  - Deferred (backlog): session-id rotation on arm, keyed audit anchor, re-validating definitions on load.
+  - Deferred (backlog): session-id rotation on arm, keyed audit anchor, re-validating definitions on load — all three
+    done in the platform review (2026-10-21, below).
 
 - **Two delegated apps** (Read, Write) plus an **automation** app for schedules (ADR-002, ADR-011).
 - **Provisioning grants exactly the baseline ∪ content-declared scopes**; `adminforge validate --scopes` reports drift. Remaining drift is limited to unlicensed workloads (Exchange, Teams, SharePoint).
@@ -131,6 +135,39 @@ outcome. Decisions taken in that review:
   Postgres'; signed-in sessions are not copied, so everyone signs in again.
 
 ## Platform review (2026-10-21)
+
+The review's plans and their full decision table are in `docs/plans/2026-10-21-platform-review-implementation.md`.
+The ones that change how AdminForge behaves for people and operators:
+
+- **Restarts don't cancel runs** (D-01). A stop lets each run reach its next checkpoint (10 s, then the step in flight
+  is interrupted); the next process resumes it — an interrupted step is retried, or the run ends `needs_review` if the
+  step is `idempotent: false`. A person's cancel still cancels. Rejected: cancelling on every deploy (runs lost to
+  routine upgrades).
+- **At most 5 open runs per person** (F-08, `RUN_MAX_OPEN_PER_USER`): previews count, a bulk run counts once, runs
+  parked on an approval, input, write access or a sign-in don't; the worker default rose from 4 to 8.
+- **Missed and file-only schedule runs** (F-09, F-10). A time missed by more than an hour is a `skipped` run with code
+  `schedule_missed` (the status list is unchanged, so no table rebuild), audited. Run now on a disabled schedule writes
+  the file only — no email, Teams post or notification — and says so.
+- **A new session id at every arm** (S-08). Arming moves the session, its unfinished runs, round trips, token
+  partitions and held secrets to a new id and CSRF token in one transaction; extending and disarming keep the id. Runs
+  bound while the session was read-only ask to be resumed before they write.
+- **Keyed audit chain, optional until the owner sets it** (S-10). `AUDIT_CHAIN_KEY` (in the Secret, never on the
+  volume) makes the chain HMAC-SHA256 from a cut-over event; `AUDIT_CHAIN_KEYED_SINCE` pins the cut-over; the shipped
+  container log's checkpoints stay the anchor for the newest events, so log shipping is required. Once set, the key can
+  be rotated, not removed. Without it nothing changes, and `/readyz`, Settings and `env check` say so.
+- **Someone else's run shows what ran, not what it found** (S-25). A delegated run collected its data with one person's
+  rights, so its inputs, outputs, requests, logs and error details go only to its initiator, its approvers, the person
+  a manual step waits for, and Portal Admins; others see metadata. "Asked to approve" means a pending, unexpired gate
+  the person may decide (with the default `approvers: [Playbook.Approver]`, every Approver who may open the run);
+  "decided" includes rejecting, and someone who decided keeps full access. Scheduled runs stay whole for every viewer.
+- **A read-mode POST must say so** (S-23): a connection's `mode: read` operation may POST unarmed only with
+  `readPost: true`, reviewed as a loosening; read operations can no longer PUT, PATCH or DELETE, and content can't set
+  method-override headers.
+- **Write actions stay clickable while unarmed** (D-18): a lock glyph and "Arm write access to run this" — the drawer's
+  preview works without write access. The eight "Service checks" navigation items folded into a status mark on each
+  section's row (D-14), and the content Probe dashboard is retired in favour of `/monitoring` (B-3).
+- **Content folders follow ids** (O-05): `validate` refuses a definition outside the folder its id prefix names, and
+  `adminforge list` finds a section's content wherever it is filed; nothing moved.
 
 - **A retired key says so.** `GET /api/definitions/:kind/:key` and a page's data answer 409 `definition_retired` for
   a key whose latest version is retired (on the files and in the database), with the retirement note — the first

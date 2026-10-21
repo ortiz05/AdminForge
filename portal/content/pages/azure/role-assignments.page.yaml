@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.role-assignments
-version: 1.1.0
+version: 1.1.1
 title: Role assignments
 summary: Azure RBAC role assignments across management groups, subscriptions, resource groups and resources — filter by scope, role and principal; remove or add assignments with approval.
 owner: azure-team
@@ -58,14 +58,14 @@ datasources:
       authorizationresources
       | where type =~ 'microsoft.authorization/roleassignments'
       | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), createdBy = tostring(properties.createdBy), updatedOn = todatetime(properties.updatedOn), condition = tostring(properties.condition), description = tostring(properties.description)
-      ${ params.scope and params.include = 'exact' ? "| where scope == '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "'" }
-      ${ params.scope and params.include = 'above' ? "| where '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "' == scope or '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "' startswith strcat(scope, '/')" }
-      ${ params.scope and params.include != 'exact' and params.include != 'above' ? "| where scope == '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "' or scope startswith '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "/'" }
+      ${ params.scope and params.include = 'exact' ? "| where scope == " & $kql($lowercase(params.scope)) }
+      ${ params.scope and params.include = 'above' ? "| where " & $kql($lowercase(params.scope)) & " == scope or " & $kql($lowercase(params.scope)) & " startswith strcat(scope, '/')" }
+      ${ params.scope and params.include != 'exact' and params.include != 'above' ? "| where scope == " & $kql($lowercase(params.scope)) & " or scope startswith " & $kql($lowercase(params.scope) & '/') }
       ${ params.principalType in ['User', 'Group', 'ServicePrincipal', 'ForeignGroup', 'Device'] ? "| where principalType == '" & params.principalType & "'" }
       ${ params.principalId ? "| where principalId == '" & $guid(params.principalId) & "'" }
       ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
       | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
-      ${ params.roleName ? "| where roleName contains '" & $replace(params.roleName, /[^A-Za-z0-9 ._()-]/, '') & "'" }
+      ${ params.roleName ? "| where roleName contains " & $kql(params.roleName) }
       | extend privileged = roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator')
       ${ params.privileged = true ? '| where privileged' }
       | extend depth = array_length(split(scope, '/'))

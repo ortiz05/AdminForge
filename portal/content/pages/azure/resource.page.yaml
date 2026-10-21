@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.resource
-version: 1.4.0
+version: 1.4.1
 title: Azure resource
 summary: One Azure resource or resource group — properties, tags, who has access and recent activity.
 owner: azure-team
@@ -35,8 +35,8 @@ datasources:
       // Resource Graph has no leading `union a, b`: pipe one table into the other (resource groups and
       // subscriptions are in resourcecontainers).
       resources
-      | where tolower(id) == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }'
-      | union (resourcecontainers | where tolower(id) == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }')
+      | where tolower(id) == ${ $kql($lowercase(params.id)) }
+      | union (resourcecontainers | where tolower(id) == ${ $kql($lowercase(params.id)) })
       | project id, name, type, kind, location, resourceGroup, subscriptionId, tags, sku, identity, managedBy, plan, zones, properties
       | take 1
     transform: >-
@@ -63,9 +63,9 @@ datasources:
       authorizationresources
       | where type =~ 'microsoft.authorization/roleassignments'
       | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), hasCondition = iff(isnotempty(tostring(properties.condition)), 'true', 'false')
-      | where scope == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }' or '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }' startswith strcat(scope, '/')
+      | where scope == ${ $kql($lowercase(params.id)) } or ${ $kql($lowercase(params.id)) } startswith strcat(scope, '/')
       | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
-      | extend inherited = iff(scope != '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }', 'true', 'false')
+      | extend inherited = iff(scope != ${ $kql($lowercase(params.id)) }, 'true', 'false')
       | project id, roleName, roleType, principalId, principalType, scope, inherited, hasCondition, createdOn
       | order by roleName asc
     cache: { ttl: 120 }

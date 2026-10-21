@@ -151,6 +151,10 @@ organization). There was no critical or high security finding; the fixes are bel
   UI label and makes British spelling the rule for new identifiers and UI text; ADR-001 to ADR-010 are back-filled
   with context, options and consequences; `tests/unit/docs/` checks every path, link and heading reference in
   CLAUDE.md, `.claude/`, the onboarding guides and the index, an index row per document, and a status line per plan.
+  The operator and reference docs (`docs/operations.md`, the Kubernetes guide, `docs/api.md`,
+  `docs/troubleshooting.md`, `docs/widgets.md`, `docs/architecture.md`, `docs/decisions.md`) describe the platform
+  review as built: runs that resume after a restart and check again before writing, the keyed audit chain, audited
+  backups, run visibility, a new session id at every arm, open-run and stream caps, missed and file-only schedule runs.
 
 #### Fixed
 

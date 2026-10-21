@@ -124,20 +124,15 @@ describe('"More actions" hrefs', { timeout: 20_000 }, () => {
       definitions: { 'page/test.links': PAGE },
       results,
     });
-    // The header re-renders as data arrives: wait for the menu with every action, then open it.
-    await waitFor(
-      () =>
-        expect(
-          within(screen.getByRole('group', { name: 'Actions' })).getByRole('button', {
-            name: /More actions/,
-          }),
-        ).toBeInTheDocument(),
-      SLOW,
-    );
-    await userEvent.click(
-      within(screen.getByRole('group', { name: 'Actions' })).getByRole('button', { name: /More actions/ }),
-    );
-    const website = await screen.findByRole('menuitem', { name: 'Website' }, SLOW);
+    // The header re-renders as data arrives, and can do so between finding the menu and clicking it: open it and find
+    // the item as one step, retried until both hold.
+    const website = await waitFor(async () => {
+      const more = within(screen.getByRole('group', { name: 'Actions' })).getByRole('button', {
+        name: /More actions/,
+      });
+      if (more.getAttribute('aria-expanded') !== 'true') await userEvent.click(more);
+      return screen.getByRole('menuitem', { name: 'Website' });
+    }, SLOW);
     await waitFor(() => expect(website).toHaveAttribute('aria-disabled', 'true'), SLOW);
     expect(website).toHaveAccessibleDescription(UNSAFE_LINK_REASON);
     expect(await axeViolations()).toEqual([]);

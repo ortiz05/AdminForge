@@ -18,11 +18,15 @@ import { contentSchedules, contentSignature, syncSchedules } from './sync';
 import type { RunErrorInfo, ScheduleRow, ScheduleRunRow, ScheduleRunStatus, ScheduleTrigger } from './types';
 
 /**
- * The scheduler (R6, ADR-011). Only the elected leader fires schedules (Postgres advisory lock; a standby takes over
- * when the leader's connection drops). Each tick: sync content → `schedules`, reap runs a dead scheduler left
- * `running`, fire due cron schedules (overlap policy, concurrency), start due queued runs (run now, retries,
- * `overlap: queue`). Every run is a `schedule_runs` row and an audit event "scheduled by X, executed as automation
- * identity"; failures also raise `schedule.failed` (audit + event). Runs are bounded by `timeoutSeconds`.
+ * The scheduler (R6, ADR-011). It runs in the API process (ADR-016) and fires schedules only while it holds the
+ * `adminforge.scheduler` lease (the `leases` table; one pod, ADR-017), so nothing else fires them on their timetable
+ * too; a one-shot runs only what it was asked, without the lease. Each tick: sync content → `schedules`, reap runs a
+ * dead scheduler left `running`, fire due cron schedules (overlap policy, concurrency; a tick missed by more than the
+ * grace period becomes a `skipped` run with `schedule_missed`), start due queued runs (run now, retries,
+ * `overlap: queue`), then report progress (the heartbeat /readyz reads). Every run is a `schedule_runs` row and an
+ * audit event "scheduled by X, executed as automation identity"; failures also raise `schedule.failed` (audit +
+ * event). Runs are bounded by `timeoutSeconds`; a slot stays taken until the job itself ends (capped). Run now on a
+ * switched-off schedule is file only: nothing is emailed, posted or notified.
  */
 
 type Log = {
@@ -1077,7 +1081,8 @@ export class Scheduler {
 
   /**
    * Graceful shutdown: stop firing, let running jobs finish for up to `graceMs`, abort the rest (recorded as
-   * interrupted), then release leadership so a standby takes over.
+   * interrupted), then release the lease so the next pod (or process) can take it at once instead of waiting for it to
+   * expire.
    */
   async stop(graceMs = 30_000): Promise<void> {
     if (!this.running) return;

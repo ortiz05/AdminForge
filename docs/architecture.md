@@ -32,7 +32,7 @@ flowchart LR
   user -.->|sign-in and step-up redirects| entra
   api -->|tokens| entra
   api -->|"delegated: Read app, Write app while armed"| msgraph & arm & la
-  api -->|"runs: initiator's tokens; schedules: automation identity"| msgraph & arm & la
+  api -->|"runs: initiator's tokens; schedules: the identity each names"| msgraph & arm & la
   api -->|"HMAC-signed jobs + delegated tokens"| runner
   runner -->|"pwsh with forwarded tokens"| ps
   api <-->|"the only writer"| db
@@ -84,19 +84,43 @@ script against a static read-only policy, then guards every write command of the
 module auto-loading off.
 Scheduled scripts aren't supported yet: the runner can't sign in as the automation identity (`docs/backlog.md`).
 
-**Schedules.** The scheduler runs in the API process and fires schedules (`SCHEDULER_CONCURRENCY`, default 4) only
-while it holds the `adminforge.scheduler` lease (30 seconds, renewed every 5), so no second process fires them on
-their timetable too; a one-shot runs the schedule or probes it was asked for, without the lease. Probe, report and content-health jobs only read, as the automation identity —
-except the built-in synthetic transactions, which write only to configured test objects (ADR-015); playbook jobs are
-queued for the run worker, which runs them as the automation identity. Probe results (status, metric, a message and
-the detail rows behind it) go to `probe_results`, each run to `schedule_runs`, and report files to
+**Schedules.** The scheduler runs in the API process and fires schedules (`SCHEDULER_CONCURRENCY`, default 4) only while
+it holds the `adminforge.scheduler` lease (30 seconds, renewed every 5), so no second process fires them on their
+timetable too; a one-shot runs the schedule or probes it was asked for, without the lease. Probe, report and
+content-health jobs only read, as the identity the schedule names (ADR-014: the automation identity by default, a named
+app identity, or — report schedules made in the portal — their creator's own access) — except the built-in synthetic
+transactions, which write only to configured test objects (ADR-015); playbook jobs are queued for the run worker, which
+runs them as the automation identity (under the app identity's name when the schedule names one). Probe results (status,
+metric, a message and the detail rows behind it) go to `probe_results`, each run to `schedule_runs`, and report files to
 `ADMINFORGE_ARTIFACTS_DIR` (in the pod `/var/lib/adminforge/artifacts`, on the same volume as the database; in
 development `~/.local/share/adminforge/artifacts`) as `<schedule>/<timestamp>.<ext>`, which the API serves to
 `Portal.Operator` by default. `GET /api/probes` gives every Reader each probe's latest result with its definition's
 `summary`, `remedy` and `link`; a probe's detail on Synthetic monitoring reads `GET /api/probes/:key/results`, whose
-detail rows only Operators receive (others get `detailsHidden`). Write-capable schedules run only after a second
-person approved enabling them; the approval covers a fingerprint of the playbook and its children, so publishing a new
-version switches the schedule off until it is approved again.
+detail rows only Operators receive (others get `detailsHidden`). Write-capable schedules run only after a second person
+approved enabling them; the approval covers a fingerprint of the playbook and its children, so publishing a new version
+switches the schedule off until it is approved again.
+
+A time the scheduler missed by more than an hour (the pod was down that long) is not run late: it becomes a `skipped`
+run with `schedule_missed`, dated when it was due, audited, and shown as the schedule's last run. **Run now** on a
+switched-off schedule runs the job but writes its file only — no email, Teams post or notification until the schedule
+is on. A run that reaches `timeoutSeconds` is recorded at once, but its slot (and its schedule's overlap policy) stays
+taken until the job itself ends, at most two minutes more.
+
+## Health and housekeeping
+
+`/healthz` answers whenever the process is up (the container's liveness). `/readyz` also reads the database and the
+**heartbeats** in `settings`: `ok`, `degraded` (still 200: the API serves, but the scheduler or the run worker isn't
+working) or 503 `not_ready`. The scheduler beats from its ticks — after each one that went through while it holds the
+lease — so a scheduler whose ticks fail goes stale after two minutes although the process answers; `GET
+/api/schedules` reports the same (`scheduler: { state, at }`). The run worker still beats on a 30-second timer, which
+shows only that the process runs (`docs/backlog.md`).
+
+Every 10 minutes the API removes expired sessions' tokens, sign-in round trips and signals older than an hour; every 6
+hours it applies **retention** (`RETENTION_*`). Each purge deletes 2,000 rows per statement and lets the event loop run
+between batches, a pass stops after 2 seconds and continues at the next 10-minute pass, and the freed pages go back to
+the file system in steps (`incremental_vacuum`) — better-sqlite3 is synchronous, so housekeeping never holds HTTP, runs
+or schedules for long. The audit log is never purged; `probes.audit-chain` checks it hourly from the last verified
+checkpoint and walks the whole chain at start and once a day.
 
 ## Identities
 

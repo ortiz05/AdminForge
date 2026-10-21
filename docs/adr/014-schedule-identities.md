@@ -42,5 +42,7 @@ will see user schedules ask for sign-in regularly; that is by design. See SECURI
 As built (2026-10-17): `{ user: creator }` is offered only for report schedules created in the portal (content
 schedules have no creator to consent), and its jobs are reports (probes are allowed by the schema for a future
 portal probe form). "Disabled for good" means deleted, switched to another identity, or the creator lost access — a
-plain disable keeps the grant so turning it back on needs no new sign-in. Runner (PowerShell) datasources run only as
-the automation identity; `news` and `contentHealth` jobs always do.
+plain disable keeps the grant so turning it back on needs no new sign-in. Runner (PowerShell) jobs can't be scheduled
+yet: the runner can't sign in to Exchange, Teams or SharePoint as the automation identity, so a schedule's `script` job
+fails with `script_not_supported` (`schedules/jobs.ts`; docs/backlog.md › "PowerShell steps for scheduled (automation)
+runs"). `news` and `contentHealth` jobs always run as the automation identity.

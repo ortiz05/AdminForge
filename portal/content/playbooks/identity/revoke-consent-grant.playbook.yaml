@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.revoke-consent-grant
-version: 1.2.0
+version: 1.3.0
 title: Revoke delegated permission grant
 summary: >-
   Deletes one delegated permission grant (OAuth consent) of an enterprise app — a user's own consent or an admin
@@ -17,14 +17,15 @@ requires:
     graph: [DelegatedPermissionGrant.ReadWrite.All, Directory.Read.All, Application.Read.All]
   entraRoles: [Cloud Application Administrator]
 # Typed: high risk (an admin consent stops the app for everyone). The person types the app's name, which they see in
-# the plan, so a revoke never goes to the wrong app on one click.
+# the plan, so a revoke never goes to the wrong app on one click — or the app's object id when its name can't be typed
+# (`confirmAs`).
 confirm:
   type: typed
-  value: ${ steps.client.output.displayName }
+  value: ${ steps.confirmAs.output.value }
   message: >-
-    ${ 'Revoke the access of ' & steps.client.output.displayName & ' to ' & steps.resource.output.displayName & ' (' & steps.grant.output.scope & ') for '
-       & (steps.grant.output.consentType = 'AllPrincipals' ? 'every user in the tenant? Features that use these permissions stop working for everyone.' : 'this user?')
-       & ' Type the app name to confirm.' }
+    ${ 'Revoke the access of ' & (steps.confirmAs.output.byName ? steps.client.output.displayName : 'the app with object id ' & steps.client.output.id)
+       & ' to ' & steps.resource.output.displayName & ' (' & steps.grant.output.scope & ') for '
+       & (steps.grant.output.consentType = 'AllPrincipals' ? 'every user in the tenant? Features that use these permissions stop working for everyone.' : 'this user?') }
 approval:
   required: false
 
@@ -56,6 +57,22 @@ steps:
     that: >-
       ${ $not(steps.client.output.appId in $append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID], $map($split(env.AF_PROTECTED_APP_IDS ? env.AF_PROTECTED_APP_IDS : '', ','), function($v) { $trim($v) }))) }
     message: This grant belongs to one of AdminForge's own apps; revoking it would break the portal for everyone.
+
+  # What the confirmation asks for. An app's name is chosen by whoever registered it: one with nothing a person can type
+  # (spaces or invisible characters only) or holding a masked value could never be confirmed, so the revoke would be
+  # blocked — the object id stands in for it then. The class lists what the API's comparison drops
+  # (`normalizeConfirmation`), control characters and everything outside the Basic Multilingual Plane.
+  - id: confirmAs
+    type: transform
+    describe: Work out what the confirmation asks for
+    expression: >-
+      ${ (
+        $name := steps.client.output.displayName;
+        $byName := $type($name) = 'string'
+          and $contains($name, /[^\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\uffa0\ufff0-\ufffb\ud800-\udfff]/)
+          and $not($contains($name, '[redacted]'));
+        { 'value': $byName ? $name : steps.client.output.id, 'byName': $byName }
+      ) }
 
   - id: resource
     type: graph

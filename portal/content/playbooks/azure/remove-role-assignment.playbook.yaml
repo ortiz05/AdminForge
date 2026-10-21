@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: azure.remove-role-assignment
-version: 1.1.0
+version: 1.2.0
 title: Remove Azure role assignment
 summary: Removes one Azure RBAC role assignment. Needs approval by a second engineer; refuses to remove your own assignment.
 owner: azure-team
@@ -14,18 +14,16 @@ requires:
     arm: [user_impersonation]
   azureRoles: [Role Based Access Control Administrator]
 # Typed (high risk, and a bulk action): the role's name; in bulk, how many assignments. An assignment whose role can't
-# be read asks for its GUID (the end of the assignment id) instead.
+# be read, or whose (custom) role name can't be typed, asks for its GUID (the end of the assignment id), which the
+# message then shows (`confirmAs`).
 confirm:
   type: typed
-  value: >-
-    ${ steps.role.output.properties.roleName ? steps.role.output.properties.roleName : steps.lookup.output.name }
+  value: ${ steps.confirmAs.output.value }
   message: >-
-    ${ 'Remove ' & (steps.role.output.properties.roleName ? steps.role.output.properties.roleName : 'this role') & ' from '
+    ${ 'Remove ' & (steps.confirmAs.output.byName ? steps.role.output.properties.roleName : 'this role (assignment ' & steps.lookup.output.name & ')') & ' from '
        & ($who := $lookup({ 'User': 'the user', 'Group': 'the group', 'ForeignGroup': 'the group', 'ServicePrincipal': 'the app' }, steps.lookup.output.properties.principalType); $who ? $who : 'the principal') & ' '
        & steps.lookup.output.properties.principalId & ' at ' & steps.lookup.output.properties.scope
-       & '? They lose the access it grants within a few minutes. Type '
-       & (steps.role.output.properties.roleName ? 'the role name' : "the assignment's GUID (the end of its id)")
-       & ' to confirm.' }
+       & '? They lose the access it grants within a few minutes.' }
 approval:
   required: true
   approvers: [Playbook.Approver]
@@ -72,6 +70,21 @@ steps:
            & '/providers/Microsoft.Authorization/roleDefinitions/'
            & $encode($split(steps.lookup.output.properties.roleDefinitionId, '/')[-1]) }
       apiVersion: "2022-04-01"
+
+  # What the confirmation asks for: the role's name, or the assignment's GUID when the role couldn't be read or its name
+  # has nothing a person can type (a custom role's name is chosen by whoever created it; the class: what the API's
+  # comparison drops, control characters, anything outside the BMP) — such a name could never be confirmed.
+  - id: confirmAs
+    type: transform
+    describe: Work out what the confirmation asks for
+    expression: >-
+      ${ (
+        $name := steps.role.output.properties.roleName;
+        $byName := $type($name) = 'string'
+          and $contains($name, /[^\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\uffa0\ufff0-\ufffb\ud800-\udfff]/)
+          and $not($contains($name, '[redacted]'));
+        { 'value': $byName ? $name : steps.lookup.output.name, 'byName': $byName }
+      ) }
 
   - id: delete
     type: arm

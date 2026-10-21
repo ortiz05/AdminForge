@@ -297,7 +297,7 @@ test('audit: chain verified, server-side filters, event detail', async ({ page }
   const auto = automationApi();
   const { calls } = await mockApi(page, { me: ADMIN, handlers: [auto.handler] });
   await page.goto('/audit');
-  await expect(page.getByText('Chain verified ✓ · 12,408 events')).toBeVisible();
+  await expect(page.getByText('Chain verified · 12,408 events')).toBeVisible();
   const grid = page.getByRole('grid', { name: 'Audit events' });
   await expect(grid.getByText('session.armed')).toBeVisible();
   await page.getByRole('textbox', { name: 'Who' }).fill('r.patel');

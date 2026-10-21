@@ -162,7 +162,7 @@ for (const theme of THEMES) {
 
   test(`audit · ${theme}`, async ({ page }) => {
     await open(page, theme, '/audit');
-    await expect(page.getByText('Chain verified ✓ · 12,408 events')).toBeVisible();
+    await expect(page.getByText('Chain verified · 12,408 events')).toBeVisible();
     await shoot(page, `audit-${theme}.png`);
   });
 

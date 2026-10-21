@@ -55,7 +55,7 @@ function ChainStatus() {
     <span
       title={`Every event's hash was recomputed from the one before it (${v.checked.toLocaleString('en-US')} events).`}
     >
-      <StatusPill status="ok">Chain verified ✓ · {v.checked.toLocaleString('en-US')} events</StatusPill>
+      <StatusPill status="ok">Chain verified · {v.checked.toLocaleString('en-US')} events</StatusPill>
     </span>
   ) : v.keyMissing ? (
     // Short, so it doesn't truncate on a phone; what to do is in KeyMissingCallout.

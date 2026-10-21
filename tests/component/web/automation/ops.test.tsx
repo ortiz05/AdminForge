@@ -77,7 +77,7 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
 
   it('/audit: chain verification, events, detail drawer', async () => {
     renderApp({ session: ADMIN, path: '/audit' });
-    expect(await screen.findByText('Chain verified ✓ · 12,408 events')).toBeInTheDocument();
+    expect(await screen.findByText('Chain verified · 12,408 events')).toBeInTheDocument();
     const grid = await screen.findByRole('grid', { name: 'Audit events' });
     await userEvent.click(await within(grid).findByText('session.armed'));
     const drawer = await screen.findByRole('dialog', { name: 'session.armed' });

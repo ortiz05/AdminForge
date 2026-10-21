@@ -100,6 +100,11 @@ export interface ServiceCall {
   pathTemplate?: string;
   /** The definition's requirements, used to name missing scopes/roles/licences in 403 hints. */
   requires?: Requires;
+  /**
+   * Retries after throttling, server and network errors (default: the executor's). A best-effort read someone waits
+   * on — the tenant name at sign-in — asks for none: it falls back instead of holding the person up.
+   */
+  maxRetries?: number;
 }
 
 export interface ServiceCallResult<T = unknown> {

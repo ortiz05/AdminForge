@@ -1383,7 +1383,9 @@ export class Outbound implements OutboundExecutor {
       },
       maxResponseBytes: this.deps.config.OUTBOUND_MAX_BYTES ?? DEFAULT_MAX_RESPONSE_BYTES,
       ...(this.deps.sleep ? { sleep: this.deps.sleep } : {}),
-      ...(this.deps.maxRetries !== undefined ? { maxRetries: this.deps.maxRetries } : {}),
+      ...((d.call.maxRetries ?? this.deps.maxRetries) !== undefined
+        ? { maxRetries: d.call.maxRetries ?? this.deps.maxRetries }
+        : {}),
     };
   }
 

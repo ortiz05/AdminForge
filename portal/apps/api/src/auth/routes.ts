@@ -1,4 +1,3 @@
-import { createGraphClient } from '@adminforge/connectors';
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../config';
 import { auditActor, type AppContext } from '../context';
@@ -16,7 +15,8 @@ import {
 } from './flow';
 import { safeReturnTo } from './return-to';
 import { portalRoles } from './roles';
-import { clearSessionCookie, endSession, startSession } from './session-plugin';
+import { clearSessionCookie, endSession, startSession, type NewSession } from './session-plugin';
+import type { SessionRecord } from './session-store';
 import { signInRateLimit, SignInFailureAudits } from '../rate-limit';
 import { completeScheduleConsent } from './schedule-consent';
 import { assertCsrf } from '../security/csrf';
@@ -48,11 +48,21 @@ export const accountStatusMissing = (kind: 'read' | 'write') =>
 export const signedOutUri = (cfg: Pick<Config, 'PUBLIC_BASE_URL'>) =>
   `${cfg.PUBLIC_BASE_URL}/auth/signed-out`;
 
-/** Tenant display name and default domain for the shell. Best effort: never blocks sign-in. */
-async function tenantProfile(
-  ctx: AppContext,
-  homeAccountId: string,
-  idHash: string,
+/** How long the sign-in waits for the tenant's name before using the configured domain. */
+const TENANT_PROFILE_TIMEOUT_MS = 5_000;
+
+/**
+ * Tenant display name and default domain for the shell. Best effort: never blocks sign-in (at most
+ * TENANT_PROFILE_TIMEOUT_MS, then the configured domain). Read through the outbound executor as the person signing in
+ * — their Read app, a read-mode GET — so it gets the request policy, a concurrency slot and its `microsoft call` line
+ * like every other Microsoft call (S-26). `signingIn` is the session about to be created (not stored yet): the token
+ * comes from the partition the sign-in just redeemed into.
+ */
+export async function tenantProfile(
+  ctx: Pick<AppContext, 'config' | 'auth' | 'outbound'>,
+  signingIn: SessionRecord,
+  correlationId: string,
+  timeoutMs = TENANT_PROFILE_TIMEOUT_MS,
 ): Promise<{ name: string; domain: string }> {
   const fallback = {
     name: ctx.config.AF_PRIMARY_DOMAIN ?? 'Microsoft Entra tenant',
@@ -60,30 +70,44 @@ async function tenantProfile(
   };
   if (!ctx.auth) return fallback;
   try {
-    const token = await ctx.auth.token({
-      kind: 'read',
-      partitionKey: partitionKey('read', idHash),
-      homeAccountId,
-      scopes: ['https://graph.microsoft.com/.default'],
-    });
-    const graph = createGraphClient({
-      getToken: async () => token,
-      fetch: ctx.fetch,
-      maxRetries: 0,
-      timeoutMs: 5_000,
-    });
-    const { data } = await graph.request<{
+    const { data } = await ctx.outbound.execute<{
       value?: Array<{ displayName?: string; verifiedDomains?: Array<{ name: string; isDefault?: boolean }> }>;
-    }>({
-      path: '/organization',
-      query: { $select: 'displayName,verifiedDomains' },
-    });
-    const org = data.value?.[0];
+    }>(
+      { kind: 'delegated', session: signingIn, mode: 'read' },
+      {
+        service: 'graph',
+        method: 'GET',
+        path: '/organization',
+        query: { $select: 'displayName,verifiedDomains' },
+        // Best effort: a throttled or failing Graph means the configured domain, not a longer sign-in.
+        maxRetries: 0,
+      },
+      { correlationId, signal: AbortSignal.timeout(timeoutMs) },
+    );
+    const org = data?.value?.[0];
     const domain = org?.verifiedDomains?.find((d) => d.isDefault)?.name ?? fallback.domain;
     return { name: org?.displayName ?? fallback.name, domain };
   } catch {
     return fallback;
   }
+}
+
+/** The session a sign-in is about to create, for calls made before it is stored (tenantProfile). */
+function signingInSession(data: NewSession, idHash: string, now: Date): SessionRecord {
+  return {
+    ...data,
+    idHash,
+    csrf: '',
+    writeAccountId: null,
+    writeExpiresAt: null,
+    writeExtended: false,
+    writeReason: null,
+    createdAt: now,
+    lastSeenAt: now,
+    expiresAt: now,
+    ip: null,
+    userAgent: null,
+  };
 }
 
 /** Sign-out and the post-logout landing route, shared by mock and Entra modes. */
@@ -249,21 +273,22 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
       // Never carry an earlier session into the new sign-in.
       if (request.session) await endSession(ctx, request.session);
       const upn = claims.preferred_username ?? claims.upn ?? claims.login_hint ?? '';
-      const tenant = await tenantProfile(ctx, homeAccountId, idHash);
+      const data: NewSession = {
+        userOid: claims.oid,
+        upn,
+        displayName: claims.name ?? upn,
+        tenantId: claims.tid,
+        tenantName: '',
+        tenantDomain: '',
+        roles,
+        readAccountId: homeAccountId,
+      };
+      const tenant = await tenantProfile(ctx, signingInSession(data, idHash, ctx.now()), request.id);
       const session = await startSession(
         ctx,
         request,
         reply,
-        {
-          userOid: claims.oid,
-          upn,
-          displayName: claims.name ?? upn,
-          tenantId: claims.tid,
-          tenantName: tenant.name,
-          tenantDomain: tenant.domain,
-          roles,
-          readAccountId: homeAccountId,
-        },
+        { ...data, tenantName: tenant.name, tenantDomain: tenant.domain },
         sid,
       );
       await ctx.audit.append({

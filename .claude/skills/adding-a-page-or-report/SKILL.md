@@ -73,7 +73,8 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
    `conditionalAccess`, `pim`, `intune`, `exchange`, …), `requires.portalRoles` where Readers shouldn't see it,
    `nav: { section, label, icon (Phosphor kebab-case), order }`, specific `tags` and a `summary`. Licence keys are the
    features in `portal/apps/api/src/capabilities/features.ts` (the schema takes any text, so a wrong key gates
-   nothing). **Reports** keep
+   nothing). A param's `pattern:` describes the whole value and must not backtrack (`docs/content-recipes.md` › Param
+   and input patterns). **Reports** keep
    `nav.section: reports` and appear in the Reports catalogue (`/reports`) on their own, under their `area:` (else the
    key's first segment) — always a navigation section key. Move a report with `area:` and a page with `nav.section`,
    never by renaming its key (schedules, links and saved views use it). `export` makes a report schedulable and its

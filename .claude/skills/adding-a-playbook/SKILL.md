@@ -28,7 +28,8 @@ Markdown sections, manual steps and executable steps.
    playbook with a `type: playbook` step.
 2. **Scaffold:** `pnpm adminforge new playbook <prefix>/<name>` (or `new runbook …`); the folder is the id prefix.
 3. **Inputs** use typed params (`user`, `group`, `device`, `app`, `resource`, `guid`, `enum`, …) — they become the
-   form. Sensitive inputs get `redact: true` (masked in stored steps, events and audit; a step that would send a masked
+   form; a `pattern:` describes the whole value and must not backtrack (`docs/content-recipes.md` › Param and input
+   patterns). Sensitive inputs get `redact: true` (masked in stored steps, events and audit; a step that would send a masked
    value fails with `redacted_value`). Manual-step fields are masked the same way, and only the person a manual step
    waits for can supply its values.
 4. **Steps:** read first (look up the target, `assert` preconditions so a stale screen can't act on the wrong object),

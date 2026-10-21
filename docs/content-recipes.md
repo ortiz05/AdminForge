@@ -48,6 +48,17 @@ characters changes what the person searched for.
 - Content can't set the headers AdminForge owns on a Microsoft call (`Authorization`, `Cookie`, `Proxy-Authorization`,
   `Host`, `client-request-id`, `x-ms-client-request-id`, in any case): validate refuses them.
 
+### Param and input patterns
+
+A `pattern:` on a page param or a playbook/runbook input always describes the whole value: it is compiled as
+`^(?:<pattern>)$` with the `u` flag (`[0-9]+` and `^[0-9]+$` mean the same), and values over 4,096 characters are
+never tested. `validate` refuses a pattern over 512 characters or one that can backtrack without bound
+(`portal/packages/schemas/src/regex-safety.ts`): no repetition inside a repeated group unless each pass starts or ends
+with a mandatory character the inner part can't match (`([a-z0-9-]{1,63}\.)+` is fine, `(a+)+` is not), no repeated
+choice whose alternatives start alike, no two repetitions side by side that can match the same characters
+(`[a-z]+[a-z0-9]*`), no backreferences or inline flag groups. Describe each part once: one character class with a
+length (`[a-z0-9.-]{1,253}`).
+
 ## Expression helpers
 
 Registered in `portal/packages/expressions/src/helpers.ts` (`HELPER_NAMES`) and available in every expression, on the

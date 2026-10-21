@@ -28,3 +28,4 @@ export * from './param-check';
 export * from './path';
 export * from './regex-safety';
 export * from './eval-probe';
+export * from './confirm-text';

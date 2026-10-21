@@ -29,7 +29,7 @@ import {
   type DataTableView,
   type TableDensity,
 } from '@adminforge/ui';
-import { isExternal, launchPlaybook, playbookLabel } from '../../lib/actions';
+import { followHref, isExternal, launchPlaybook, playbookLabel } from '../../lib/actions';
 import { evaluateTemplate, tryResolveSync, useWhen } from '../../lib/expr';
 import { formatBytes, formatDate, formatPercentValue } from '../../lib/format';
 import { asRows, getPath } from '../../lib/path';
@@ -296,10 +296,7 @@ function RowActionsMenu({
     if (a.href)
       void evaluateTemplate<unknown>(a.href, scope).then((href) => {
         // Templated from the row: only safe targets are followed (never javascript:, //host or /\host).
-        const safe = typeof href === 'string' ? safeUrl(href) : null;
-        if (!safe) return;
-        if (safe.external) window.open(safe.href, '_blank', 'noopener,noreferrer');
-        else runtime.navigate(safe.href);
+        followHref(runtime, href);
       });
   };
   return (

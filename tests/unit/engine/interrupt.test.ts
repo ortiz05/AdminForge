@@ -170,6 +170,68 @@ describe('engine: interrupted runs resume (D-01)', () => {
     expect(h.status('two')).toBeUndefined();
   });
 
+  it('after a lost lock, items still in flight in a loop record nothing either', async () => {
+    const def = playbook(
+      [
+        {
+          id: 'loop',
+          type: 'forEach',
+          items: '${ inputs.ids }',
+          concurrency: 2,
+          steps: [
+            {
+              id: 'set',
+              type: 'graph',
+              mode: 'write',
+              describe: 'Set',
+              request: { method: 'PATCH', path: '/things/${ item }', body: {} },
+            },
+          ],
+        },
+        write('after'),
+      ],
+      { inputs: { ids: { type: 'enum', values: ['a', 'b', 'c'], multiple: true } } },
+    );
+    const ac = new AbortController();
+    const late = deferred<unknown>();
+    const h = harness(def, { inputs: { ids: ['a', 'b', 'c'] }, respond: () => late.promise });
+    const pending = run(h, def, { signal: ac.signal });
+    await tick(10);
+    expect(h.outbound.inFlight).toBe(2);
+    ac.abort(new RunInterrupted('lock_lost'));
+    const saves = h.store.saves.length;
+    const events = h.store.events.length;
+    late.resolve({ ok: true }); // both stalled calls answer anyway
+    expect((await pending).status).toBe('running');
+    expect([h.store.saves.length, h.store.events.length]).toEqual([saves, events]);
+    expect(h.outbound.paths()).toEqual(['/things/a', '/things/b']);
+    expect((await h.run()).status).toBe('running');
+  });
+
+  it('a lock lost while a finished step is being recorded: the record and the run are left alone', async () => {
+    const def = playbook([write('tap', { secretOutputs: ['password'] }), write('next')]);
+    const ac = new AbortController();
+    let savesAtLoss = -1;
+    const h = harness(def, {
+      respond: () => ({ password: 'Synthetic-Secret-1' }),
+      engine: {
+        secrets: {
+          // The lock lapses while the secret is being handed over, after the call came back.
+          deliver: async () => {
+            savesAtLoss = h.store.saves.length;
+            ac.abort(new RunInterrupted('lock_lost'));
+            return { status: 'held' };
+          },
+        },
+      },
+    });
+    expect((await run(h, def, { signal: ac.signal })).status).toBe('running');
+    expect(h.store.saves.length).toBe(savesAtLoss);
+    expect(h.status('tap')).toBe('running');
+    expect(h.status('next')).toBeUndefined();
+    expect(h.runEvents()).toEqual(['running']);
+  });
+
   it('a shutdown during compensation continues the compensation on resume', async () => {
     const undo = (id: string) => ({
       type: 'graph',

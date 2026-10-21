@@ -272,8 +272,9 @@ export class RunWorker {
         return;
       }
       // A run that stopped (approval, input, arming, sign-in) continues only on the current version and only for
-      // someone still allowed to run it (IAM-02).
-      if (isParked(row.status) && !(await this.mayContinue(row, def))) return;
+      // someone still allowed to run it (IAM-02) — and so does one found `running`: interrupted by a restart or a lost
+      // lock (D-01), or waking from a `wait` step. A new run (`queued`) was checked when it was started.
+      if ((isParked(row.status) || row.status === 'running') && !(await this.mayContinue(row, def))) return;
       this.deps.store.bind(runId, def);
       // `user.roles` for the initiator's first steps.
       if (row.identity === 'delegated')
@@ -313,7 +314,7 @@ export class RunWorker {
   }
 
   /**
-   * Before a parked root run continues: every unfinished run in its tree is still on the current published version
+   * Before a parked or interrupted root run continues: every unfinished run in its tree is still on the current version
    * (else it fails `run_outdated`), and the initiator, while signed in, still holds the roles running it needs (else
    * it fails `forbidden`). A signed-out initiator is left to the engine, which parks the run for a new sign-in when
    * one of their steps comes up.

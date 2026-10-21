@@ -90,6 +90,8 @@ export interface BootOptions {
   now?: () => Date;
   lockTtlMs?: number;
   lockRenewMs?: number;
+  /** What this process has published (default: the kit's definitions). */
+  definitions?: StaticDefinitions;
 }
 
 /** A database file and the processes that share it. Call `close()` in afterEach. */
@@ -120,7 +122,7 @@ export async function restartKit(definitions: () => StaticDefinitions) {
         database,
         sessions,
         runs: {
-          definitions: definitions(),
+          definitions: o.definitions ?? definitions(),
           outbound,
           queue,
           repository,

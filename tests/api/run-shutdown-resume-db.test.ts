@@ -7,9 +7,11 @@ import { playbook, restartKit, until, write } from './runs-restart-helpers';
 // an interrupted idempotent step is retried, an `idempotent: false` one ends `needs_review`.
 const GRACE_MS = 300;
 
+const look = { id: 'look', type: 'graph', mode: 'read', request: { method: 'GET', path: '/things/look' } };
 const definitions = () =>
   new StaticDefinitions()
     .add(playbook('test.restart', [write('one'), write('two'), write('three')]))
+    .add(playbook('test.restart-look', [look, write('two')]))
     .add(playbook('test.restart-tap', [write('one'), write('two', { idempotent: false }), write('three')]))
     .add(playbook('test.restart-child', [write('two')]))
     .add(
@@ -128,6 +130,47 @@ describe('a stopped API resumes its runs after the restart (D-01)', () => {
         'PATCH /things/two',
         'PATCH /things/three',
       ]);
+    } finally {
+      await second.app.close();
+    }
+  });
+
+  it('a run interrupted before it changed anything resumes only on the current version (IAM-02)', async () => {
+    const first = await k.boot({ graceMs: GRACE_MS });
+    const { runId } = await k.startHeld(first, 'test.restart-look', 'look');
+    await first.app.close();
+    expect(k.run(runId).status).toBe('running');
+
+    // The deploy published a newer version meanwhile.
+    k.outbound.hold = null;
+    const published = definitions().add({
+      ...(playbook('test.restart-look', [look]) as object),
+      version: '1.1.0',
+    } as never);
+    const second = await k.boot({ definitions: published });
+    try {
+      await until(() => k.run(runId).status === 'failed');
+      expect(JSON.parse(k.run(runId).error!)).toMatchObject({ code: 'run_outdated' });
+      expect(k.outbound.calls).toEqual(['GET /things/look']); // the write never went out
+    } finally {
+      await second.app.close();
+    }
+  });
+
+  it('a run that may have changed something finishes on the version it started with', async () => {
+    const first = await k.boot({ graceMs: GRACE_MS });
+    const { runId } = await k.startHeld(first, 'test.restart', 'two');
+    await first.app.close();
+
+    k.outbound.hold = null;
+    const published = definitions().add({
+      ...(playbook('test.restart', [write('one')]) as object),
+      version: '2.0.0',
+    } as never);
+    const second = await k.boot({ definitions: published });
+    try {
+      await until(() => k.run(runId).status === 'succeeded');
+      expect(k.outbound.calls.at(-1)).toBe('PATCH /things/three');
     } finally {
       await second.app.close();
     }

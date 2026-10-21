@@ -229,7 +229,24 @@ class Execution {
     records: StepRecord[],
     opts: ExecuteOptions,
   ) {
-    this.store = engine.opts.store;
+    // After a lost lock this worker writes nothing more — another worker may be driving the run now (D-01).
+    const store = engine.opts.store;
+    const owned = () => !this.disowned();
+    this.store = {
+      getRun: (id) => store.getRun(id),
+      listSteps: (id) => store.listSteps(id),
+      getDecision: (id, path) => store.getDecision(id, path),
+      updateRun: async (id, patch, expect) => (owned() ? store.updateRun(id, patch, expect) : null),
+      saveStep: async (id, record, meta) => {
+        if (owned()) await store.saveStep(id, record, meta);
+      },
+      appendEvent: async (id, event) => {
+        if (owned()) await store.appendEvent(id, event);
+      },
+      openTask: async (id, task) => {
+        if (owned()) await store.openTask(id, task);
+      },
+    };
     this.clock = engine.clock;
     this.limits = engine.limits;
     this.dryRun = run.dryRun;

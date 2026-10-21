@@ -199,7 +199,8 @@ volumes replicated synchronously over a slow link (e.g. Longhorn replicas on dis
   portal-readiness probe, a Private Link endpoint — in `overlays/example/networkpolicy-private-egress.yaml`; through
   the ingress controller the pod reaches every site that controller serves, so keep internal-only sites on another
   controller. A network that uses other ranges internally (public addresses used privately) adds them to the base
-  policy's `except` list with a patch in the overlay.
+  policy's `except` list with a patch in the overlay; `preflight.sh` compares the nodes' pod networks and addresses
+  and the API server's Service address with the refused ranges.
 
 | Host (TCP 443)                                                                                                                                              | What for                                                                                                                     | Where it comes from                                                                                    |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -299,7 +300,8 @@ new `PUBLIC_BASE_URL` (`pnpm adminforge provision entra`).
 - [ ] **CNI enforces NetworkPolicy**, egress and `ipBlock` excepts included. (P: the API, and a known engine)
 - [ ] **DNS pods** labelled `k8s-app: kube-dns` in `kube-system`, resolving public names and the Ingress name. (P)
 - [ ] **Egress**: TCP 443 to the hosts in the table (Network), direct — no HTTP proxy, no TLS interception; the
-      private addresses you need named in `networkpolicy-private-egress.yaml`.
+      private addresses you need named in `networkpolicy-private-egress.yaml`; pods, nodes and Services on private
+      ranges (P).
 - [ ] **Ingress controller** with TLS and a trusted certificate for the DNS name (`PUBLIC_BASE_URL`); SSE
       unbuffered, idle read timeout ≥ 1 h, other requests ≥ 300 s, bodies ≥ 256 KiB; the real client address kept;
       `TRUST_PROXY` = the controller's pod network; the name reachable from inside the cluster. (P: an IngressClass)

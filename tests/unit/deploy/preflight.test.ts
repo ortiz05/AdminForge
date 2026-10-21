@@ -80,11 +80,22 @@ function goodCluster(): Record<string, Rule> {
       match: '^-n kube-system get pods -l k8s-app=kube-dns -o name$',
       stdout: 'pod/coredns-1\npod/coredns-2\n',
     },
-    nodes: { match: '^get nodes -o jsonpath=', stdout: NODES_OK },
+    nodes: {
+      match: '^get nodes -o jsonpath=\\{range \\.items\\[\\*\\]\\}\\{\\.metadata\\.name\\}',
+      stdout: NODES_OK,
+    },
+    addresses: {
+      match: '^get nodes -o jsonpath=\\{range \\.items\\[\\*\\]\\}\\{\\.spec\\.podCIDRs\\}',
+      stdout: '["10.244.0.0/24"] 10.224.0.4\n["10.244.1.0/24"] 10.224.0.5\n',
+    },
+    kubernetesService: {
+      match: '^-n default get service kubernetes -o jsonpath=\\{\\.spec\\.clusterIP\\}$',
+      stdout: '10.0.0.1',
+    },
     ingressClasses: { match: '^get ingressclass -o jsonpath=', stdout: 'nginx\tk8s.io/ingress-nginx\n' },
     pullSecret: {
-      match: '^-n adminforge get secret registry-pull -o jsonpath=\\{\\.type\\}$',
-      stdout: 'kubernetes.io/dockerconfigjson',
+      match: '^-n adminforge get secret registry-pull --no-headers$',
+      stdout: 'registry-pull   kubernetes.io/dockerconfigjson   1      12d\n',
     },
   };
 }
@@ -119,6 +130,18 @@ function run(cluster: Record<string, Rule>, args: string[] = []) {
   } catch {
     // no call made
   }
+  // Whatever the scenario: reads only, and the one dry run.
+  for (const { args } of calls) {
+    const rest = args[0] === '--context' ? args.slice(2) : args;
+    const verb = rest.find((a, i) => !a.startsWith('-') && rest[i - 1] !== '-n');
+    expect(['get', 'api-resources', 'create', 'config'], rest.join(' ')).toContain(verb);
+    if (verb === 'create') {
+      expect(rest).toContain('--dry-run=server');
+      expect(rest).not.toContain('--raw');
+    }
+    if (rest.includes('--raw')) expect(rest).toEqual(['get', '--raw', '/version']);
+    if (verb === 'config') expect(rest).toEqual(['config', 'current-context']);
+  }
   const lines = res.stdout.split('\n').filter(Boolean);
   return { code: res.status, out: res.stdout, err: res.stderr, lines, calls };
 }
@@ -148,25 +171,21 @@ describe('preflight.sh', () => {
     expect(r.out).toMatch(/example-cluster/);
   });
 
-  it('only reads: get, api-resources and one server-side dry run of the database claim', () => {
+  it('only reads (run() checks every call of every test) and dry-runs the database claim it would make', () => {
     const r = run(goodCluster(), ['--pull-secret', 'registry-pull']);
-    for (const { args } of r.calls) {
-      const verb = args.find((a) => !a.startsWith('-') && a !== 'adminforge' && a !== 'kube-system');
-      expect(['get', 'api-resources', 'create', 'config'], args.join(' ')).toContain(verb);
-      if (verb === 'create') expect(args).toContain('--dry-run=server');
-      if (verb === 'config') expect(args).toEqual(['config', 'current-context']);
-    }
+    expect(r.calls.filter((c) => c.args.includes('create'))).toHaveLength(1);
     const dry = r.calls.find((c) => c.args.includes('create'));
     expect(dry?.stdin).toMatch(/kind: PersistentVolumeClaim/);
     expect(dry?.stdin).toMatch(/ReadWriteOncePod/);
-    expect(dry?.stdin).toMatch(/storageClassName: managed-csi/);
+    expect(dry?.stdin).toMatch(/storageClassName: "managed-csi"/);
   });
 
-  it('never asks for a Secret in a form that carries its data', () => {
+  it("never asks for a Secret's data: the table view, which the server answers with metadata only", () => {
     const r = run(goodCluster(), ['--pull-secret', 'registry-pull']);
     const secretCalls = r.calls.filter((c) => c.args.includes('secret') || c.args.includes('secrets'));
     expect(secretCalls).toHaveLength(1);
-    expect(secretCalls[0]!.args.join(' ')).toMatch(/-o jsonpath=\{\.type\}$/);
+    expect(secretCalls[0]!.args).not.toContain('-o');
+    expect(secretCalls[0]!.args.at(-1)).toBe('--no-headers');
   });
 
   it('fails an old cluster, a network file system, an unlabelled namespace and a missing pull secret', () => {
@@ -181,6 +200,8 @@ describe('preflight.sh', () => {
     c.pullSecret = { match: c.pullSecret!.match, ...NOT_FOUND('secrets "registry-pull"') };
     const r = run(c, ['--storage-class', 'managed-csi', '--pull-secret', 'registry-pull']);
     expect(r.code).toBe(1);
+    // No dry run against a server too old to know the access mode.
+    expect(r.calls.some((x) => x.args.includes('create'))).toBe(false);
     expect(line(r.lines, '✗', /Kubernetes 1\.28.*1\.29/)).toBeDefined();
     expect(line(r.lines, '✗', /file\.csi\.azure\.com.*(network|file)/i)).toBeDefined();
     expect(line(r.lines, '✗', /namespace adminforge.*restricted/i)).toBeDefined();
@@ -275,6 +296,19 @@ describe('preflight.sh', () => {
     expect(line(r.lines, '⚠', /5 GiB/)).toBeDefined();
   });
 
+  it('fails pod, node or Service addresses outside the ranges the network policy refuses', () => {
+    const c = goodCluster();
+    c.addresses!.stdout = '["240.10.0.0/24","fd00:10::/64"] 10.224.0.4\n["240.10.1.0/24"] 203.0.113.7\n';
+    c.kubernetesService!.stdout = '34.118.224.1';
+    const r = run(c);
+    expect(r.code).toBe(1);
+    const bad = line(r.lines, '✗', /outside the ranges the network policy refuses/);
+    expect(bad).toMatch(/203\.0\.113\.7/);
+    expect(bad).toMatch(/34\.118\.224\.1/);
+    expect(bad).not.toMatch(/240\.10/); // class E is refused now
+    expect(bad).not.toMatch(/fd00/); // IPv6 egress is refused altogether
+  });
+
   it('warns, without failing, when it may not list cluster-wide objects', () => {
     const c = goodCluster();
     const forbidden = {
@@ -282,6 +316,7 @@ describe('preflight.sh', () => {
       code: 1,
     };
     c.nodes = { match: c.nodes!.match, ...forbidden };
+    c.addresses = { match: c.addresses!.match, ...forbidden };
     c.daemonsets = { match: c.daemonsets!.match, ...forbidden };
     const r = run(c);
     expect(r.code).toBe(0);

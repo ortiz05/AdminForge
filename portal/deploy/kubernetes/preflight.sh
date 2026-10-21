@@ -12,7 +12,7 @@
 # kubectl is used for reads only — get, api-resources — and one server-side dry run of the database claim
 # (`create --dry-run=server`: the API server validates and admits it, and stores nothing). One line per check:
 # ✓ met, ✗ not met (with what to do), ⚠ advice, or something kubectl can't see with your access. Names and states
-# only: a Secret is asked for its type, never its data. Exit 0 when nothing is ✗, 1 when something is, 2 on a usage
+# only: a Secret is read in the table view (name and type; the server sends no data). Exit 0 when nothing is ✗, 1 when something is, 2 on a usage
 # error. What kubectl can't check (node clocks, egress to Microsoft, the ingress controller's settings, backups, log
 # shipping) is in the README's cluster readiness checklist.
 set -uo pipefail
@@ -92,9 +92,11 @@ if ! run get --raw /version; then
 fi
 MAJOR="$(printf '%s' "$OUT" | sed -n 's/.*"major"[^"]*"\([0-9]*\).*/\1/p' | head -n 1)"
 MINOR="$(printf '%s' "$OUT" | sed -n 's/.*"minor"[^"]*"\([0-9]*\).*/\1/p' | head -n 1)"
+VERSION_OK=0
 if [ -z "$MAJOR" ] || [ -z "$MINOR" ]; then
   bad "couldn't read the server's version"
 elif [ "$MAJOR" -gt 1 ] || [ "$MINOR" -ge 29 ]; then
+  VERSION_OK=1
   ok "Kubernetes $MAJOR.$MINOR (1.29+: ReadWriteOncePod is generally available)"
 else
   bad "Kubernetes $MAJOR.$MINOR — AdminForge needs 1.29+ (ReadWriteOncePod for the database volume): upgrade the cluster"
@@ -181,7 +183,7 @@ if [ -n "$CLASS" ]; then
 fi
 
 # ── ReadWriteOncePod, admitted by the API server (a dry run: nothing is created) ─────────────────────
-if [ "$NS_OK" = 1 ] && [ -n "$CLASS" ]; then
+if [ "$VERSION_OK" = 1 ] && [ "$NS_OK" = 1 ] && [ -n "$CLASS" ]; then
   if run -n "$NAMESPACE" create --dry-run=server -o name -f - << EOF
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -189,7 +191,7 @@ metadata:
   name: adminforge-preflight
 spec:
   accessModes: [ReadWriteOncePod]
-  storageClassName: $CLASS
+  storageClassName: "$CLASS"
   resources:
     requests:
       storage: 10Gi
@@ -200,7 +202,7 @@ EOF
     bad "a ReadWriteOncePod claim on $CLASS was refused: ${ERR:-no reason given}"
   fi
 else
-  warn "ReadWriteOncePod not checked: that needs the namespace and a storage class"
+  warn "ReadWriteOncePod not checked: that needs Kubernetes 1.29+, the namespace and a storage class"
 fi
 
 # ── Network policy: the API, an engine that enforces it, and the DNS pods the policy allows ──────────
@@ -231,6 +233,45 @@ if run -n kube-system get pods -l k8s-app=kube-dns -o name; then
   fi
 else
   warn "couldn't list the DNS pods in kube-system (${ERR:-kubectl failed}) — the network policy allows DNS only to pods labelled k8s-app=kube-dns there"
+fi
+
+# ── Cluster addresses: inside the ranges the network policy refuses ──────────────────────────────────
+# The base policy allows 443 to every IPv4 address except these (base/networkpolicy.yaml). Pod networks, nodes or
+# Services on other addresses (public ranges used privately) would stay reachable from the pod.
+REFUSED='10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16 168.63.129.16/32 0.0.0.0/8 192.0.0.0/24 198.18.0.0/15 224.0.0.0/3'
+ADDRS=""
+ADDR_ERR=""
+if run get nodes -o 'jsonpath={range .items[*]}{.spec.podCIDRs}{" "}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}'; then
+  ADDRS="$OUT"
+else
+  ADDR_ERR="$ERR"
+fi
+if run -n default get service kubernetes -o 'jsonpath={.spec.clusterIP}'; then
+  ADDRS="$ADDRS $OUT"
+fi
+if [ -n "$ADDR_ERR" ]; then
+  warn "couldn't list the nodes' pod networks and addresses (${ADDR_ERR}) — check that pods, nodes and Services use private ranges (README.md → Requirements › Network)"
+else
+  # IPv4 addresses and CIDRs only: the policy refuses IPv6 egress altogether.
+  OUTSIDE="$(printf '%s\n' "$ADDRS" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?' | sort -u | awk -v refused="$REFUSED" '
+    function ip(a,   p) { split(a, p, "."); return ((p[1] * 256 + p[2]) * 256 + p[3]) * 256 + p[4] }
+    BEGIN { n = split(refused, r, " "); for (i = 1; i <= n; i++) { split(r[i], c, "/"); net[i] = ip(c[1]); len[i] = c[2] } }
+    {
+      split($0, c, "/"); a = ip(c[1]); l = (c[2] == "" ? 32 : c[2]); inside = 0
+      for (i = 1; i <= n; i++) {
+        size = 2 ^ (32 - len[i])
+        if (l >= len[i] && int(a / size) == int(net[i] / size)) { inside = 1; break }
+      }
+      if (!inside) { printf "%s%s", sep, $0; sep = ", " }
+    }')"
+  COUNT="$(printf '%s\n' "$ADDRS" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?' | sort -u | wc -l | tr -d ' ')"
+  if [ -n "$OUTSIDE" ]; then
+    bad "cluster addresses outside the ranges the network policy refuses: $OUTSIDE — the pod could reach them on 443: add them to the base policy's except list in your overlay (README.md → Requirements › Network)"
+  elif [ "$COUNT" -gt 0 ]; then
+    ok "the $COUNT pod network, node and Service address(es) kubectl shows lie in ranges the network policy refuses"
+  else
+    warn "no pod network, node or Service addresses to compare with the network policy's refused ranges"
+  fi
 fi
 
 # ── Nodes: amd64 (the runner image), room for the pod's limits ───────────────────────────────────────
@@ -287,7 +328,10 @@ fi
 
 # ── Image pull secret (its type only) ────────────────────────────────────────────────────────────────
 if [ -n "$PULL_SECRET" ]; then
-  if [ "$NS_OK" = 1 ] && run -n "$NAMESPACE" get secret "$PULL_SECRET" -o 'jsonpath={.type}'; then
+  # The table view: the server answers with name, type, count and age, never the data.
+  if [ "$NS_OK" = 1 ] && run -n "$NAMESPACE" get secret "$PULL_SECRET" --no-headers; then
+    OUT="$(printf '%s
+' "$OUT" | awk 'NR == 1 { print $2 }')"
     case "$OUT" in
       kubernetes.io/dockerconfigjson | kubernetes.io/dockercfg) ok "image pull secret $PULL_SECRET ($OUT)" ;;
       *) bad "secret $PULL_SECRET is of type ${OUT:-unknown}, not an image pull secret (kubernetes.io/dockerconfigjson)" ;;

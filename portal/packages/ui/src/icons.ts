@@ -39,6 +39,7 @@ export {
   LightningIcon,
   LockKeyIcon,
   LockKeyOpenIcon,
+  LockSimpleIcon,
   MagnifyingGlassIcon,
   MegaphoneIcon,
   MoonIcon,

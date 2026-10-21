@@ -84,6 +84,17 @@ export interface ProbeSummary {
   history?: Array<{ ts: string; status: ProbeHealth; metric?: number | null }>;
 }
 
+/** How a content action that runs a playbook stands with write access (from the playbook's published `mode`). */
+export interface PlaybookWriteState {
+  /** Write access is armed: the action runs, and carries the small ember dot. */
+  armed: boolean;
+  /**
+   * Unarmed: why running it waits, shown with a lock glyph. The action stays clickable — the playbook drawer's
+   * preview (dry run) works without write access.
+   */
+  hint?: string;
+}
+
 export interface ProbesState {
   status: 'loading' | 'ready' | 'error';
   probes: ProbeSummary[];
@@ -124,6 +135,11 @@ export interface WidgetRuntime {
   dataMode: 'live' | 'fixtures';
   /** Synthetic probe results (a hook: call it unconditionally). */
   useProbes: (keys: string[] | undefined) => ProbesState;
+  /**
+   * Whether `playbook` writes and how that stands with write access (a hook: call it unconditionally). Undefined for
+   * read playbooks, while its definition loads, and outside the app (tests, previews).
+   */
+  usePlaybookWrite?: (playbook: string | undefined) => PlaybookWriteState | undefined;
   /** Starts a sign-in at `login` (a `reauth` error's URL), keeping the person's place. */
   signIn?: (login: string) => void;
   /**

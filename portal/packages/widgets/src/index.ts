@@ -19,7 +19,15 @@ export {
 } from './schemas';
 
 // Building blocks the page renderer shares with widgets.
-export { ActionButton, launchPlaybook, playbookLabel, isExternal } from './lib/actions';
+export {
+  ActionButton,
+  followHref,
+  launchPlaybook,
+  playbookLabel,
+  isExternal,
+  usePlaybookWriteState,
+  WriteLockGlyph,
+} from './lib/actions';
 export {
   evaluateTemplate,
   hasExpression,

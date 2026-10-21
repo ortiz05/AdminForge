@@ -27,7 +27,7 @@ import {
   viewsQuery,
   type PageDefinition,
 } from './api';
-import { ActionGroup } from './ActionGroup';
+import { ActionGroup, usePlaybookWrite } from './ActionGroup';
 import { WidgetGrid, type Block } from './blocks';
 import { ExportMenu } from './ExportMenu';
 import { FilterRegion, filterParamsOf } from './FilterRegion';
@@ -265,6 +265,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
       feature: (key: string) => caps.data?.features[key],
       dataMode: me.dataMode,
       useProbes,
+      usePlaybookWrite,
       signIn: (login: string) => browser.assign(loginUrl(login)),
       signInBanner: Boolean(signInError),
     }),

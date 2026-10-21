@@ -166,7 +166,16 @@ export interface PlanEntry {
 
 /** Human decisions recorded by the API and read back when a run resumes. */
 export type Decision =
-  | { kind: 'approval'; approved: true; actor: Actor; comment?: string | null; decidedAt: string }
+  | {
+      kind: 'approval';
+      approved: true;
+      /** Who approved last: the steps after the gate run as them (delegated runs). */
+      actor: Actor;
+      comment?: string | null;
+      decidedAt: string;
+      /** Everyone who approved (`minApprovals` > 1), `actor` included. */
+      approvers?: Actor[];
+    }
   | {
       kind: 'approval';
       approved: false;

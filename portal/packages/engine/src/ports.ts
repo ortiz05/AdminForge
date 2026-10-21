@@ -235,7 +235,10 @@ export interface StepContext {
 export interface Prepared {
   /** What the dry-run plan shows for this step (null for pure steps). */
   plan: Omit<PlanEntry, 'stepId' | 'stepPath' | 'describe'> | null;
-  /** Redacted request stored on the step record. */
+  /**
+   * Redacted request stored on the step record. External handlers always return one (not null): a failed write record
+   * without a request never went out, and the resume re-check relies on that (engine.ts › wasSent).
+   */
   request: unknown;
   /** Handler-private rendered payload passed to execute. */
   payload: unknown;

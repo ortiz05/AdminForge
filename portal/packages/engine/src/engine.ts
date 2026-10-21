@@ -145,7 +145,7 @@ interface Frame {
   /** What this frame reused from an earlier pass that must run again before the next write in its scope. */
   rechecks?: Recheck[];
   /** Approvals decided in this frame (their `excludes` are worked out again after a re-check). */
-  approvals?: Array<{ step: ApprovalStep; asWalked: Actor; approver: string | null }>;
+  approvals?: Array<{ step: ApprovalStep; asWalked: Actor; approvers: string[] }>;
 }
 
 /** A stale read or check (or a finished forEach holding some), run again at most once per pass. */
@@ -695,16 +695,21 @@ class Execution {
   /**
    * A run that paused (an approval, input, write access, a sign-in, a `wait`, a restart) reads and checks again before
    * it writes. A pass that continues an earlier one runs again, right before it sends its next write, the reads,
-   * transforms and asserts the earlier pass ran since the last write sent in their scope — as the person the write runs
-   * as — so a guard such as "the session still belongs to the person the list showed" holds now, not when the run
-   * paused. A step that fails now fails like the first time (its `onError` applies: by default the run ends `failed`
-   * with the assert's message) and the write is not sent.
+   * transforms and asserts since the last write sent in their scope — those the earlier pass ran, and those this pass
+   * ran meanwhile on what they read — so a guard such as "the session still belongs to the person the list showed"
+   * holds now, not when the run paused. They run as who ran them (`user.*` means what it meant then); their reads go
+   * out with the access of the person the write runs as (the approver after an approval), except a read of `/me`,
+   * which keeps its answer. A step that fails now fails like the first time (its `onError` applies: by default the run
+   * ends `failed` with the assert's message) and the write is not sent; a write that may already have gone out before
+   * the run stopped ends `needs_review` instead.
    *
-   * What the run decided stays as recorded: approvals and input, `when`, branch arms and forEach items. Writes already
-   * sent are never sent again, and what was read before them is not read again. Steps with show-once secrets and child
-   * playbooks (which check for themselves) are not run again. Scope: a step inside a forEach iteration guards that
-   * iteration's writes, a step outside guards every write after it; a finished forEach before the write is walked
-   * again with its items as recorded, so its reads run again and its output is rebuilt.
+   * What the run decided stays as recorded: approvals and input, the `when` of reads and checks, branch arms and
+   * forEach items (a guard is an `assert`). The write's own `when` and the approvals' `excludes` (ENG-02) are worked
+   * out again. Writes already sent are never sent again, and what was read before them is not read again. Steps with
+   * show-once secrets, `idempotent: false` reads and child playbooks (which check for themselves) are not run again.
+   * Scope: a step inside a forEach iteration guards that iteration's writes, a step outside guards every write after
+   * it; a finished forEach before the write is walked again with its items as recorded, so its reads run again and its
+   * output is rebuilt.
    */
   private findStale(sorted: readonly StepRecord[]) {
     // A re-check attempt that never finished (a restart, a sign-in needed mid-call) leaves the finished record before
@@ -853,8 +858,14 @@ class Execution {
   /** A decided approval in this pass, so its `excludes` can be worked out again after a re-check (as when it opened). */
   private noteApproval(step: ApprovalStep, rec: StepRecord, frame: Frame) {
     if (frame.recheck || this.dryRun || (step.excludes ?? this.def.approval?.excludes) === undefined) return;
-    const approver = (rec.output as { approver?: { oid?: string | null } } | null)?.approver?.oid ?? null;
-    (frame.approvals ??= []).push({ step, asWalked: { ...frame.actor }, approver });
+    const out = rec.output as {
+      approver?: { oid?: string | null };
+      approvers?: Array<{ oid?: string | null }>;
+    } | null;
+    const approvers = [...(out?.approvers ?? []), ...(out?.approver ? [out.approver] : [])]
+      .map((x) => x.oid?.toLowerCase())
+      .filter((x): x is string => !!x);
+    (frame.approvals ??= []).push({ step, asWalked: { ...frame.actor }, approvers });
   }
 
   /**
@@ -864,16 +875,16 @@ class Execution {
    */
   private async recheckExcludes(frame: Frame): Promise<Flow | null> {
     for (let f: Frame | null = frame; f; f = f.parent)
-      for (const { step, asWalked, approver } of f.approvals ?? []) {
+      for (const { step, asWalked, approvers } of f.approvals ?? []) {
         const path = f.prefix + step.id;
         const { prefix, locals, parent, vars } = f;
         let excludes: string[];
         try {
           excludes = await this.approvalExcludes(step, { prefix, actor: asWalked, locals, parent, vars });
         } catch (err) {
-          return this.policy(step, toRunError(err, { stepId: step.id, path }));
+          return { kind: 'fail', policy: 'fail', error: toRunError(err, { stepId: step.id, path }) };
         }
-        if (approver && excludes.includes(approver.toLowerCase()))
+        if (approvers.some((oid) => excludes.includes(oid)))
           return {
             kind: 'fail',
             policy: 'fail',
@@ -977,8 +988,9 @@ class Execution {
   /** `onError` of a failed step: continue → carry on; compensate/fail → propagate. */
   private policy(step: Step, error: RunError): Flow {
     const onError = step.onError ?? 'fail';
-    if (onError === 'continue') return OK;
-    return { kind: 'fail', error, policy: onError };
+    // A gate that can be stepped over is no gate: a rejected, expired or unworkable approval always stops the run.
+    if (onError === 'continue' && step.type !== 'approval') return OK;
+    return { kind: 'fail', error, policy: onError === 'continue' ? 'fail' : onError };
   }
 
   private async evalWhen(step: Step, frame: Frame): Promise<{ skip: boolean } | { error: RunError }> {
@@ -1360,6 +1372,23 @@ class Execution {
       identity = r.identity;
     }
 
+    // Sent before the run stopped (in flight, or failed in a way that may still have taken effect): if it now can't go
+    // out (a check fails, its `when` no longer holds, its request no longer builds), the first send may have gone
+    // through — and changed what was read — so the run doesn't claim nothing happened: someone checks the target.
+    const sent = maybeSent(a.existing);
+    const review = async (why: string, cause: RunError) => {
+      const error: RunError = {
+        code: 'needs_review',
+        message: `Step ${a.stepId} ${sent === 'interrupted' ? 'was in flight when the worker stopped' : 'was sent before the run stopped and may have taken effect'}, and ${why}, so it was not sent again — check whether it took effect.`,
+        stepId: a.stepId,
+        path,
+        details: { check: { stepId: cause.stepId ?? null, code: cause.code, message: cause.message } },
+      };
+      await this.close(a.existing!, caller, { status: 'needs_review', error });
+      const flow: Flow = { kind: 'fail', error, policy: 'fail', needsReview: true };
+      return { kind: 'flow' as const, flow };
+    };
+
     // A pass that continues an earlier one reads and checks again before the write goes out (see `recheck`) — not when
     // it only follows a child playbook that already started.
     if (a.beforeSend && !(a.existing?.status === 'waiting' && !a.existing.error)) {
@@ -1373,28 +1402,11 @@ class Execution {
       }
       if (typeof checked === 'object') {
         const stop = checked;
-        // Sent before the run stopped (in flight, or failed in a way that may still have taken effect), so the first
-        // send may have gone through — and changed what the check read: the run doesn't claim nothing happened, someone
-        // checks the target.
-        const sent = maybeSent(a.existing);
-        if (stop.kind === 'fail' && a.existing && sent) {
-          const inFlight = sent === 'interrupted';
-          const error: RunError = {
-            code: 'needs_review',
-            message: `Step ${a.stepId} ${inFlight ? 'was in flight when the worker stopped' : 'was sent before the run stopped and may have taken effect'}, and ${stop.error.stepId ? `the check ${stop.error.stepId}` : 'a check'} before it no longer holds, so it was not sent again — check whether it took effect.`,
-            stepId: a.stepId,
-            path,
-            details: {
-              check: {
-                stepId: stop.error.stepId ?? null,
-                code: stop.error.code,
-                message: stop.error.message,
-              },
-            },
-          };
-          await this.close(a.existing, caller, { status: 'needs_review', error });
-          return { kind: 'flow', flow: { kind: 'fail', error, policy: 'fail', needsReview: true } };
-        }
+        if (stop.kind === 'fail' && sent)
+          return review(
+            `${stop.error.stepId ? `the check ${stop.error.stepId}` : 'a check'} before it no longer holds`,
+            stop.error,
+          );
         // Never sent: a write that waited for write access or a sign-in stops waiting.
         if (stop.kind === 'fail' && a.existing?.status === 'waiting')
           await this.close(a.existing, caller, { status: 'skipped', error: null });
@@ -1405,7 +1417,16 @@ class Execution {
         // it is now (disarmed meanwhile?).
         if (!a.compensation) {
           const w = await this.evalWhen(a.body as Step, frame);
-          if ('error' in w) return fail(new StepError(w.error.code, w.error.message));
+          if ('error' in w) {
+            if (sent) return review('its condition can no longer be worked out', w.error);
+            return fail(new StepError(w.error.code, w.error.message));
+          }
+          if (w.skip && sent)
+            return review('its condition no longer holds', {
+              code: 'condition_false',
+              message: 'Its condition no longer holds.',
+              stepId: a.stepId,
+            });
           if (w.skip) {
             // A record that waited is closed; a retried one stays in the history, a new attempt is skipped.
             const rec =
@@ -1424,6 +1445,8 @@ class Execution {
             this.context(a.stepId, path, mode, frame, this.ac.signal, seqRef),
           );
         } catch (err) {
+          if (sent)
+            return review('its request can no longer be built', toRunError(err, { stepId: a.stepId, path }));
           return fail(err);
         }
         if (handler.external && !handler.plansItself && !intercepted && containsRedacted(prep.payload))
@@ -1521,7 +1544,14 @@ class Execution {
           }
           await this.close(rec, caller, {
             status: 'waiting',
-            error: { code: err.reason, message: err.message, stepId: a.stepId, path },
+            error: {
+              code: err.reason,
+              message: err.message,
+              stepId: a.stepId,
+              path,
+              // Refused, so not sent now — but an earlier attempt may have been (see `maybeSent`).
+              ...(sent ? { details: { maybeSent: sent } } : {}),
+            },
             endedAt: null,
           });
           await this.runEvent('running', undefined, { blockedOn: err.reason, path });
@@ -1961,6 +1991,8 @@ class Execution {
         output: {
           decision: 'approved',
           approver: { oid: decision.actor.oid, upn: decision.actor.upn },
+          // Everyone who approved: none of them may be someone the change grants access to (see `recheckExcludes`).
+          approvers: (decision.approvers ?? [decision.actor]).map((x) => ({ oid: x.oid, upn: x.upn })),
           comment: decision.comment ?? null,
           decidedAt: decision.decidedAt,
         },
@@ -2312,7 +2344,8 @@ function callsMe(payload: unknown): boolean {
     } catch {
       // keep it as it is
     }
-    return /^\/+me(?:[/?#(]|$)/i.test(p);
+    // The read policy takes paths with or without the leading slash.
+    return /^\/*me(?:[/?#(]|$)/i.test(p);
   };
   const call = payload as {
     service?: unknown;
@@ -2321,7 +2354,14 @@ function callsMe(payload: unknown): boolean {
   } | null;
   if (!call || call.service !== 'graph') return false;
   if (me(call.path)) return true;
-  return call.path === '/$batch' && (call.body?.requests ?? []).some((r) => me(r.url));
+  let base = typeof call.path === 'string' ? call.path.trim() : '';
+  try {
+    base = decodeURIComponent(base);
+  } catch {
+    // keep it as it is
+  }
+  const batch = /^\/*\$batch(?:[?#]|$)/i.test(base);
+  return batch && (call.body?.requests ?? []).some((r) => me(r.url));
 }
 
 /**

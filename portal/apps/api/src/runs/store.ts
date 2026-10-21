@@ -260,6 +260,7 @@ export function decisionOf(task: TaskRow): Decision | null {
         actor: actorOf(d),
         comment: d.comment ?? null,
         decidedAt: at,
+        approvers: task.decisions.filter((x) => x.decision === 'approve').map(actorOf),
       };
     }
     if (task.status === 'rejected') {

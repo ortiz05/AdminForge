@@ -841,3 +841,257 @@ describe('engine: re-checks on resume, the harder cases', () => {
     expect(deletes(h)).toEqual([]);
   });
 });
+
+// Found by the third security review (each was reproduced against the engine before the fix).
+describe('engine: approvals can’t be stepped over, and a write that may have gone out is reviewed', () => {
+  const lookupThenAdd = (approval: Record<string, unknown>) =>
+    playbook([
+      read('lookup', '/users/x@example.com'),
+      { id: 'approve', type: 'approval', ...approval },
+      write('add', {
+        request: { method: 'POST', path: '/groups/g1/members', body: { id: '${ steps.lookup.output.id }' } },
+      }),
+    ]);
+  // Validate refuses `onError: continue` on an approval; the engine stops the run anyway (definitions built here
+  // bypass validate, as an older published one would).
+  const continueGate = (extra: Record<string, unknown> = {}) => {
+    const def = lookupThenAdd({});
+    const gate = def.steps[1] as unknown as Record<string, unknown>;
+    Object.assign(gate, { onError: 'continue', ...extra });
+    return def;
+  };
+
+  it('a rejected approval stops the run even with onError: continue', async () => {
+    const h = harness(continueGate(), { respond: () => ({ id: 'u-1' }) });
+    await h.exec();
+    h.reject('approve');
+    expect(await h.exec()).toMatchObject({ status: 'failed', error: { code: 'approval_rejected' } });
+    expect(h.outbound.paths('POST')).toEqual([]);
+  });
+
+  it('excludes that can’t be worked out when the gate opens stop the run even with onError: continue', async () => {
+    const h = harness(continueGate({ excludes: '${ steps.lookup.output.id }' }), {
+      respond: () => ({ id: 42 }),
+    });
+    expect(await h.exec()).toMatchObject({ status: 'failed', error: { code: 'approval_excludes_invalid' } });
+    expect(h.outbound.paths('POST')).toEqual([]);
+  });
+
+  it('excludes that can’t be worked out after the re-check stop the run', async () => {
+    let id: unknown = 'u-1';
+    const h = harness(continueGate({ excludes: '${ steps.lookup.output.id }' }), {
+      respond: (c) => (c.method === 'GET' ? { id } : null),
+    });
+    h.identity.signIn(APPROVER, true);
+    expect((await h.exec()).status).toBe('awaiting_approval');
+    id = 42;
+    h.approve('approve');
+    expect(await h.exec()).toMatchObject({ status: 'failed', error: { code: 'approval_excludes_invalid' } });
+    expect(h.outbound.paths('POST')).toEqual([]);
+  });
+
+  it('with two approvals, the re-read may name neither approver', async () => {
+    const SECOND = {
+      kind: 'delegated' as const,
+      oid: '00000000-0000-4000-8000-0000000000c3',
+      upn: 'casey@example.com',
+    };
+    let target = INITIATOR.oid;
+    const h = harness(lookupThenAdd({ minApprovals: 2, excludes: '${ steps.lookup.output.id }' }), {
+      respond: (c) => (c.method === 'GET' ? { id: target } : null),
+    });
+    h.identity.signIn(APPROVER, true);
+    await h.exec();
+    target = SECOND.oid; // now the first of the two approvers
+    h.store.decide('run-1', 'approve', {
+      kind: 'approval',
+      approved: true,
+      actor: APPROVER,
+      approvers: [SECOND, APPROVER],
+      decidedAt: h.clock.now().toISOString(),
+    });
+    expect(await h.exec()).toMatchObject({ status: 'failed', error: { code: 'approval_excludes_approver' } });
+    expect(h.outbound.paths('POST')).toEqual([]);
+  });
+
+  const SESSION_PATH = '/sessions/3';
+  const inFlight = async (h: ReturnType<typeof harness>) => {
+    const at = new Date('2026-10-15T11:59:00.000Z');
+    const base = { attempt: 1, actorOid: INITIATOR.oid, plan: null, msRequestId: null, startedAt: at };
+    for (const r of [
+      {
+        ...base,
+        seq: 1,
+        stepId: 'lookup',
+        path: 'lookup',
+        type: 'graph',
+        mode: 'read',
+        status: 'succeeded',
+        request: null,
+        output: SAME,
+        error: null,
+        endedAt: at,
+      },
+      {
+        ...base,
+        seq: 2,
+        stepId: 'logOff',
+        path: 'logOff',
+        type: 'graph',
+        mode: 'write',
+        status: 'running',
+        request: { method: 'DELETE', path: SESSION_PATH },
+        output: null,
+        error: null,
+        endedAt: null,
+      },
+    ] as StepRecord[])
+      await h.store.saveStep('run-1', r, { actor: INITIATOR, dryRun: false });
+    await h.store.updateRun('run-1', { status: 'running', startedAt: h.clock.now() });
+  };
+
+  it('in flight at a stop, then its when no longer holds: needs_review, not skipped', async () => {
+    const { holder, respond } = sessionHolder();
+    const def = playbook([
+      read('lookup', SESSION_PATH),
+      write('logOff', {
+        when: "${ steps.lookup.output.userPrincipalName = 'm.chen@example.com' }",
+        request: { method: 'DELETE', path: SESSION_PATH },
+      }),
+    ]);
+    const h = harness(def, { respond });
+    await inFlight(h);
+    holder.now = OTHER; // the sign-out went through; the number was reused
+    const out = await h.exec();
+    expect(out).toMatchObject({ status: 'needs_review', error: { code: 'needs_review', stepId: 'logOff' } });
+    expect(out.error!.message).toMatch(/its condition no longer holds/);
+    expect(deletes(h)).toEqual([]);
+  });
+
+  it('in flight at a stop, then its request no longer builds: needs_review', async () => {
+    const { holder, respond } = sessionHolder();
+    const def = playbook([
+      read('lookup', SESSION_PATH),
+      write('logOff', {
+        request: {
+          method: 'DELETE',
+          path: "${ steps.lookup.output.userPrincipalName = 'm.chen@example.com' ? '/sessions/3' : $error('session changed') }",
+        },
+      }),
+    ]);
+    const h = harness(def, { respond });
+    await inFlight(h);
+    h.identity.signIn(INITIATOR, false);
+    expect((await h.exec()).status).toBe('awaiting_arm');
+    holder.now = OTHER;
+    h.identity.signIn(INITIATOR, true);
+    const out = await h.exec();
+    expect(out).toMatchObject({ status: 'needs_review', error: { code: 'needs_review' } });
+    expect(out.error!.message).toMatch(/its request can no longer be built/);
+    expect(deletes(h)).toEqual([]);
+  });
+
+  it('in flight at a stop, refused for write access as it went out again, then its check fails: needs_review', async () => {
+    const { holder, respond } = sessionHolder();
+    let lapse = true;
+    const h = harness(signOut(), {
+      respond: (c) => {
+        if (c.method !== 'GET' && lapse) throw new IdentityUnavailable('not_armed');
+        return respond(c);
+      },
+    });
+    const at = new Date('2026-10-15T11:59:00.000Z');
+    const base = { attempt: 1, actorOid: INITIATOR.oid, plan: null, msRequestId: null, startedAt: at };
+    for (const r of [
+      {
+        ...base,
+        seq: 1,
+        stepId: 'lookup',
+        path: 'lookup',
+        type: 'graph',
+        mode: 'read',
+        status: 'succeeded',
+        request: null,
+        output: SAME,
+        error: null,
+        endedAt: at,
+      },
+      {
+        ...base,
+        seq: 2,
+        stepId: 'sameUser',
+        path: 'sameUser',
+        type: 'assert',
+        mode: 'read',
+        status: 'succeeded',
+        request: null,
+        output: true,
+        error: null,
+        endedAt: at,
+      },
+      {
+        ...base,
+        seq: 3,
+        stepId: 'logOff',
+        path: 'logOff',
+        type: 'graph',
+        mode: 'write',
+        status: 'running',
+        request: { method: 'DELETE', path: SESSION },
+        output: null,
+        error: null,
+        endedAt: null,
+      },
+    ] as StepRecord[])
+      await h.store.saveStep('run-1', r, { actor: INITIATOR, dryRun: false });
+    await h.store.updateRun('run-1', { status: 'running', startedAt: h.clock.now() });
+    expect((await h.exec()).status).toBe('awaiting_arm');
+    lapse = false;
+    holder.now = OTHER;
+    expect(await h.exec()).toMatchObject({ status: 'needs_review', error: { stepId: 'logOff' } });
+  });
+
+  for (const [label, step] of [
+    [
+      'a $batch written as /%24batch',
+      {
+        request: {
+          method: 'POST',
+          path: '/%24batch',
+          body: { requests: [{ id: '1', method: 'GET', url: '/me' }] },
+        },
+      },
+    ],
+    [
+      'a $batch request url without a leading slash',
+      {
+        request: {
+          method: 'POST',
+          path: '/$batch',
+          body: { requests: [{ id: '1', method: 'GET', url: 'me' }] },
+        },
+      },
+    ],
+  ] as const)
+    it(`a /me read keeps its answer: ${label}`, async () => {
+      const def = playbook([
+        { id: 'whoami', type: 'graph', mode: 'read', ...step },
+        { id: 'approve', type: 'approval' },
+        write('addMe', {
+          request: {
+            method: 'POST',
+            path: '/groups/g1/members',
+            body: { id: '${ steps.whoami.output.id }' },
+          },
+        }),
+      ]);
+      const h = harness(def);
+      h.outbound.respond = (c) =>
+        c.path !== '/groups/g1/members' ? { id: h.outbound.calls.at(-1)!.identity.actor.oid } : null;
+      h.identity.signIn(APPROVER, true);
+      await h.exec();
+      h.approve('approve');
+      expect((await h.exec()).status).toBe('succeeded');
+      expect(h.outbound.calls.at(-1)!.call.body).toEqual({ id: INITIATOR.oid });
+    });
+});

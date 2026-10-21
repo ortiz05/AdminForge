@@ -8,6 +8,7 @@ import {
   Tooltip,
   button,
   cn,
+  followSafeUrl,
   safeUrl,
   type ButtonProps,
 } from '@adminforge/ui';
@@ -42,15 +43,12 @@ export async function launchPlaybook(
 }
 
 /**
- * Follows a content action's href (already evaluated) when it is a safe target — in the app through the router, an
- * external one in a new tab. Anything else (javascript:, //host, /\host, data:) is ignored: never navigates.
+ * Follows a content action's href (already evaluated) when it is a safe target (`followSafeUrl`) — in the app through
+ * the router, an external one (or any, with `external`) in a new tab. Anything else (javascript:, //host, /\host,
+ * data:) is ignored: never navigates.
  */
 export function followHref(runtime: WidgetRuntime, href: unknown, external?: boolean): boolean {
-  const safe = typeof href === 'string' ? safeUrl(href) : null;
-  if (!safe) return false;
-  if (safe.external || external) window.open(safe.href, '_blank', 'noopener,noreferrer');
-  else runtime.navigate(safe.href);
-  return true;
+  return followSafeUrl(href, (to) => runtime.navigate(to), { newTab: external });
 }
 
 const NO_WRITE: NonNullable<WidgetRuntime['usePlaybookWrite']> = () => undefined;

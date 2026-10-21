@@ -22,6 +22,23 @@ export function safeUrl(href: string): { href: string; external: boolean } | nul
 }
 
 /**
+ * Follows a link target from content or data the one way the portal does: not at all (false) unless `safeUrl` allows
+ * it; an external address — or any, with `newTab` — in a new tab without opener or referrer; an in-app one through
+ * `navigate` (the router). The app's `useNavigateHref` and the widgets' content actions both go through it.
+ */
+export function followSafeUrl(
+  href: unknown,
+  navigate: (href: string) => void,
+  opts: { newTab?: boolean } = {},
+): boolean {
+  const safe = typeof href === 'string' ? safeUrl(href) : null;
+  if (!safe) return false;
+  if (safe.external || opts.newTab) window.open(safe.href, '_blank', 'noopener,noreferrer');
+  else navigate(safe.href);
+  return true;
+}
+
+/**
  * Escapes a value placed into Markdown so it always shows as text: `[x](/admin)` can't become a link, `# x` can't
  * become a heading, `*x*` can't become emphasis. The portal's Markdown renderers undo these backslash escapes.
  * Keep in step with `escapeMarkdown` in @adminforge/engine (the server's copy).

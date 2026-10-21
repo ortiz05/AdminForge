@@ -1,6 +1,6 @@
 import { defaultParseSearch, Link, useRouter } from '@tanstack/react-router';
 import { useCallback } from 'react';
-import { safeUrl, type LinkComponent } from '@adminforge/ui';
+import { followSafeUrl, safeUrl, type LinkComponent } from '@adminforge/ui';
 
 /** `/p/identity.users?userType=Guest` → path + parsed search (values typed the way the router reads them). */
 export function splitHref(href: string): {
@@ -60,19 +60,15 @@ export const AppLink: LinkComponent = ({ href, className, children }) => {
 };
 
 /**
- * Follows an href the way `AppLink` would: in-app through the router, external in a new tab, and anything `safeUrl`
- * refuses not at all (false). Row and menu actions navigate with hrefs templated from data.
+ * Follows an href the way `AppLink` would (`followSafeUrl`): in-app through the router, external in a new tab, and
+ * anything `safeUrl` refuses not at all (false). Row and menu actions navigate with hrefs templated from data.
  */
 export function followHref(
   router: { navigate: (to: { href: string; replace?: boolean }) => unknown },
   href: string,
   opts?: { replace?: boolean },
 ): boolean {
-  const safe = safeUrl(href);
-  if (!safe) return false;
-  if (safe.external) window.open(safe.href, '_blank', 'noopener,noreferrer');
-  else void router.navigate({ href: safe.href, replace: opts?.replace });
-  return true;
+  return followSafeUrl(href, (to) => void router.navigate({ href: to, replace: opts?.replace }));
 }
 
 /** Navigate to any safe href: in-app through the router, external in a new tab (`followHref`). */

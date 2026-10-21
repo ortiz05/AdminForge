@@ -9,7 +9,7 @@ import { api, ApiRequestError } from '../lib/api';
 import { useMe } from '../lib/session';
 import { isParked, isTerminal, StartRunResponse, type RunDetail } from '../runs/contracts';
 import { runDetailQuery } from '../runs/queries';
-import { bulkConfirmationText, confirmationText } from './confirm';
+import { bulkConfirmationText, confirmationMessage, confirmationText } from './confirm';
 import { inputsOf } from './contracts';
 import { initialValues, previewMatches, validateForm, type FormValues } from './form';
 import { encodeParam, itemInputs, type ParsedLaunch } from './url';
@@ -30,8 +30,13 @@ export interface PlaybookFlowOptions {
 }
 
 export interface ConfirmState {
-  /** What to type (typed confirmation), or null for a click-through confirmation. */
+  /** Typed confirmation (type `text`) or a click-through one. */
+  kind: 'typed' | 'click';
+  /** typed: what to type, as the API rendered it from the preview (bulk: the number of items); null when the preview
+   * didn't produce it, so the change can't be confirmed. */
   text: string | null;
+  /** The playbook's confirmation message as the API rendered it from the preview (single runs only). */
+  message: string | null;
   description: string;
 }
 
@@ -249,7 +254,7 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
     else await startRun.mutateAsync(body);
   };
 
-  const openConfirm = async (basis: RunDetail | undefined) => {
+  const openConfirm = (basis: RunDetail | undefined) => {
     const count = items?.length ?? 0;
     const changes = bulk
       ? `${count} object${count === 1 ? '' : 's'}`
@@ -260,9 +265,10 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
         : `This makes ${changes} in ${me.tenant.name} as ${me.user.upn}. It’s audited${def.inputs && 'reason' in def.inputs ? ' with your reason' : ''}.`
       : `This runs the playbook’s read steps as ${me.user.upn}.`;
     if (!writes || confirmType === 'none') return void go().catch(() => undefined);
-    if (confirmType === 'click') return setConfirm({ text: null, description });
-    const text = bulk ? bulkConfirmationText(count) : await confirmationText(def, basis ?? null, me.user);
-    setConfirm({ text, description });
+    const message = bulk ? null : confirmationMessage(basis);
+    if (confirmType === 'click') return setConfirm({ kind: 'click', text: null, message, description });
+    const text = bulk ? bulkConfirmationText(count) : confirmationText(basis);
+    setConfirm({ kind: 'typed', text, message, description });
   };
 
   /** Dry-runs again and waits for the result (used when Run finds the preview expired). */
@@ -285,7 +291,7 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
       setRefreshing(true);
       try {
         const fresh = await refreshPreview();
-        if (fresh?.run.status === 'succeeded') await openConfirm(fresh);
+        if (fresh?.run.status === 'succeeded') openConfirm(fresh);
       } catch {
         // The preview's own error is shown in the drawer.
       } finally {
@@ -293,7 +299,7 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
       }
       return;
     }
-    await openConfirm(detail);
+    openConfirm(detail);
   };
 
   const runError = startRun.error ?? startBulk.error ?? null;

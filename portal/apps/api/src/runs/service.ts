@@ -13,9 +13,16 @@ import {
   type RunError,
   type RunStatus,
   type RunStore,
+  type StepRecord,
 } from '@adminforge/engine';
-import { renderTemplate } from '@adminforge/expressions';
-import { PORTAL_ROLES, type Connection, type Kind, type PortalRole } from '@adminforge/schemas';
+import {
+  confirmationMatches,
+  normalizeConfirmation,
+  PORTAL_ROLES,
+  type Connection,
+  type Kind,
+  type PortalRole,
+} from '@adminforge/schemas';
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { hasRole, requireRole } from '../auth/guards';
 import { isArmed, type SessionRecord } from '../auth/session-store';
@@ -26,6 +33,7 @@ import { SCHEDULED_DATA_ROLES } from '../schedules/service';
 import type { RunQueue } from './queue';
 import { failTree, outdatedRun, pinnedDefinition, rootOf, runOutdated, wroteAnything } from './run-worker';
 import { decisionOf, executedAs } from './store';
+import { confirmMessage, confirmValue, renderConfirm, type ConfirmView } from './confirm';
 import { automationFingerprint, writesInTree, type PlaybookRef } from './fingerprint';
 import {
   RUN_STATUS_ACTIVE as NON_TERMINAL,
@@ -37,7 +45,7 @@ import {
   type TaskRow,
   type TaskView,
 } from './types';
-import { runPlan, runSummary, runView, stepView, taskView } from './views';
+import { runPlan, runSecrets, runSummary, runView, stepView, taskView } from './views';
 
 /** Who is calling (from the request's session). */
 export interface Caller {
@@ -50,7 +58,7 @@ export interface Caller {
 export interface ConfirmationInput {
   /** The dry run (same person, definition version and inputs, ≤ 15 minutes old) this execution was confirmed from. */
   previewRunId?: string;
-  /** typed confirms: what the person typed (compared trimmed, case-insensitive). */
+  /** typed confirms: what the person typed (`confirmationMatches`: NFKC, invisible characters and case ignored). */
   confirmation?: string;
 }
 
@@ -158,8 +166,6 @@ export function canonicalJson(value: unknown): string {
       .join(',')}}`;
   return JSON.stringify(value ?? null);
 }
-
-const fold = (s: string) => s.trim().toLocaleLowerCase('en-US');
 
 interface Confirmed {
   previewRunId: string;
@@ -464,14 +470,19 @@ export class RunService {
     return preview;
   }
 
-  /** `confirm.value` rendered against the preview: its inputs and its stored (secret-masked) step outputs. */
+  /**
+   * The scope `confirm.value` and `confirm.message` render against: the preview's inputs and its stored (secret-masked)
+   * top-level step outputs, as the person who previewed (only they can confirm it). `records`: the preview's steps when
+   * the caller already has them.
+   */
   private async previewScope(
     def: AutomationDefinition,
     preview: RunRow,
     session: SessionRecord,
+    records?: readonly StepRecord[],
   ): Promise<Record<string, unknown>> {
     const steps: Record<string, { output: unknown; status: string; error: unknown }> = {};
-    for (const r of await this.deps.repo.listSteps(preview.id)) {
+    for (const r of records ?? (await this.deps.repo.listSteps(preview.id))) {
       if (/[[#>]/.test(r.path)) continue; // top-level steps only (latest record wins: listSteps is in seq order)
       steps[r.stepId] = {
         output: r.output === null ? undefined : r.output,
@@ -489,6 +500,36 @@ export class RunService {
     };
   }
 
+  /**
+   * The confirmation shown with a preview (GET /api/runs/:id → `run.confirm`): the playbook's `confirm` rendered from
+   * the preview, so the dialog shows real names instead of `${ … }` and the value to type is the one `checkTyped`
+   * compares with. Only for the person who previewed (nobody else can confirm it), and only on a succeeded top-level
+   * interactive dry run; bulk previews confirm the number of items, which the browser knows.
+   */
+  private async previewConfirm(
+    caller: Caller,
+    row: RunRow,
+    def: AutomationDefinition | null,
+    records: readonly StepRecord[],
+  ): Promise<ConfirmView | null> {
+    if (
+      !def?.confirm ||
+      !row.dryRun ||
+      row.status !== 'succeeded' ||
+      row.trigger !== 'interactive' ||
+      row.parentRunId !== null ||
+      row.initiatorOid !== caller.session.userOid
+    )
+      return null;
+    const scope = await this.previewScope(def, row, caller.session, records);
+    return renderConfirm(def.confirm, scope, runSecrets(row, def.inputs));
+  }
+
+  /**
+   * Typed confirmation: what the person typed must match `confirm.value` rendered from the preview (bulk: the number of
+   * items), compared by `confirmationMatches` — the browser's comparison too. The refusal never contains the expected
+   * value: the author's message is used only when it doesn't.
+   */
   private async checkTyped(
     def: AutomationDefinition,
     preview: RunRow,
@@ -501,40 +542,35 @@ export class RunService {
     let scope: Record<string, unknown> | undefined;
     if (expected === undefined) {
       scope = await this.previewScope(def, preview, caller.session);
-      let v: unknown;
-      try {
-        v = await renderTemplate(confirm.value, scope);
-      } catch {
-        v = undefined;
-      }
-      // Only plain values can be typed; a masked secret (object) or a missing value can never be the confirmation.
-      if (typeof v !== 'string' && typeof v !== 'number')
+      // Only plain text can be typed; a masked secret, a missing value or nothing at all can never be the confirmation.
+      const v = await confirmValue(confirm, scope, runSecrets(preview, def.inputs));
+      if (v === null)
         throw new AppError(
           409,
           'preview_stale',
           'The preview did not produce the value to confirm. Preview it again.',
         );
-      expected = String(v);
+      expected = v;
     }
-    if (typed !== undefined && fold(typed) === fold(expected) && fold(expected) !== '') return;
+    if (confirmationMatches(typed, expected)) return;
     let message =
       expectedOverride !== undefined
         ? 'Type the number of items to confirm this change.'
         : "The confirmation doesn't match.";
     if (expectedOverride === undefined && confirm.message) {
-      try {
-        const m = await renderTemplate(
-          confirm.message,
-          scope ?? (await this.previewScope(def, preview, caller.session)),
-        );
-        // Never echo the expected value, even if the author's message contains it.
-        if (typeof m === 'string' && m.trim() && !fold(m).includes(fold(expected))) message = m;
-      } catch {
-        // keep the generic message
-      }
+      const m = await confirmMessage(
+        confirm,
+        scope ?? (await this.previewScope(def, preview, caller.session)),
+        runSecrets(preview, def.inputs),
+      );
+      // Never echo the expected value, even if the author's message contains it.
+      if (m && !normalizeConfirmation(m).includes(normalizeConfirmation(expected))) message = m;
     }
     throw new AppError(422, 'confirmation_mismatch', message, {
-      hint: 'Type the confirmation exactly as asked (case does not matter).',
+      hint:
+        expectedOverride !== undefined
+          ? 'Type the number of items shown in the dialog.'
+          : 'Type the text shown in the dialog. Case, extra spaces and invisible characters don’t matter; letters from another alphabet that only look the same do, so copy the text when the dialog says it has any.',
     });
   }
 
@@ -933,7 +969,11 @@ export class RunService {
       return step?.type === 'manual' ? step.inputs : undefined;
     };
     return {
-      run: { ...runView(row, def, steps, params), previewRunId },
+      run: {
+        ...runView(row, def, steps, params),
+        previewRunId,
+        confirm: await this.previewConfirm(caller, row, def, steps),
+      },
       steps: steps.map(stepView),
       plan: runPlan(steps),
       tasks: tasks.map((t) => taskView(t, this.canDecide(caller.session, row, t), manualParams(t))),

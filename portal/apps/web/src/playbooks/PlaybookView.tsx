@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { confirmationMatches, unusualCharacters, type UnusualCharacter } from '@adminforge/schemas';
 import { errorText } from '../lib/errors';
 import {
   Button,
@@ -361,8 +362,63 @@ export function PlaybookSections({ flow, problems }: { flow: PlaybookFlow; probl
 }
 
 /**
- * The confirmation before a write: what will change, and (typed confirmation) the exact text to type. The server
- * checks the text too; its 422 message appears under the field and the dialog stays open.
+ * The text to type, with every character that isn't plain marked where it sits: look-alikes highlighted, invisible
+ * ones shown by their code point (not selectable, so copying the text copies only the text).
+ */
+function ConfirmText({ text, unusual }: { text: string; unusual: UnusualCharacter[] }) {
+  const marked = new Map(unusual.map((u) => [u.char, u]));
+  return (
+    <code className="rounded-sm bg-sunken px-1 py-0.5 break-all text-fg">
+      {Array.from(text).map((ch, i) => {
+        const u = marked.get(ch);
+        if (!u) return ch;
+        return u.invisible ? (
+          <span key={i}>
+            {ch}
+            <span
+              aria-hidden
+              className="mx-px rounded-sm bg-warn-subtle px-0.5 text-2xs text-warn select-none"
+            >
+              {u.codePoint}
+            </span>
+          </span>
+        ) : (
+          <span key={i} className="rounded-sm bg-warn-subtle text-warn">
+            {ch}
+          </span>
+        );
+      })}
+    </code>
+  );
+}
+
+/** What in the text to type isn't a plain letter or digit: an app or object name may imitate another one. */
+function UnusualNote({ unusual }: { unusual: UnusualCharacter[] }) {
+  return (
+    <span role="note" aria-label="Characters to check" className="flex flex-col gap-1 text-fg-2">
+      <span>
+        <span className="font-semibold text-warn">Check the name:</span> it contains{' '}
+        {unusual.length === 1 ? 'a character that isn’t' : 'characters that aren’t'} a plain letter or digit —{' '}
+        {unusual.map((u, i) => (
+          <span key={u.codePoint}>
+            {i > 0 && ', '}
+            {u.invisible ? 'an ' : ''}
+            {!u.invisible && <span className="font-mono text-fg">{u.char} </span>}
+            {u.kind} ({u.codePoint})
+          </span>
+        ))}
+        .
+      </span>
+      <span>Copy it from here to type it exactly. Case, spacing and invisible characters don’t count.</span>
+    </span>
+  );
+}
+
+/**
+ * The confirmation before a write: what will change, the playbook's message and (typed confirmation) the text to
+ * type — both rendered by the API from the preview, never evaluated here. Typed text is compared the API's way
+ * (`confirmationMatches`), and the API checks it again; its 422 message appears under the field and the dialog stays
+ * open.
  */
 function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }) {
   const { def } = flow;
@@ -372,14 +428,16 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const count = flow.items?.length ?? 0;
-  const matches = confirm.text === null || typed === confirm.text;
+  const asksToType = confirm.kind === 'typed';
+  const unusual = useMemo(() => (confirm.text ? unusualCharacters(confirm.text) : []), [confirm.text]);
+  const matches = !asksToType || (confirm.text !== null && confirmationMatches(typed, confirm.text));
   const submit = async () => {
     if (!matches || pending) return;
     setPending(true);
     setError(null);
     setFailure(null);
     try {
-      await flow.run.go(confirm.text === null ? undefined : typed);
+      await flow.run.go(asksToType ? typed : undefined);
       flow.closeConfirm();
     } catch (e) {
       if (isConfirmationError(e)) setError((e as Error).message);
@@ -425,16 +483,22 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
             ))}
           </ul>
         )}
-        {def.confirm?.message && !flow.bulk && <p className="text-sm text-fg-2">{def.confirm.message}</p>}
-        {confirm.text !== null && (
+        {confirm.message && <p className="text-sm text-fg-2">{confirm.message}</p>}
+        {asksToType && confirm.text === null && (
+          <p role="alert" className="rounded-md bg-crit-subtle px-3 py-2 text-sm text-crit">
+            The preview didn’t produce the text to type, so this can’t be confirmed. Preview again; if it
+            keeps happening, tell the playbook’s owner.
+          </p>
+        )}
+        {asksToType && confirm.text !== null && (
           <TextField
             label={
               <>
-                Type <code className="rounded-sm bg-sunken px-1 py-0.5 text-fg">{confirm.text}</code> to
-                confirm
+                Type <ConfirmText text={confirm.text} unusual={unusual} /> to confirm
                 {flow.bulk ? ` changing ${count} object${count === 1 ? '' : 's'}` : ''}
               </>
             }
+            hint={unusual.length > 0 ? <UnusualNote unusual={unusual} /> : undefined}
             value={typed}
             onChange={(e) => {
               setTyped(e.target.value);

@@ -16,8 +16,9 @@ import { assertCsrf } from '../security/csrf';
  * - POST /api/runs/bulk {playbook, version?, items: object[], inputsTemplate?, dryRun?, concurrency?, stopOnError?, previewRunId?, confirmation?} → 202 {runId, status, items}
  *   Executing (dryRun: false) a playbook with a `confirm` block needs `previewRunId` — a succeeded dry run by the same
  *   person of the same definition version with identical inputs/items, ≤ 15 min old (409 preview_required /
- *   preview_stale) — and for `confirm.type: typed` the `confirmation` text (bulk: the number of items), compared
- *   trimmed and case-insensitive (422 confirmation_mismatch; the expected value is never returned).
+ *   preview_stale) — and for `confirm.type: typed` the `confirmation` text (bulk: the number of items), compared by
+ *   `confirmationMatches` (422 confirmation_mismatch; the expected value is never in an error). The preview's own
+ *   GET /api/runs/:id carries it, rendered for the person who previewed (`run.confirm`).
  * - GET  /api/runs?scope=mine|all&status=active|<s>,<s>&playbook=&from=&to=&parent=&limit=&cursor= → {items: RunSummary[], cursor?}
  * - GET  /api/runs/:id → {run, steps, plan, tasks, children}
  * - GET  /api/runs/:id/events (SSE, Last-Event-ID) → data {id, type:'run'|'step'|'log'|'progress', ts, stepSeq, data}; `event: end` when finished

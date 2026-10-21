@@ -390,6 +390,12 @@ export function previewDetail(
       outputs: { summary: 'Sign-in disabled and sessions revoked for a.lee@example.com' },
       error: null,
       waiting: null,
+      // Rendered by the API from the preview (the person who previewed): what the confirmation dialog shows.
+      confirm: {
+        type: 'typed',
+        value: 'a.lee@example.com',
+        message: 'Type the user’s sign-in name to confirm.',
+      },
     },
     steps: [
       step(1, 'lookup', { output: lookupOutput }),

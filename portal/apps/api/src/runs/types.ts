@@ -8,6 +8,7 @@ import type {
   RunStatus,
   StepRecord,
 } from '@adminforge/engine';
+import type { ConfirmView } from './confirm';
 
 /**
  * Storage + API shapes for runs (§8 `runs`, `run_steps`, `run_step_events`, `approvals`). The engine sees RunRecord;
@@ -237,6 +238,11 @@ export interface RunView extends RunSummary {
   error: RunError | null;
   /** The dry run this execution was confirmed from (playbooks with a confirm block), else null. */
   previewRunId: string | null;
+  /**
+   * GET /api/runs/:id on the caller's own succeeded preview of a playbook with a confirm block: the confirmation
+   * rendered from it (message, and for typed confirms the text to type); null otherwise.
+   */
+  confirm?: ConfirmView | null;
   /** What the run is parked on, when it is. */
   waiting: {
     kind: 'approval' | 'manual' | 'arm' | 'reauth' | 'wait' | 'child';

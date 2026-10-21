@@ -547,8 +547,9 @@ else gets 404 `run_not_found` (not 403).
   `playbook` is a playbook or runbook key. `version`, if sent, must be the current version.
 - **Preview then confirm:** executing a playbook with a `confirm` block needs `previewRunId` — a **succeeded dry run**
   by the same person, of the same definition version and sha256, with identical inputs, ≤ 15 minutes old. For
-  `confirm.type: typed` also `confirmation` (≤ 500 chars), compared trimmed and case-insensitively; the expected value
-  is never returned.
+  `confirm.type: typed` also `confirmation` (≤ 500 chars), compared as the browser compares it (`confirmationMatches`
+  in `@adminforge/schemas`: Unicode NFKC, invisible format characters removed, whitespace collapsed and trimmed, case
+  ignored; letters of another script stay different); an error never contains the expected value.
 - **Response:** 202 `{runId, status}`. Audited `run.created` (inputs redacted per `redact: true`).
 - **Errors:** `definition_not_found` 404, `version_superseded` 409 (reload), `definition_retired` 409,
   `limit_exceeded` 422, `forbidden` 403, `invalid_inputs` 400, `preview_required` 409, `preview_stale` 409,
@@ -588,9 +589,14 @@ else gets 404 `run_not_found` (not 403).
 
 - **Who:** a run viewer (above).
 - **Response:** `{run, steps, plan, tasks, children}`:
-  - `run` — RunSummary plus `definitionSha256, correlationId, inputs, outputs, error, previewRunId, waiting`;
+  - `run` — RunSummary plus `definitionSha256, correlationId, inputs, outputs, error, previewRunId, waiting, confirm`;
     `inputs` are redacted per `redact: true`, `outputs` have secrets masked; `waiting` is `null` or
     `{kind, path, stepId, since, wakeAt?}` with `kind` one of `approval`, `manual`, `wait`, `child`, `arm`, `reauth`.
+    `confirm` is `null` except on the caller's own succeeded single-run preview of a definition with a `confirm` block:
+    `{type: 'typed' | 'click', value, message}`, the confirmation rendered from the preview's inputs and step outputs —
+    `value` is the text a typed confirmation is compared with (null when the preview didn't produce it: the run can't be
+    confirmed), `message` the author's message (null when there is none, it didn't render, or it would show a
+    `redact: true` input).
   - `steps[]` —
     `seq, stepId, path, type, status, mode, attempt, actorOid, request, plan, output, error, msRequestId, startedAt, endedAt`.
   - `plan[]` — dry-run plan entries; `tasks[]` — approval/manual tasks with `canDecide`; `children[]` — RunSummary.

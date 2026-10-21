@@ -5,6 +5,7 @@ import { ArrowSquareOutIcon, Badge, cn, STATUS_ICON, type StatusTone } from '@ad
 import { useMe } from '../lib/session';
 import { Callout } from '../ops/ui';
 import { serviceLabel } from '../runs/PlanView';
+import { staticConfirmMessage } from './confirm';
 import { capabilitiesQuery, type Capabilities } from './contracts';
 
 /** Generic Entra PIM "My roles → activate" blade (not tenant-specific). */
@@ -45,7 +46,7 @@ export function RiskBanner({ def, bulkCount }: { def: Playbook | Runbook; bulkCo
     lines.push(
       bulkCount
         ? 'You’ll type the number of items to confirm.'
-        : (def.confirm.message ?? 'You’ll type a confirmation before it runs.'),
+        : (staticConfirmMessage(def) ?? 'You’ll type a confirmation before it runs.'),
     );
   else if (def.confirm?.type === 'click') lines.push('You’ll confirm before it runs.');
   if (def.approval?.required)

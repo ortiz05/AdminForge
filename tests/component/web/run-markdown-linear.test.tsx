@@ -1,4 +1,3 @@
-import { renderToStaticMarkup } from 'react-dom/server';
 import { render, screen } from '@testing-library/react';
 import { Markdown } from '@adminforge/web/src/runs/Markdown';
 
@@ -6,32 +5,7 @@ import { Markdown } from '@adminforge/web/src/runs/Markdown';
 // thread over text that can carry values from data. Its link pattern let a label hold "[" and a target hold "(", so
 // each "[" scanned to the end of the text: 64,000 "[" froze the page for seconds — the pattern S-21 fixed in the
 // Markdown widget. A label now ends at the next "[" or "]" and a target at the next "(", ")" or whitespace, as there.
-const BUDGET_MS = 250;
-const N = 64_000;
-
-function timed(fn: () => unknown): number {
-  const t0 = performance.now();
-  fn();
-  return performance.now() - t0;
-}
-
-describe('run Markdown on hostile input', () => {
-  it.each([
-    ['64,000 "["', '['.repeat(N)],
-    ['"[a" repeated', '[a'.repeat(N / 2)],
-    ['"[x](a" repeated (links never closed)', '[x](a'.repeat(N / 5)],
-    ['a label then a target that never closes', `[${'a'.repeat(N / 2)}](${'b'.repeat(N / 2)}`],
-    ['"[a](" repeated', '[a]('.repeat(N / 4)],
-    ['64,000 "*"', '*'.repeat(N)],
-    ['"**a" repeated', '**a'.repeat(N / 3)],
-    ['64,000 "`"', '`'.repeat(N)],
-    ['64,000 "\\"', '\\'.repeat(N)],
-    ['a mix of every delimiter', '[*`\\](_'.repeat(N / 7)],
-  ])('%s renders quickly', { retry: 2 }, (_label, source) => {
-    expect(timed(() => renderToStaticMarkup(<Markdown source={source} />))).toBeLessThan(BUDGET_MS);
-  });
-});
-
+// The timing cases are in run-markdown-linear.scale.test.tsx (the scale project runs one file at a time).
 describe('run Markdown links', () => {
   it('an unescaped "[" starts a new label; escaped brackets stay in one', () => {
     const { container } = render(<Markdown source={'[a [b](/runs) and [\\[c\\]](/approvals)'} />);

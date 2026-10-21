@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react';
  * at enterprise size. They run in the `scale` project — after the others and one file at a time (`pnpm test`) — so
  * another project's files can't take the CPU and fail a budget.
  */
-const SCALE = '**/*.scale.test.ts';
+const SCALE = '**/*.scale.test.{ts,tsx}';
 
 /**
  * `*.pwsh.test.ts` (any folder): tests that start real PowerShell (`pwsh`: the runner's workers, Pester). They run in
@@ -43,6 +43,7 @@ export default defineConfig({
         test: {
           name: 'component',
           include: ['component/**/*.test.tsx'],
+          exclude: [SCALE],
           environment: 'jsdom',
           setupFiles: ['./component/setup.ts'],
           testTimeout: PARALLEL_TEST_TIMEOUT,

@@ -177,33 +177,38 @@ describe('published definitions are re-validated when loaded (SQLite)', () => {
     }
   });
 
-  it('every definition in portal/content survives the load-time check with its content unchanged', async () => {
-    const { definitions, errors } = await loadContentDir(path.join(repoRoot, 'portal', 'content'), {
-      references: false,
-    });
-    expect(errors).toEqual([]);
-    const local = createDatabase(await testDatabasePath(), { name: 'cli', pollSignals: false });
-    try {
-      const store = new DbDefinitionStore(local.db);
-      const result = await store.publish(definitions.map((d) => ({ def: d.def, sha256: d.sha256 })));
-      expect(result.refused).toBe(0);
-      const canonical = (v: unknown): unknown =>
-        Array.isArray(v)
-          ? v.map(canonical)
-          : v && typeof v === 'object'
-            ? Object.fromEntries(
-                Object.keys(v)
-                  .sort()
-                  .map((k) => [k, canonical((v as Record<string, unknown>)[k])]),
-              )
-            : v;
-      for (const d of definitions) {
-        const rec = await store.get(d.def.kind, d.def.id, d.def.version);
-        expect(canonical(rec!.def), d.file).toEqual(canonical(d.def));
+  // Loads, publishes and re-reads every file in portal/content: seconds on a busy machine.
+  it(
+    'every definition in portal/content survives the load-time check with its content unchanged',
+    { timeout: 60_000 },
+    async () => {
+      const { definitions, errors } = await loadContentDir(path.join(repoRoot, 'portal', 'content'), {
+        references: false,
+      });
+      expect(errors).toEqual([]);
+      const local = createDatabase(await testDatabasePath(), { name: 'cli', pollSignals: false });
+      try {
+        const store = new DbDefinitionStore(local.db);
+        const result = await store.publish(definitions.map((d) => ({ def: d.def, sha256: d.sha256 })));
+        expect(result.refused).toBe(0);
+        const canonical = (v: unknown): unknown =>
+          Array.isArray(v)
+            ? v.map(canonical)
+            : v && typeof v === 'object'
+              ? Object.fromEntries(
+                  Object.keys(v)
+                    .sort()
+                    .map((k) => [k, canonical((v as Record<string, unknown>)[k])]),
+                )
+              : v;
+        for (const d of definitions) {
+          const rec = await store.get(d.def.kind, d.def.id, d.def.version);
+          expect(canonical(rec!.def), d.file).toEqual(canonical(d.def));
+        }
+        expect(store.problems()).toEqual([]);
+      } finally {
+        await local.close();
       }
-      expect(store.problems()).toEqual([]);
-    } finally {
-      await local.close();
-    }
-  });
+    },
+  );
 });

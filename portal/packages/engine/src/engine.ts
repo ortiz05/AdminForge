@@ -137,6 +137,11 @@ interface Frame {
   vars: Record<string, unknown>;
   /** A re-check (see `recheck`): stale reads and checks run again; nothing else starts, nothing is sent. */
   recheck?: boolean;
+  /**
+   * In a re-check: whose access reads go out with (the person the guarded write runs as). `actor` stays who the step
+   * ran as the first time, so `user.*` means what it meant then (a transform of `user.oid` before an approval).
+   */
+  callAs?: Actor;
   /** What this frame reused from an earlier pass that must run again before the next write in its scope. */
   rechecks?: Recheck[];
 }
@@ -145,8 +150,8 @@ interface Frame {
 interface Recheck {
   /** Walk order, so a transform runs after the read it is built from. */
   order: number;
-  /** Runs it again as `actor` (who the write it guards runs as). */
-  run: (actor: Actor) => Promise<Flow>;
+  /** Runs it again, its reads going out with `callAs`'s access (who the write it guards runs as). */
+  run: (callAs: Actor) => Promise<Flow>;
   done?: Promise<Flow>;
 }
 
@@ -731,8 +736,13 @@ class Execution {
   /** What a re-check runs again: reads, transforms and asserts (not show-once secrets, not child playbooks). */
   private recheckable(rec: StepRecord): boolean {
     const step = this.byId.get(rec.stepId);
-    if (!step || rec.path.includes('#') || CONTROL.has(step.type) || stepMode(step) !== 'read') return false;
-    if (step.secret || step.secretOutputs) return false;
+    return !!step && !rec.path.includes('#') && this.rerunnable(step);
+  }
+
+  /** A read, transform or assert that is safe to run twice (not `idempotent: false`, no show-once secrets). */
+  private rerunnable(step: Step): boolean {
+    if (CONTROL.has(step.type) || stepMode(step) !== 'read') return false;
+    if (step.secret || step.secretOutputs || step.idempotent === false) return false;
     const handler = this.handlers[step.type];
     return !!handler && !handler.plansItself;
   }
@@ -764,10 +774,16 @@ class Execution {
       );
   }
 
-  /** The frame a re-check runs in: `frame`'s steps and loop variables, as `actor`. */
-  private recheckFrame(frame: Frame, actor: Actor): Frame {
+  /** The frame a re-check runs in: `frame`'s steps and loop variables, as `actor`, reads with `callAs`'s access. */
+  private recheckFrame(frame: Frame, actor: Actor, callAs: Actor): Frame {
     const { prefix, locals, parent, vars } = frame;
-    return { prefix, actor, locals, parent, vars, recheck: true };
+    return { prefix, actor, callAs, locals, parent, vars, recheck: true };
+  }
+
+  /** Whether a re-check is pending around `frame` (this pass reused something stale that no write covered yet). */
+  private chainPending(frame: Frame): boolean {
+    for (let f: Frame | null = frame; f; f = f.parent) if (this.pendingRechecks(f)) return true;
+    return false;
   }
 
   /** Whether a frame still holds something to run again (a write in it hasn't covered it yet). */
@@ -775,24 +791,34 @@ class Execution {
     return (frame.rechecks ?? []).some((u) => !u.done);
   }
 
-  /** Notes a stale step this pass reused: it runs again before the next write in its scope. */
-  private keepForRecheck(step: Step, frame: Frame, path: string) {
-    if (frame.recheck || !this.stale.has(path)) return;
+  /**
+   * Notes a stale step this pass reused — or one it ran fresh while a re-check is pending around it (it may have read
+   * what is stale: a check after an approval on what was read before it) — to run again before the next write in its
+   * scope, as who it ran as.
+   */
+  private keepForRecheck(step: Step, frame: Frame, path: string, fresh = false) {
+    if (frame.recheck) return;
+    if (fresh) {
+      if (this.dryRun || !this.rerunnable(step) || !this.chainPending(frame)) return;
+      this.stale.add(path);
+    } else if (!this.stale.has(path)) return;
+    const asWalked = { ...frame.actor };
     (frame.rechecks ??= []).push({
       order: this.recheckOrder++,
-      run: (actor) => this.runLeaf(step, this.recheckFrame(frame, actor)),
+      run: (callAs) => this.runLeaf(step, this.recheckFrame(frame, asWalked, callAs)),
     });
   }
 
   /**
    * Before a write is sent: runs again, in walk order and as the person the write runs as, what this pass reused from
    * an earlier one in the write's scope (its frame and the frames around it). Returns the flow to stop with when one of
-   * them now fails, or null to send. A sign-in that a step needs is thrown, and the write parks on it.
+   * them now fails, else whether anything was checked again (the write is then built and authorised anew). A sign-in
+   * that a step needs is thrown, and the write parks on it.
    */
-  private async recheck(frame: Frame, path: string): Promise<Flow | null> {
+  private async recheck(frame: Frame, path: string): Promise<Flow | boolean> {
     const units: Recheck[] = [];
     for (let f: Frame | null = frame; f; f = f.parent) units.push(...(f.rechecks ?? []));
-    if (!units.length) return null;
+    if (!units.length) return false;
     units.sort((a, b) => a.order - b.order);
     if (units.some((u) => !u.done))
       await this.emit(null, {
@@ -808,7 +834,7 @@ class Execution {
       const flow = await u.done;
       if (flow.kind !== 'ok') return flow;
     }
-    return null;
+    return true;
   }
 
   /** A stale step run again: a new attempt (its `when` isn't evaluated again — it ran). */
@@ -820,6 +846,12 @@ class Execution {
     mode: Mode,
   ): Promise<Flow> {
     this.stale.delete(path);
+    const before = this.records.get(path);
+    // `/me` read with someone else's access is someone else: what it read for the person it ran as stands.
+    if (frame.callAs && frame.callAs.oid !== frame.actor.oid && readsMe(step) && before) {
+      this.setView(frame, step.id, this.viewOf(before));
+      return OK;
+    }
     const outcome = await this.attempt({
       stepId: step.id,
       type: step.type,
@@ -833,7 +865,7 @@ class Execution {
       describe: step.describe,
       dryRunOutput: step.dryRunOutput,
       existing: undefined,
-      firstAttempt: (this.attempts.get(path) ?? 0) + 1,
+      firstAttempt: Math.max(this.attempts.get(path) ?? 0, before?.attempt ?? 0) + 1,
     });
     if (outcome.kind === 'flow') return outcome.flow;
     this.setView(frame, step.id, this.viewOf(outcome.rec));
@@ -1124,10 +1156,12 @@ class Execution {
     });
     if (outcome.kind === 'ok') {
       this.setView(frame, step.id, this.viewOf(outcome.rec));
+      this.keepForRecheck(step, frame, path, true);
       return OK;
     }
     if (outcome.kind === 'failed') {
       this.setView(frame, step.id, this.viewOf(outcome.rec));
+      this.keepForRecheck(step, frame, path, true);
       return this.policy(step, outcome.rec.error!);
     }
     return outcome.flow;
@@ -1154,23 +1188,25 @@ class Execution {
     /** Attempt number of a new record (a step run again continues its count). Default 1. */
     firstAttempt?: number;
     /** Once the identity is resolved, before the first send: re-checks on resume (see `recheck`). */
-    beforeSend?: () => Promise<Flow | null>;
+    beforeSend?: () => Promise<Flow | boolean>;
   }): Promise<
     { kind: 'ok'; rec: StepRecord } | { kind: 'failed'; rec: StepRecord } | { kind: 'flow'; flow: Flow }
   > {
     const { frame, handler, path, mode } = a;
+    // Who the step goes out as: in a re-check, the person the guarded write runs as (see `recheck`).
+    const caller = frame.callAs ?? frame.actor;
     const seqRef: { seq: number | null } = { seq: null };
     const spec = a.compensation ? null : secretSpec(a.body as { secret?: boolean; secretOutputs?: string[] });
     const fail = async (err: unknown, rec?: StepRecord) => {
       const error = toRunError(err, { stepId: a.stepId, path });
       const r =
         rec ??
-        this.newRecord(a.stepId, a.type, path, mode, frame.actor, {
+        this.newRecord(a.stepId, a.type, path, mode, caller, {
           attempt: a.existing
             ? a.existing.attempt + (a.existing.status === 'retried' ? 1 : 0)
             : (a.firstAttempt ?? 1),
         });
-      await this.close(r, frame.actor, { status: 'failed', error });
+      await this.close(r, caller, { status: 'failed', error });
       return { kind: 'failed' as const, rec: r };
     };
 
@@ -1208,7 +1244,7 @@ class Execution {
     const mockedChild = handler.plansItself === true && !!intercepted && 'output' in intercepted;
     const planSelf = planned && !mockedChild;
     if (planSelf && (!delegate || intercepted)) {
-      const rec = this.newRecord(a.stepId, a.type, path, mode, frame.actor, {
+      const rec = this.newRecord(a.stepId, a.type, path, mode, caller, {
         request: prep.request,
         plan: [entry],
         ...(a.existing ? { seq: a.existing.seq } : {}),
@@ -1226,7 +1262,7 @@ class Execution {
         return fail(err, rec);
       }
       // Dry runs produce no real secrets: mask whatever dryRunOutput/mocks say, deliver nothing.
-      await this.close(rec, frame.actor, {
+      await this.close(rec, caller, {
         status: 'planned',
         output: extractSecrets(output ?? null, spec).masked ?? null,
       });
@@ -1240,41 +1276,48 @@ class Execution {
       return fail(redactedValueError());
 
     // Identity for external steps (write steps refuse to run unless the actor is armed). Child playbooks resolve their own.
-    let identity: ResolvedIdentity | null = null;
-    if (handler.external && !handler.plansItself) {
+    const resolveIdentity = async (): Promise<
+      { identity: ResolvedIdentity } | Awaited<ReturnType<typeof fail>> | { kind: 'flow'; flow: Flow }
+    > => {
       try {
-        identity = await this.engine.opts.identity.resolve(this.run, frame.actor, mode);
+        const identity = await this.engine.opts.identity.resolve(this.run, caller, mode);
         if (mode === 'write' && identity.mode !== 'write') throw new IdentityUnavailable('not_armed');
+        return { identity };
       } catch (err) {
         if (!(err instanceof IdentityUnavailable)) return fail(err);
         // A step run again for a write: the write parks on the sign-in, not this step (see `recheck`).
         if (frame.recheck) throw err;
         return { kind: 'flow', flow: await this.parkIdentity(a, err) };
       }
+    };
+    let identity: ResolvedIdentity | null = null;
+    if (handler.external && !handler.plansItself) {
+      const r = await resolveIdentity();
+      if (!('identity' in r)) return r;
+      identity = r.identity;
     }
 
     // A pass that continues an earlier one reads and checks again before the write goes out (see `recheck`) — not when
     // it only follows a child playbook that already started.
     if (a.beforeSend && !(a.existing?.status === 'waiting' && !a.existing.error)) {
-      let stop: Flow | null;
+      let checked: Flow | boolean;
       try {
-        stop = await a.beforeSend();
+        checked = await a.beforeSend();
       } catch (err) {
         if (err instanceof IdentityUnavailable)
           return { kind: 'flow', flow: await this.parkIdentity(a, err) };
         throw err;
       }
-      if (stop) {
-        // In flight when the worker stopped: the first send may have gone through (and changed what the check read), so
-        // the run doesn't claim nothing happened — someone checks the target.
-        if (
-          stop.kind === 'fail' &&
-          a.existing?.status === 'retried' &&
-          a.existing.error?.code === 'interrupted'
-        ) {
+      if (typeof checked === 'object') {
+        const stop = checked;
+        // Sent before the run stopped (in flight, or failed in a way that may still have taken effect), so the first
+        // send may have gone through — and changed what the check read: the run doesn't claim nothing happened, someone
+        // checks the target.
+        if (stop.kind === 'fail' && a.existing?.status === 'retried') {
+          const inFlight = a.existing.error?.code === 'interrupted';
           const error: RunError = {
             code: 'needs_review',
-            message: `Step ${a.stepId} was in flight when the worker stopped, and ${stop.error.stepId ? `the check ${stop.error.stepId}` : 'a check'} before it no longer holds, so it was not sent again — check whether it took effect.`,
+            message: `Step ${a.stepId} ${inFlight ? 'was in flight when the worker stopped' : 'was sent before the run stopped and may have taken effect'}, and ${stop.error.stepId ? `the check ${stop.error.stepId}` : 'a check'} before it no longer holds, so it was not sent again — check whether it took effect.`,
             stepId: a.stepId,
             path,
             details: {
@@ -1285,25 +1328,32 @@ class Execution {
               },
             },
           };
-          await this.close(a.existing, frame.actor, { status: 'needs_review', error });
+          await this.close(a.existing, caller, { status: 'needs_review', error });
           return { kind: 'flow', flow: { kind: 'fail', error, policy: 'fail', needsReview: true } };
         }
         // Never sent: a write that waited for write access or a sign-in stops waiting.
         if (stop.kind === 'fail' && a.existing?.status === 'waiting')
-          await this.close(a.existing, frame.actor, { status: 'skipped', error: null });
+          await this.close(a.existing, caller, { status: 'skipped', error: null });
         return { kind: 'flow', flow: stop };
       }
-      // The request is built from what was read now.
-      try {
-        prep = await handler.prepare(
-          a.body as never,
-          this.context(a.stepId, path, mode, frame, this.ac.signal, seqRef),
-        );
-      } catch (err) {
-        return fail(err);
+      if (checked) {
+        // Checked again: the request is built from what was read now, with access as it is now (disarmed meanwhile?).
+        try {
+          prep = await handler.prepare(
+            a.body as never,
+            this.context(a.stepId, path, mode, frame, this.ac.signal, seqRef),
+          );
+        } catch (err) {
+          return fail(err);
+        }
+        if (handler.external && !handler.plansItself && !intercepted && containsRedacted(prep.payload))
+          return fail(redactedValueError());
+        if (handler.external && !handler.plansItself) {
+          const r = await resolveIdentity();
+          if (!('identity' in r)) return r;
+          identity = r.identity;
+        }
       }
-      if (handler.external && !handler.plansItself && !intercepted && containsRedacted(prep.payload))
-        return fail(redactedValueError());
     }
 
     let attempt = a.existing
@@ -1313,14 +1363,14 @@ class Execution {
       : (a.firstAttempt ?? 1);
     let reuseSeq = a.existing?.status === 'waiting' ? a.existing.seq : undefined;
     for (;;) {
-      const rec = this.newRecord(a.stepId, a.type, path, mode, frame.actor, {
+      const rec = this.newRecord(a.stepId, a.type, path, mode, caller, {
         attempt,
         request: prep.request,
         ...(reuseSeq !== undefined ? { seq: reuseSeq } : {}),
       });
       reuseSeq = undefined;
       seqRef.seq = rec.seq;
-      await this.save(rec, frame.actor);
+      await this.save(rec, caller);
       const stepAc = new AbortController();
       const signal = AbortSignal.any([this.ac.signal, stepAc.signal]);
       const ctx = { ...this.context(a.stepId, path, mode, frame, signal, seqRef, spec), identity };
@@ -1336,7 +1386,7 @@ class Execution {
         const lost = this.disowned();
         if (lost) return { kind: 'flow', flow: { kind: 'interrupted', why: lost } };
         if (result.park) {
-          await this.close(rec, frame.actor, {
+          await this.close(rec, caller, {
             status: 'waiting',
             plan: result.plan?.length ? result.plan : null,
             output: result.output ?? null,
@@ -1368,7 +1418,7 @@ class Execution {
           frame,
           deliver: !this.dryRun,
         });
-        await this.close(rec, frame.actor, {
+        await this.close(rec, caller, {
           status: planSelf ? 'planned' : 'succeeded',
           output: output ?? null,
           plan: plan.length ? plan : null,
@@ -1383,13 +1433,13 @@ class Execution {
         if (err instanceof IdentityUnavailable) {
           if (frame.recheck) {
             // A step run again for a write: the write parks; this attempt is superseded (see `findStale`).
-            await this.close(rec, frame.actor, {
+            await this.close(rec, caller, {
               status: 'retried',
               error: { code: err.reason, message: err.message, stepId: a.stepId, path },
             });
             throw err;
           }
-          await this.close(rec, frame.actor, {
+          await this.close(rec, caller, {
             status: 'waiting',
             error: { code: err.reason, message: err.message, stepId: a.stepId, path },
             endedAt: null,
@@ -1398,12 +1448,12 @@ class Execution {
           return { kind: 'flow', flow: { kind: 'park', status: err.parkStatus } };
         }
         if (this.ac.signal.aborted) {
-          await this.close(rec, frame.actor, { status: 'cancelled' });
+          await this.close(rec, caller, { status: 'cancelled' });
           return { kind: 'flow', flow: { kind: 'cancelled' } };
         }
         const error = toRunError(err, { stepId: a.stepId, path });
         if (isTransientError(err) && a.retry && attempt <= a.retry.max) {
-          await this.close(rec, frame.actor, { status: 'retried', error });
+          await this.close(rec, caller, { status: 'retried', error });
           const delay = backoff(a.retry, attempt, retryAfterMs(err));
           await this.emit(rec.seq, {
             type: 'log',
@@ -1426,7 +1476,7 @@ class Execution {
           attempt++;
           continue;
         }
-        await this.close(rec, frame.actor, { status: 'failed', error });
+        await this.close(rec, caller, { status: 'failed', error });
         return { kind: 'failed', rec };
       }
     }
@@ -1605,6 +1655,7 @@ class Execution {
         parent: frame,
         vars: { [as]: items[index], index },
         ...(frame.recheck ? { recheck: true } : {}),
+        ...(frame.callAs ? { callAs: frame.callAs } : {}),
       };
       iframes.push(iframe);
       const flow = await this.runSteps(step.steps, iframe);
@@ -1675,11 +1726,13 @@ class Execution {
     this.setView(frame, step.id, this.viewOf(loopRec));
     // Reads and checks reused inside the loop that no write in it has covered: the loop is walked again (its items as
     // recorded) before the next write after it, so they run again and its output is rebuilt (see `recheck`).
-    if (!frame.recheck && iframes.some((f) => this.pendingRechecks(f)))
+    if (!frame.recheck && iframes.some((f) => this.pendingRechecks(f))) {
+      const asWalked = { ...frame.actor };
       (frame.rechecks ??= []).push({
         order: this.recheckOrder++,
-        run: (actor) => this.runForEach(step, this.recheckFrame(frame, actor)),
+        run: (callAs) => this.runForEach(step, this.recheckFrame(frame, asWalked, callAs)),
       });
+    }
     return OK;
   }
 
@@ -2154,6 +2207,15 @@ class Execution {
     };
     return this.end(failures.length ? 'needs_review' : 'compensated', { error });
   }
+}
+
+/** A Graph read of the caller's own `/me` (its answer depends on whose access it goes out with). */
+function readsMe(step: Step): boolean {
+  const me = (path: unknown) => typeof path === 'string' && /^\s*\/me(?:[/?]|$)/.test(path);
+  if (step.type === 'graph') return me((step.request as { path?: unknown }).path);
+  if (step.type === 'graphBatch')
+    return Object.values(step.requests).some((r) => me((r as { path?: unknown }).path));
+  return false;
 }
 
 /** The forEach iterations a step path is inside: `outer[1].inner[0].get` → `['outer[1]', 'inner[0]']`. */

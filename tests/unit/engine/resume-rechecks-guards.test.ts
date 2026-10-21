@@ -493,4 +493,140 @@ describe('engine: a resumed run checks again before its next write', () => {
     expect((await h.exec()).status).toBe('succeeded');
     expect(h.outbound.paths()).toEqual(['/users/a', '/users/b', '/users/b']);
   });
+
+  it('a check that first runs after the pause, on what was read before it, runs again too', async () => {
+    // lookup → approval → sameUser → logOff: sameUser runs fresh after the approval, on the old lookup.
+    const { holder, respond } = sessionHolder();
+    const def = playbook([
+      read('lookup', SESSION),
+      { id: 'approve', type: 'approval' },
+      {
+        id: 'sameUser',
+        type: 'assert',
+        that: "${ $lowercase(steps.lookup.output.userPrincipalName) = 'm.chen@example.com' }",
+        message: 'Someone else holds the session.',
+      },
+      write('logOff', { request: { method: 'DELETE', path: SESSION } }),
+    ]);
+    const h = harness(def, { respond });
+    h.identity.signIn(APPROVER, true);
+    expect((await h.exec()).status).toBe('awaiting_approval');
+    holder.now = OTHER;
+    h.approve('approve');
+    expect(await h.exec()).toMatchObject({ status: 'failed', error: { stepId: 'sameUser' } });
+    expect(deletes(h)).toEqual([]);
+  });
+
+  it('steps before an approval keep who they ran as (user.*), though reads go out with the approver’s access', async () => {
+    const def = playbook([
+      { id: 'me', type: 'transform', expression: '${ user.oid }' },
+      read('mine', '/users/${ user.oid }'),
+      read('whoami', '/me'),
+      { id: 'approve', type: 'approval' },
+      write('addMe', {
+        request: { method: 'POST', path: '/groups/g1/members', body: { id: '${ steps.me.output }' } },
+      }),
+    ]);
+    const h = harness(def);
+    h.identity.signIn(APPROVER, true);
+    await h.exec();
+    h.approve('approve');
+    expect((await h.exec()).status).toBe('succeeded');
+    expect(h.outbound.calls.map((c) => [c.call.method, c.call.path, c.identity.actor.oid])).toEqual([
+      ['GET', `/users/${INITIATOR.oid}`, INITIATOR.oid],
+      ['GET', '/me', INITIATOR.oid],
+      // Read again with the approver's access, for the initiator as before; `/me` would be someone else: kept.
+      ['GET', `/users/${INITIATOR.oid}`, APPROVER.oid],
+      ['POST', '/groups/g1/members', APPROVER.oid],
+    ]);
+    expect(h.outbound.calls.at(-1)!.call.body).toEqual({ id: INITIATOR.oid });
+  });
+
+  it('a read that is not safe to repeat (idempotent: false) is not run again', async () => {
+    const def = playbook([
+      read('once', '/things/once', { request: { method: 'POST', path: '/things/once' }, idempotent: false }),
+      write('w'),
+    ]);
+    const h = harness(def, { armed: false });
+    expect((await h.exec()).status).toBe('awaiting_arm');
+    h.identity.signIn(INITIATOR, true);
+    expect((await h.exec()).status).toBe('succeeded');
+    expect(h.outbound.paths()).toEqual(['/things/once', '/things/w']);
+  });
+
+  it('a write retried after a failure that may have taken effect ends needs_review when its check fails', async () => {
+    const { holder, respond } = sessionHolder();
+    const h = harness(signOut(), { respond });
+    const at = new Date('2026-10-15T11:59:00.000Z');
+    const base = {
+      attempt: 1,
+      actorOid: INITIATOR.oid,
+      request: null,
+      plan: null,
+      msRequestId: null,
+      startedAt: at,
+    };
+    for (const r of [
+      {
+        ...base,
+        seq: 1,
+        stepId: 'lookup',
+        path: 'lookup',
+        type: 'graph',
+        mode: 'read',
+        status: 'succeeded',
+        output: SAME,
+        error: null,
+        endedAt: at,
+      },
+      {
+        ...base,
+        seq: 2,
+        stepId: 'sameUser',
+        path: 'sameUser',
+        type: 'assert',
+        mode: 'read',
+        status: 'succeeded',
+        output: true,
+        error: null,
+        endedAt: at,
+      },
+      // A 503 (it may still have happened), then the worker stopped during the backoff.
+      {
+        ...base,
+        seq: 3,
+        stepId: 'logOff',
+        path: 'logOff',
+        type: 'graph',
+        mode: 'write',
+        status: 'retried',
+        output: null,
+        endedAt: at,
+        error: { code: 'HTTP503', message: 'Service unavailable', stepId: 'logOff', path: 'logOff' },
+      },
+    ] as StepRecord[])
+      await h.store.saveStep('run-1', r, { actor: INITIATOR, dryRun: false });
+    await h.store.updateRun('run-1', { status: 'running', startedAt: h.clock.now() });
+    holder.now = OTHER;
+    const out = await h.exec();
+    expect(out).toMatchObject({ status: 'needs_review', error: { code: 'needs_review', stepId: 'logOff' } });
+    expect(out.error!.message).toMatch(
+      /^Step logOff was sent before the run stopped and may have taken effect/,
+    );
+    expect(deletes(h)).toEqual([]);
+  });
+
+  it('write access is checked again after the re-check, before the write goes out', async () => {
+    const { respond } = sessionHolder();
+    const h = harness(signOut(), { armed: false, respond });
+    expect((await h.exec()).status).toBe('awaiting_arm');
+    h.identity.signIn(INITIATOR, true);
+    h.outbound.respond = (c) => {
+      if (c.method === 'GET') h.identity.signIn(INITIATOR, false); // disarmed while the session is read again
+      return respond(c);
+    };
+    expect((await h.exec()).status).toBe('awaiting_arm');
+    expect(deletes(h)).toEqual([]);
+    expect(h.record('logOff')).toMatchObject({ status: 'waiting', error: { code: 'not_armed' } });
+  });
 });

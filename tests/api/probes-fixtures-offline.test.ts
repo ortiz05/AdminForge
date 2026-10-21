@@ -33,7 +33,8 @@ vi.mock('node:dns/promises', async (importOriginal) => {
     resolveSrv = refuse;
     resolveCaa = refuse;
   }
-  return { ...real, default: { ...real.default, lookup: refuse, Resolver }, lookup: refuse, Resolver };
+  const base = (real as unknown as { default: object }).default;
+  return { ...real, default: { ...base, lookup: refuse, Resolver }, lookup: refuse, Resolver };
 });
 
 vi.mock('node:tls', async (importOriginal) => {
@@ -42,14 +43,14 @@ vi.mock('node:tls', async (importOriginal) => {
     network.tls.push(String(opts?.host));
     throw new Error('TLS is off in this test');
   };
-  return { ...real, default: { ...real.default, connect }, connect };
+  return { ...real, default: { ...(real as unknown as { default: object }).default, connect }, connect };
 });
 
 const CONTENT = path.join(repoRoot, 'portal/content');
 const loaded = await loadContentDir(CONTENT);
 const active = <T>(kind: string) =>
   loaded.definitions
-    .map((d) => d.def as T & { kind: string; id: string; status?: string })
+    .map((d) => d.def as unknown as T & { kind: string; id: string; status?: string })
     .filter((d) => d.kind === kind && d.status !== 'retired' && d.status !== 'draft');
 
 const probes = new Map(active<Probe>('probe').map((p) => [p.id, p]));
@@ -162,7 +163,12 @@ async function sweepAll(app: App): Promise<Map<string, Outcome>> {
   return new Map(
     latest.map((r) => [
       r.probeKey,
-      { probeKey: r.probeKey, status: r.status, code: codes.get(r.probeKey) ?? '', message: r.message },
+      {
+        probeKey: r.probeKey,
+        status: r.status,
+        code: codes.get(r.probeKey) ?? '',
+        message: r.message ?? '',
+      },
     ]),
   );
 }
@@ -200,7 +206,7 @@ describe('probe sweeps in fixtures mode never touch the network', { timeout: 30_
         'probes.portal-tls-certificate',
       ])
         expect.soft(results.get(key), key).toMatchObject({ status: 'ok' });
-      for (const [key, setting] of [
+      for (const [key, setting] of <Array<[string, string]>>[
         ['probes.entra-home-realm-discovery', 'AF_PRIMARY_DOMAIN'],
         ['probes.exchange-autodiscover-service', 'AF_MAIL_DOMAIN, AF_PRIMARY_DOMAIN'],
         ['probes.entra-openid-metadata', 'AF_TENANT_ID'],

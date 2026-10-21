@@ -105,6 +105,8 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
     const view = (
       <ErrorState
         compact
+        // Unframed it may stand in a KPI strip, whose own surface is the hairline colour: keep the panel surface.
+        className={framed ? undefined : 'bg-panel'}
         title={`${label ?? 'This panel'} couldn’t be shown`}
         message="Something in its data couldn’t be displayed. The rest of the page still works, and nothing was changed."
         hint="Try again. If it keeps happening, give a portal administrator the reference and the page you were on."

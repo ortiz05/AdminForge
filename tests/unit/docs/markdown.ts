@@ -126,16 +126,18 @@ export function links(markdown: string): { target: string; line: number }[] {
 
 /**
  * `file.md › Heading › Sub-heading` and `file.md → Heading` references (the file optionally backticked), outside
- * fenced blocks. `rest` is the text after the first arrow, up to the end of the line.
+ * fenced blocks. `rest` is the text after the first arrow to the end of the line, plus the next line when the
+ * paragraph goes on — a heading name is often wrapped onto it.
  */
 export function headingRefs(markdown: string): { file: string; rest: string; line: number }[] {
   const out: { file: string; rest: string; line: number }[] = [];
-  withoutFences(markdown)
-    .split('\n')
-    .forEach((line, i) => {
-      for (const m of line.matchAll(/`?([\w./-]+\.md)`?\s*[›→]\s*(.+)$/g))
-        out.push({ file: m[1]!, rest: m[2]!, line: i + 1 });
-    });
+  const lines = withoutFences(markdown).split('\n');
+  lines.forEach((line, i) => {
+    const next = lines[i + 1] ?? '';
+    const goesOn = next.trim() !== '' && !/^\s*(?:[-*+]\s|\d+\.\s|#|\||>)/.test(next);
+    for (const m of line.matchAll(/`?([\w./-]+\.md)`?\s*[›→]\s*(.+)$/g))
+      out.push({ file: m[1]!, rest: goesOn ? `${m[2]!} ${next.trim()}` : m[2]!, line: i + 1 });
+  });
   return out;
 }
 

@@ -30,15 +30,6 @@ const DOCS = committableFiles()
   )
   .sort();
 
-/**
- * Stale references in files another work package is rewriting at the same time (the skills package owns `.claude/**`
- * in wave 2 of the platform review). Each entry is `<doc> <path>`; the last test fails once an entry is fixed, so the
- * list only shrinks. Never add a file this package owns.
- */
-const KNOWN_STALE = new Set([
-  '.claude/skills/adding-a-page-or-report/SKILL.md tests/content/content-at-scale-subscription-names.test.ts',
-]);
-
 /** A Markdown file a reference names: next to the doc, else from the repository root. */
 function resolveDoc(from: string, file: string): string | undefined {
   for (const rel of [path.posix.join(path.posix.dirname(from), file), file]) {
@@ -59,22 +50,10 @@ describe('documentation references resolve', () => {
   it.each(DOCS)('%s: every backticked repository path exists', (doc) => {
     const missing = codeSpans(read(doc)).flatMap(({ text, line }) =>
       codeSpanPaths(text)
-        .filter((p) => !existsOrIgnored(p) && !KNOWN_STALE.has(`${doc} ${p}`))
+        .filter((p) => !existsOrIgnored(p))
         .map((p) => `${doc}:${line} \`${p}\``),
     );
     expect(missing).toEqual([]);
-  });
-
-  it('lists as known-stale only references that are still broken', () => {
-    const stillBroken = [...KNOWN_STALE].filter((entry) => {
-      const [doc, p] = entry.split(' ') as [string, string];
-      return (
-        DOCS.includes(doc) &&
-        codeSpans(read(doc)).some(({ text }) => codeSpanPaths(text).includes(p)) &&
-        !existsOrIgnored(p)
-      );
-    });
-    expect(stillBroken, 'remove the fixed entries from KNOWN_STALE').toEqual([...KNOWN_STALE]);
   });
 
   it.each(DOCS)('%s: every link points at a file and heading that exist', (doc) => {
@@ -130,6 +109,13 @@ describe('the reference readers', () => {
     expect(existsOrIgnored('portal/apps/web/dist')).toBe(true);
     expect(existsOrIgnored('portal/packages/schemas/generated/page.schema.json')).toBe(true);
     expect(existsOrIgnored('docs/no-such-guide.md')).toBe(false);
+  });
+
+  it('read a heading name wrapped onto the next line of the paragraph', () => {
+    const [ref] = headingRefs('see (`docs/x.md` › Param\n   and input patterns). Next.\n');
+    expect(ref?.rest).toBe('Param and input patterns). Next.');
+    expect(headingChainProblem(ref!.rest, ['Param and input patterns'])).toBeUndefined();
+    expect(headingRefs('see `docs/x.md` › Upgrade\n- a list item\n')[0]?.rest).toBe('Upgrade');
   });
 
   it('follow a heading chain and stop where the sentence goes on', () => {

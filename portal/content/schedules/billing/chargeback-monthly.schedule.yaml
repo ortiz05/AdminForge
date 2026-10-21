@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: billing.chargeback-monthly
-version: 1.0.0
+version: 1.0.1
 title: Monthly Azure chargeback by tag
 summary: >-
   On the 4th of every month at 07:30 UTC, writes last month's amortized Azure cost per value of the chargeback tag
-  (AF_COST_TAG_NAME, default CostCenter) and subscription, with the cost that carries no value, as XLSX, and mails it
-  to the finance team (AF_FINANCE_RECIPIENTS) when it and AF_MAIL_SENDER are configured.
+  (CostCenter unless an administrator set another) and subscription, with the cost that carries no value, as XLSX, and
+  mails it to the finance team once an administrator has set the finance team's address and the portal's mail
+  sender.
 owner: finance-ops
 tags: [billing, cost, finops, chargeback, report]
 every: on the 4th of every month at 07:30

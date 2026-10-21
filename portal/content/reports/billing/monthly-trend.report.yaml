@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: billing.monthly-trend
-version: 1.0.0
+version: 1.0.1
 title: Azure monthly cost trend
 summary: >-
   Azure cost month by month for the last 6 or 12 months across every subscription (or one), by subscription, service,
@@ -61,7 +61,7 @@ params:
     label: Tag key
     default: "${ env.AF_COST_TAG_NAME ? env.AF_COST_TAG_NAME : 'CostCenter' }"
     pattern: "[A-Za-z0-9 _.:@+=-]{1,128}"
-    description: Used when grouping by tag (AF_COST_TAG_NAME).
+    description: Used when grouping by tag; an administrator can set the default (CostCenter otherwise).
   costType:
     type: enum
     label: Cost

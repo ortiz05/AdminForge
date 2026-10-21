@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: billing.cost-analysis
-version: 1.0.0
+version: 1.0.1
 title: Azure cost analysis
 summary: >-
   Slice and dice Azure cost across every subscription: pick the period, group by subscription, resource group, service,
@@ -28,7 +28,7 @@ params:
     values:
       - { value: managementGroup, label: All subscriptions (management group) }
       - { value: billingAccount, label: Billing account }
-    description: Every subscription under AF_COST_MANAGEMENT_GROUP_ID (default the tenant root group), or the billing account in AF_BILLING_ACCOUNT_ID.
+    description: Every subscription under the management group set for cost reporting (by default the tenant root group), or the billing account an administrator set.
   subscriptionId:
     type: string
     format: guid
@@ -82,7 +82,7 @@ params:
     label: Tag key
     default: "${ env.AF_COST_TAG_NAME ? env.AF_COST_TAG_NAME : 'CostCenter' }"
     pattern: "[A-Za-z0-9 _.:@+=-]{1,128}"
-    description: Used when grouping by tag, e.g. CostCenter or Department (AF_COST_TAG_NAME).
+    description: Used when grouping by tag, e.g. CostCenter or Department; an administrator can set the default.
   thenBy:
     type: enum
     label: Then by

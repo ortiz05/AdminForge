@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.budgets
-version: 1.0.1
+version: 1.0.2
 title: Azure budgets
 summary: Cost Management budgets on a subscription with spend so far, forecast and alert rules — which budgets are over, close to their limit or forecast to overrun before the period ends.
 owner: azure-team
@@ -23,7 +23,7 @@ params:
     picker: subscription
     facet: true
     default: "${ env.AF_SUBSCRIPTION_ID }"
-    description: Defaults to the installation's subscription (AF_SUBSCRIPTION_ID).
+    description: Defaults to the installation's subscription.
   nearPercent:
     type: enum
     label: Close to the limit from

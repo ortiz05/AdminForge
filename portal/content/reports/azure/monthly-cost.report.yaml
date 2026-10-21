@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.monthly-cost
-version: 1.1.0
+version: 1.1.1
 title: Azure cost this month and last
 summary: >-
   Actual cost month to date and for the whole of last month across every subscription (or one), by subscription,
@@ -28,7 +28,7 @@ params:
     values:
       - { value: managementGroup, label: All subscriptions (management group) }
       - { value: billingAccount, label: Billing account }
-    description: Every subscription under AF_COST_MANAGEMENT_GROUP_ID (default the tenant root group), or the billing account in AF_BILLING_ACCOUNT_ID.
+    description: Every subscription under the management group set for cost reporting (by default the tenant root group), or the billing account an administrator set.
   subscriptionId:
     type: string
     format: guid

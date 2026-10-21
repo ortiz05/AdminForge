@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.adminforge-group-changes
-version: 1.0.0
+version: 1.0.1
 title: AdminForge role group changes
 summary: >-
   Who added or removed members and owners of AdminForge's own role groups (SG-AdminForge-<environment>-<role>), and
@@ -136,8 +136,8 @@ layout:
     span: 12
     when: ${ $count(groups.value) = 0 }
     text: |
-      **No SG-AdminForge-* groups were found.** Provisioning creates them (`pnpm adminforge provision entra`); until
-      they exist there is nothing to watch.
+      **No SG-AdminForge-* groups were found.** They are created when an administrator sets AdminForge up
+      (provisioning); until they exist there is nothing to watch.
   - widget: table
     id: changes
     span: 12

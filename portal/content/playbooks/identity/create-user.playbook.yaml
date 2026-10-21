@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.create-user
-version: 1.1.1
+version: 1.1.2
 title: Onboard user
 summary: >-
   Creates a cloud user account with a unique sign-in name, sets the manager, adds group memberships, assigns a licence,
@@ -47,7 +47,7 @@ inputs:
     label: Domain
     format: hostname
     required: false
-    description: A verified domain. Defaults to the primary domain configured for AdminForge (AF_PRIMARY_DOMAIN).
+    description: A verified domain. Defaults to the primary domain configured for AdminForge.
   usageLocation: { type: string, label: Usage location, pattern: "^[A-Za-z]{2}$", placeholder: US, description: Two-letter country code (needed for licences). }
   department: { type: string, label: Department, required: false }
   jobTitle: { type: string, label: Job title, required: false }

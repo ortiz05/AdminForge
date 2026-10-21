@@ -1,11 +1,11 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.remove-group-owner
-version: 1.2.1
+version: 1.2.2
 title: Remove group owner
 summary: >-
   Removes an owner from a group. Refuses to remove the last owner, so groups never end up ownerless, and refuses
-  AdminForge's own role groups and accounts marked as protected (AF_PROTECTED_USER_IDS).
+  AdminForge's own role groups and accounts marked as protected, such as break-glass accounts.
 owner: identity-team
 tags: [identity, groups, governance]
 risk: medium

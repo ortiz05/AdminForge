@@ -1,13 +1,13 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: billing.chargeback
-version: 1.0.0
+version: 1.0.1
 title: Azure chargeback by tag
 summary: >-
-  Azure cost per value of a tag (cost centre, department, project — AF_COST_TAG_NAME, default CostCenter) across every
-  subscription, optionally split by subscription, resource group or service, with the share each value carries and how
-  much cost has no value at all — for chargeback and showback. Amortized by default, so reservations and savings plans
-  land with the teams that use them.
+  Azure cost per value of a tag (cost centre, department, project — the chargeback tag, by default CostCenter) across
+  every subscription, optionally split by subscription, resource group or service, with the share each value carries
+  and how much cost has no value at all — for chargeback and showback. Amortized by default, so reservations and
+  savings plans land with the teams that use them.
 owner: finance-ops
 tags: [billing, cost, finops, chargeback, showback, tags]
 area: billing
@@ -40,7 +40,7 @@ params:
     label: Tag key
     default: "${ env.AF_COST_TAG_NAME ? env.AF_COST_TAG_NAME : 'CostCenter' }"
     pattern: "[A-Za-z0-9 _.:@+=-]{1,128}"
-    description: The tag cost is charged back by, e.g. CostCenter or Department (AF_COST_TAG_NAME).
+    description: The tag cost is charged back by, e.g. CostCenter or Department; an administrator can set the default.
   timeframe:
     type: enum
     label: Period

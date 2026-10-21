@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: billing.invoices
-version: 1.0.0
+version: 1.0.1
 title: Billing accounts and invoices
 summary: >-
   The Azure billing accounts you can read (agreement type and state) and the invoices of one of them for the last
@@ -25,7 +25,7 @@ params:
     label: Billing account
     pattern: "[A-Za-z0-9:_.-]{1,200}"
     default: "${ env.AF_BILLING_ACCOUNT_ID }"
-    description: Leave empty for the first billing account you can read (AF_BILLING_ACCOUNT_ID sets the default).
+    description: Leave empty for the first billing account you can read (an administrator can set a default).
   months:
     type: enum
     label: Invoices from

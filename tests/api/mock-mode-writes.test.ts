@@ -105,6 +105,50 @@ describe('the fixture fetch behind the outbound executor', () => {
     expect((await f(`https://graph.microsoft.com/v1.0/users/${ADELE.id}`)).status).toBe(200);
   });
 
+  it('with mock sign-in: a read-only POST no fixture answers still fails (a query is not a write to accept)', async () => {
+    const f = fixtureFetch(mockConfig());
+    const kql = await f(
+      'https://api.loganalytics.io/v1/workspaces/00000000-0000-4000-8000-0000000000ff/query',
+      {
+        method: 'POST',
+        body: JSON.stringify({ query: '// af:nothing.here\nHeartbeat | take 1' }),
+      },
+    );
+    expect(kql.status).toBe(404);
+    expect((await kql.json()).error.message).toBe(MOCK_NO_FIXTURE);
+    const byIds = await f('https://graph.microsoft.com/beta/directoryObjects/getByIds', {
+      method: 'POST',
+      body: JSON.stringify({ ids: [UNKNOWN] }),
+    });
+    expect(byIds.status).toBe(404);
+  });
+
+  it('with mock sign-in: inside a $batch, an unfixtured write is accepted and an unfixtured read names no file', async () => {
+    const f = fixtureFetch(mockConfig());
+    const res = await f('https://graph.microsoft.com/v1.0/$batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        requests: [
+          { id: 'read', method: 'GET', url: `/users/${UNKNOWN}` },
+          { id: 'write', method: 'PATCH', url: `/users/${UNKNOWN}`, body: { accountEnabled: false } },
+          { id: 'known', method: 'GET', url: `/users/${ADELE.id}` },
+        ],
+      }),
+    });
+    expect(res.status).toBe(200);
+    const subs = new Map(
+      ((await res.json()).responses as Array<{ id: string; status: number; body?: unknown }>).map((r) => [
+        r.id,
+        r,
+      ]),
+    );
+    expect(subs.get('read')).toMatchObject({ status: 404, body: { error: { message: MOCK_NO_FIXTURE } } });
+    expect(subs.get('write')).toMatchObject({ status: 204 });
+    expect(subs.get('write')?.body).toBeUndefined();
+    expect(subs.get('known')).toMatchObject({ status: 200, body: { id: ADELE.id } });
+    expect(JSON.stringify([...subs.values()])).not.toMatch(/\.json/);
+  });
+
   it('with Entra sign-in on fixtures: an unfixtured write stays a 404 (never a silent success)', async () => {
     const f = fixtureFetch(entraConfig({ DATA_MODE: 'fixtures' }));
     const res = await f(unfixtured, PATCH);

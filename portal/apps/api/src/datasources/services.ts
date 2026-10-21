@@ -1,4 +1,4 @@
-import { createFixtureFetch, fixtureKey } from '@adminforge/connectors';
+import { createFixtureFetch, evaluate, fixtureKey, type ServiceId } from '@adminforge/connectors';
 import type { Connection } from '@adminforge/schemas';
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { MemorySettingsStore, SqliteSettingsStore, type SettingsStore } from '../admin/settings-store';
@@ -151,35 +151,91 @@ export function createContentServices(
 export const MOCK_NO_FIXTURE =
   'Mock mode has no synthetic data for this request. The API log names the fixture file to add.';
 
+type FixtureError = { error?: { code?: string; message?: string } };
+const isFixtureMissing = (body: unknown): body is FixtureError =>
+  (body as FixtureError | null)?.error?.code === 'FixtureNotFound';
+
+/** A POST that only reads (Resource Graph, KQL, `getByIds`, …: the request policy's list) is not a write to accept. */
+function readsOnly(method: string, url: URL): boolean {
+  if (method === 'GET' || method === 'HEAD') return true;
+  const host = url.hostname.toLowerCase();
+  const service: ServiceId | undefined =
+    host === 'graph.microsoft.com'
+      ? 'graph'
+      : host === 'management.azure.com'
+        ? 'arm'
+        : host === 'api.loganalytics.io' || host === 'api.loganalytics.azure.com'
+          ? 'logAnalytics'
+          : undefined;
+  if (!service) return false;
+  const path = service === 'graph' ? url.pathname.replace(/^\/(v1\.0|beta)(?=\/)/, '') : url.pathname;
+  return evaluate('read', { service, method, path }).allowed;
+}
+
 /**
  * The fixture fetch of DATA_MODE=fixtures (synthetic responses from ADMINFORGE_FIXTURES_DIR, never Microsoft).
  *
- * With **mock sign-in only** (AUTH_MODE=mock, which config.ts refuses in production and off loopback, and which never
- * holds the automation identity) a write no fixture describes is accepted — 204, there is no tenant to change — so
- * write playbooks complete end to end, and a request no fixture answers gets a mock-mode message that names no file;
- * the file to add goes to the API log. With Entra sign-in on fixtures (allowed: a real person is signed in) nothing is
- * accepted that a fixture doesn't describe: an unfixtured write stays a 404 and fails the step.
+ * With **mock sign-in only** (AUTH_MODE=mock, which config.ts refuses in production, off loopback, without fixtures and
+ * with any tenant credential) a write no fixture describes is accepted — 204, there is no tenant to change — so write
+ * playbooks complete end to end. A read no fixture answers (GET, or a read-only POST such as a Resource Graph query)
+ * still fails, with a mock-mode message that names no file — also inside a `$batch` — and the file to add goes to the
+ * API log. With Entra sign-in on fixtures (allowed: a real person is signed in) nothing is accepted that a fixture
+ * doesn't describe: an unfixtured write stays a 404 and fails the step.
  */
 export function fixtureFetch(
   config: Pick<Config, 'AUTH_MODE' | 'ADMINFORGE_FIXTURES_DIR'>,
   log?: Log,
 ): typeof fetch {
-  if (config.AUTH_MODE !== 'mock') return createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR);
-  const fixtures = createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR, { acceptWrites: true });
-  return (async (input: string | URL | Request, init?: RequestInit) => {
-    const res = await fixtures(input, init);
-    if (res.status !== 404) return res;
-    const body = (await res
-      .clone()
-      .json()
-      .catch(() => null)) as { error?: { code?: string } } | null;
-    if (body?.error?.code !== 'FixtureNotFound') return res;
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  const fixtures = createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR);
+  if (config.AUTH_MODE !== 'mock') return fixtures;
+  const missing = (method: string, url: string) =>
     log?.warn(
       { fixture: { method, candidates: fixtureKey(method, url).candidates } },
       'mock mode: no fixture for this request',
     );
+  return (async (input: string | URL | Request, init?: RequestInit) => {
+    const res = await fixtures(input, init);
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const batch =
+      method === 'POST' && url.hostname === 'graph.microsoft.com' && /\/\$batch\/?$/.test(url.pathname);
+    if (res.status !== 404 && !(batch && res.ok)) return res;
+    const body = (await res
+      .clone()
+      .json()
+      .catch(() => null)) as (FixtureError & { responses?: Array<{ body?: unknown }> }) | null;
+    if (batch && res.ok) {
+      const subs = (body?.responses ?? []) as Array<{ id?: string; status?: number; body?: unknown }>;
+      if (!subs.some((r) => isFixtureMissing(r.body))) return res;
+      // The sub-requests, to tell a write (accepted) from a read (the mock message) by id.
+      const sent = new Map(
+        (
+          (
+            JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as {
+              requests?: Array<{ id: string; method?: string; url: string }>;
+            }
+          ).requests ?? []
+        ).map((r) => [r.id, r]),
+      );
+      const version = url.pathname.split('/').filter(Boolean)[0] ?? 'v1.0';
+      for (const r of subs) {
+        if (!isFixtureMissing(r.body)) continue;
+        const sub = sent.get(String(r.id));
+        const subMethod = (sub?.method ?? 'GET').toUpperCase();
+        const subUrl = new URL(`/${version}/${(sub?.url ?? '').replace(/^\//, '')}`, url.origin);
+        if (sub && !readsOnly(subMethod, subUrl)) {
+          r.status = 204;
+          delete r.body;
+          continue;
+        }
+        missing(subMethod, subUrl.href);
+        r.body = { error: { code: 'FixtureNotFound', message: MOCK_NO_FIXTURE } };
+      }
+      return new Response(JSON.stringify(body), { status: res.status, headers: res.headers });
+    }
+    if (!isFixtureMissing(body)) return res;
+    if (!readsOnly(method, url)) return new Response(null, { status: 204, headers: res.headers });
+    missing(method, url.href);
     return new Response(JSON.stringify({ error: { code: 'FixtureNotFound', message: MOCK_NO_FIXTURE } }), {
       status: 404,
       headers: res.headers,

@@ -1,6 +1,6 @@
 # ADR-008: Run on this host first; Azure optional
 
-Status: accepted (2026-10-15); partially implemented
+Status: superseded by ADR-017 (2026-10-20) — was accepted 2026-10-15; partially implemented
 
 > **Implementation status:** AdminForge runs on one host as systemd **user** units (`portal/deploy/systemd`: api,
 > worker, scheduler, runner, plus `adminforge-proxy`, Caddy with `tls internal` for LAN TLS), built with `pnpm build`

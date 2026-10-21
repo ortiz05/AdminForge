@@ -32,8 +32,9 @@ RUN pwsh -NoLogo -NoProfile -NonInteractive -File /build/scripts/install-modules
 # ── Runtime ──────────────────────────────────────────────────────────────────────────────────────
 FROM ${PWSH_IMAGE} AS runtime
 COPY --from=build /usr/local/bin/node /usr/local/bin/node
-RUN groupadd --system adminforge \
- && useradd --system --gid adminforge --create-home --home-dir /home/adminforge --shell /usr/sbin/nologin adminforge
+# A fixed numeric uid: Kubernetes verifies runAsNonRoot only against a number (portal/deploy/kubernetes).
+RUN groupadd --gid 10002 adminforge \
+ && useradd --uid 10002 --gid 10002 --create-home --home-dir /home/adminforge --shell /usr/sbin/nologin adminforge
 
 WORKDIR /app
 # Layout mirrors portal/apps/runner so the bundle finds ps/worker.ps1 and modules.lock.json next to dist/.
@@ -53,8 +54,9 @@ ENV NODE_ENV=production \
     POWERSHELL_UPDATECHECK=Off \
     DOTNET_CLI_TELEMETRY_OPTOUT=1
 
-USER adminforge
-# Listens on all interfaces inside the container only: publish on 127.0.0.1 or an internal network.
+USER 10002:10002
+# Listens on all interfaces inside the container only: publish on 127.0.0.1 or an internal network. As the
+# AdminForge pod's sidecar it listens on the pod's loopback (RUNNER_HOST=127.0.0.1 in the Deployment).
 EXPOSE 3101
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD ["node", "dist/healthcheck.js"]
 STOPSIGNAL SIGTERM

@@ -1,0 +1,49 @@
+# An example installation: copy this folder (outside the repository, or to a private repository of your own), then
+# replace every example value — registry, tag, host name, storage class, the ingress controller's namespace and pod
+# network. Apply with `kubectl apply -k <your copy>`. Nothing here is tenant-specific: the tenant's settings are in
+# the adminforge-env Secret (../../README.md → Secrets).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: adminforge
+resources:
+  - namespace.yaml
+  - ../../base
+  - ingress.yaml
+images:
+  # The images build-images.sh built and pushed — pin a tag (the commit) or, better, the digest.
+  - name: adminforge
+    newName: registry.example.com/adminforge/adminforge
+    newTag: 0123456789ab
+  - name: adminforge-runner
+    newName: registry.example.com/adminforge/adminforge-runner
+    newTag: 0123456789ab
+configMapGenerator:
+  - name: adminforge-config
+    behavior: merge
+    literals:
+      # The ingress controller's pods: they add X-Forwarded-For, and the API trusts that header only from them (rate
+      # limits per address, the audit log's client address). As narrow as your network allows (here: the whole pod
+      # network, which relies on the NetworkPolicy letting only the ingress controller in). Never `true`.
+      - TRUST_PROXY=10.244.0.0/16
+      # With an automation certificate (README.md → Secrets): its path in the pod.
+      # - AF_AUTOMATION_CERT_PATH=/etc/adminforge/automation/automation.pem
+patches:
+  # Block storage for the database (AKS: managed-csi = Azure Disk). Never an Azure Files / NFS class.
+  - target:
+      kind: PersistentVolumeClaim
+      name: adminforge-data
+    patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: managed-csi
+  # Only the ingress controller may open connections to the pod.
+  - target:
+      kind: NetworkPolicy
+      name: adminforge
+    patch: |-
+      - op: add
+        path: /spec/ingress/0/from
+        value:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: ingress-nginx

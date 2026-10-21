@@ -1,15 +1,17 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.portal-readiness
-version: 1.0.3
+version: 1.0.4
 title: AdminForge readiness
-summary: Calls the portal's own /readyz endpoint (API up and database reachable) at the configured public URL and measures latency.
+summary: Calls the portal's own /readyz endpoint (API up, database file readable, run worker and scheduler reporting) at the configured public URL and measures latency.
 owner: portal-admins
 tags: [synthetic, portal, http, sweep-15m]
 group: platform
 remedy: >-
-  AdminForge isn't ready: its API or database didn't answer, so pages may fail to load. The AdminForge administrator
-  checks the API service and its database on the host (docs/troubleshooting.md).
+  AdminForge isn't fully ready. HTTP 503 or no answer: the database file can't be read, or the Ingress can't reach
+  the pod, so pages may not load. HTTP 200 without the expected text means degraded: pages load, but playbook runs or
+  schedules aren't being processed. The AdminForge administrator reads the api container's log first, then checks the
+  database volume (mounted, not full) and the Ingress (docs/troubleshooting.md › Operations symptoms).
 check:
   kind: http
   url: ${ env.PUBLIC_BASE_URL & '/readyz' }

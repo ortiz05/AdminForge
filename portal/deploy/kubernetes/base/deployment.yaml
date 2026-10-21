@@ -1,0 +1,150 @@
+# AdminForge: one pod, one replica (ADR-016/017). The api container is the API, the run worker and the scheduler in
+# one process, and the only writer of the SQLite file on the PersistentVolume; the runner is its PowerShell sidecar on
+# the pod's loopback. Never scale this Deployment past 1: SQLite has one writer, and the volume attaches to one pod
+# (ReadWriteOncePod). `Recreate` stops the old pod before the new one starts — a deploy is a short outage.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adminforge
+  labels:
+    app.kubernetes.io/name: adminforge
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: adminforge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: adminforge
+    spec:
+      serviceAccountName: adminforge
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # Long enough for running playbook steps to reach a checkpoint (the API gives them 10 s, then 5 s more).
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: adminforge
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3300
+          envFrom:
+            # The installation's own settings: tenant, app registrations, TOKEN_CACHE_KEY, RUNNER_SHARED_KEY,
+            # PUBLIC_BASE_URL (made from the env file: README.md → Secrets) …
+            - secretRef:
+                name: adminforge-env
+            # … then the pod's layout (kustomization.yaml): a later source wins, so a copied env file's API_HOST,
+            # DATABASE_PATH or ports can't move the database off the volume or the API off the pod's interface.
+            - configMapRef:
+                name: adminforge-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/adminforge
+            - name: tmp
+              mountPath: /tmp
+            - name: automation-cert
+              mountPath: /etc/adminforge/automation
+              readOnly: true
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            # Migrations run before the API listens: allow a few minutes on a large database.
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+        - name: runner
+          image: adminforge-runner
+          imagePullPolicy: IfNotPresent
+          env:
+            # The pod's loopback only: the api container reaches it; nothing outside the pod can.
+            - name: RUNNER_HOST
+              value: 127.0.0.1
+            - name: RUNNER_PORT
+              value: '3101'
+            # Only the shared key — never the rest of the installation's configuration.
+            - name: RUNNER_SHARED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: adminforge-env
+                  key: RUNNER_SHARED_KEY
+          volumeMounts:
+            - name: runner-tmp
+              mountPath: /tmp
+            - name: runner-home
+              mountPath: /home/adminforge
+          securityContext:
+            runAsUser: 10002
+            runAsGroup: 10002
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            exec:
+              command: [node, dist/healthcheck.js]
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: adminforge-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: runner-tmp
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: runner-home
+          emptyDir:
+            sizeLimit: 256Mi
+        # The automation identity's certificate, when it uses one (AF_AUTOMATION_CERT_PATH=/etc/adminforge/automation/
+        # automation.pem); optional, so a secret-based installation needs no such Secret.
+        - name: automation-cert
+          secret:
+            secretName: adminforge-automation-cert
+            optional: true
+            # Readable by the api container through the pod's fsGroup (the files belong to root).
+            defaultMode: 0440

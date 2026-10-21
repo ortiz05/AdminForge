@@ -1,0 +1,31 @@
+# AdminForge on Kubernetes (ADR-017) — the base. Copy overlays/example and fill in your registry, host name, storage
+# class and ingress; create the Secrets from your env file (README.md). Nothing tenant-specific lives here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: adminforge
+resources:
+  - serviceaccount.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  # How the pod is laid out — the same for every installation, and stronger than the env file: listed after the
+  # Secret in the Deployment, these win over a copied env file's own API_HOST, DATABASE_PATH, … The installation's
+  # settings (tenant, apps, keys, PUBLIC_BASE_URL) come from the adminforge-env Secret; TRUST_PROXY from the overlay.
+  - name: adminforge-config
+    literals:
+      - NODE_ENV=production
+      - API_HOST=0.0.0.0
+      - API_PORT=3300
+      - DATABASE_PATH=/var/lib/adminforge/adminforge.db
+      - ADMINFORGE_ARTIFACTS_DIR=/var/lib/adminforge/artifacts
+      - CONTENT_SOURCE=db
+      - CONTENT_DIR=/app/portal/content
+      - WEB_DIST_DIR=/app/portal/apps/web/dist
+      - ADMINFORGE_ENV_FILE=/dev/null
+      - RUNNER_URL=http://127.0.0.1:3101
+# Images: the overlay names them (registry, tag or digest) — the base uses the bare names `adminforge` and
+# `adminforge-runner` as placeholders.

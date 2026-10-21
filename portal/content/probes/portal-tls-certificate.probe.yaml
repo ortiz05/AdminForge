@@ -1,17 +1,19 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.portal-tls-certificate
-version: 1.0.3
+version: 1.0.4
 title: AdminForge TLS certificate
 summary: >-
-  Days until the TLS certificate served at the portal's public host (from PUBLIC_BASE_URL) expires. Caddy renews
-  automatically; a warning here means renewal is failing.
+  Days until the TLS certificate served at the portal's public host (from PUBLIC_BASE_URL) expires — the Ingress's
+  certificate (the adminforge-tls Secret). With cert-manager it renews by itself; a warning then means renewal is
+  failing.
 owner: portal-admins
 tags: [synthetic, portal, certificates, sweep-6h]
 group: platform
 remedy: >-
   The portal's TLS certificate expires soon; when it does, browsers refuse to open AdminForge. The AdminForge
-  administrator renews the certificate on the host (docs/operations.md).
+  administrator renews the Ingress's certificate — the adminforge-tls Secret, or cert-manager's Certificate for it
+  (docs/operations.md › Certificates (Ingress)).
 check:
   kind: certExpiry
   host: ${ $replace(env.PUBLIC_BASE_URL, /^https?:\/\/([^\/:]+).*$/, '$1') }

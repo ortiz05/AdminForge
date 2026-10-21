@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.entra-openid-metadata
-version: 1.0.3
+version: 1.0.4
 title: Entra ID sign-in endpoint
 summary: >-
   Fetches the tenant's public OpenID Connect metadata from login.microsoftonline.com. A failure means engineers
@@ -11,8 +11,8 @@ tags: [synthetic, identity, http, sweep-15m]
 group: identity
 remedy: >-
   Microsoft Entra's sign-in metadata didn't answer as expected, so apps may be unable to sign people in. Check Service
-  health for Microsoft Entra. If there's no incident and it continues, check this host's network and DNS, then open a
-  Microsoft support request.
+  health for Microsoft Entra. If there's no incident and it continues, check the cluster's outbound network and DNS,
+  then open a Microsoft support request.
 link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Entra" }
 check:
   kind: http

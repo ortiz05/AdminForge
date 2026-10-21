@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.m365-web-portal
-version: 1.0.1
+version: 1.0.2
 title: Microsoft 365 web portal
 summary: >-
   Loads the Microsoft 365 web portal (m365.cloud.microsoft — where office.com and microsoft365.com now lead), without
@@ -11,7 +11,7 @@ tags: [synthetic, m365, http, sweep-15m]
 group: m365
 remedy: >-
   The Microsoft 365 web portal didn't answer as expected. Check Service health; if there's no incident and it
-  continues, check this host's network.
+  continues, check the cluster's outbound network.
 link: { label: Open Service health, href: "/p/m365.service-health" }
 check:
   kind: http

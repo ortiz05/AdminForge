@@ -1,15 +1,15 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.graph-reachability
-version: 1.0.3
+version: 1.0.4
 title: Microsoft Graph reachability
 summary: Reads the organization object as the automation identity and measures round-trip latency.
 owner: portal-admins
 tags: [synthetic, graph, sweep-15m]
 group: m365
 remedy: >-
-  Microsoft Graph didn't answer from this host, so most AdminForge pages and checks fail until it does. Check Service
-  health; if there's no incident, check this host's internet access, proxy and DNS.
+  Microsoft Graph didn't answer from AdminForge's pod, so most AdminForge pages and checks fail until it does. Check
+  Service health; if there's no incident, check the cluster's outbound access (egress, proxy) and DNS.
 link: { label: Open Service health, href: "/p/m365.service-health" }
 check:
   kind: graph

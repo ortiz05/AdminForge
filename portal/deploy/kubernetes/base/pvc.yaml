@@ -1,0 +1,19 @@
+# The database volume: the SQLite file (DATABASE_PATH=/var/lib/adminforge/adminforge.db) and scheduled report files.
+#
+# Block storage only — a disk attached to the node (AKS: the default `managed-csi` class, Azure Disk). Never Azure
+# Files, NFS or a FUSE mount: SQLite's locking is unreliable on network filesystems and the database would be
+# corrupted; the API refuses to start in production on one (statfs check, db/file-check.ts).
+#
+# ReadWriteOncePod: only one pod can ever mount it (Kubernetes 1.29+; the Azure Disk CSI driver supports it). On a
+# cluster without it, patch the overlay to ReadWriteOnce — `replicas: 1` and `Recreate` then keep it to one pod.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: adminforge-data
+  labels:
+    app.kubernetes.io/name: adminforge
+spec:
+  accessModes: [ReadWriteOncePod]
+  resources:
+    requests:
+      storage: 10Gi

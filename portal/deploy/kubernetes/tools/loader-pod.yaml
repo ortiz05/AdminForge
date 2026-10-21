@@ -1,0 +1,50 @@
+# A one-off pod that mounts the database volume while AdminForge is stopped, to put a database file on it (the first
+# move from the Postgres releases: `adminforge db import-postgres`; a restore from `adminforge db backup`) or take one
+# off (with its -wal, if there is one). The file put in must be self-contained: a backup copy or the importer's output
+# (both are), never a live database's file without its -wal. README.md → Moving the data, Backups.
+#
+#   kubectl -n adminforge scale deploy/adminforge --replicas=0
+#   kubectl -n adminforge apply -f portal/deploy/kubernetes/tools/loader-pod.yaml
+#   kubectl -n adminforge wait --for=condition=Ready pod/adminforge-loader
+#   # A write-ahead log left by a crashed pod belongs to the old file: remove it before a new file goes in.
+#   kubectl -n adminforge exec adminforge-loader -- \
+#     rm -f /var/lib/adminforge/adminforge.db /var/lib/adminforge/adminforge.db-wal /var/lib/adminforge/adminforge.db-shm
+#   kubectl -n adminforge cp adminforge.db adminforge-loader:/var/lib/adminforge/adminforge.db
+#   kubectl -n adminforge exec adminforge-loader -- chmod 600 /var/lib/adminforge/adminforge.db
+#   kubectl -n adminforge delete pod adminforge-loader
+#   kubectl -n adminforge scale deploy/adminforge --replicas=1
+#
+# Same user, group and security settings as the api container, so the file is the API's; the image is the app image
+# (it has `sleep`), pinned like the Deployment's.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: adminforge-loader
+  labels:
+    app.kubernetes.io/name: adminforge-loader
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: loader
+      image: registry.example.com/adminforge/adminforge:0123456789ab
+      command: [sleep, '3600']
+      volumeMounts:
+        - name: data
+          mountPath: /var/lib/adminforge
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: adminforge-data

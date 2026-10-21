@@ -1,0 +1,27 @@
+# Build context of the images (context = the repository root, or `git archive HEAD` from build-images.sh):
+# portal/deploy/kubernetes/Dockerfile reads this file;
+# portal/apps/runner/Dockerfile has its own (Dockerfile.dockerignore, BuildKit) and falls back to this one otherwise.
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/*.log
+**/*.tsbuildinfo
+**/routeTree.gen.ts
+# Secrets and databases at any depth (build-images.sh builds from `git archive HEAD`, which never has them; this is for
+# a plain `docker build` of a working tree).
+.git
+**/.env
+**/.env.*
+**/.local
+**/*.pem
+**/*.pfx
+**/*.key
+**/*.db
+**/*.db-*
+portal/apps/runner/modules
+docs
+.claude
+# The tests package is a workspace member (pnpm checks the lockfile against its manifest); nothing else of it ships.
+tests/**
+!tests/package.json

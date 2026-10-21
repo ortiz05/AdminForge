@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.exchange-autodiscover-service
-version: 1.0.1
+version: 1.0.2
 title: Exchange Autodiscover for the mail domain
 summary: >-
   Asks Exchange Online's Autodiscover service where mail for the primary mail domain lives, the way Outlook and phones
@@ -13,8 +13,8 @@ tags: [synthetic, exchange, http, autodiscover, sweep-15m]
 group: exchange
 remedy: >-
   Exchange Online's autodiscover service didn't answer as expected, so new Outlook profiles and mobile mail setups may
-  fail. Check Service health for Exchange Online. If there's no incident and it continues, check this host's network,
-  then open a Microsoft support request.
+  fail. Check Service health for Exchange Online. If there's no incident and it continues, check the cluster's
+  outbound network, then open a Microsoft support request.
 link: { label: Open Service health, href: "/p/m365.service-health?service=Exchange%20Online" }
 check:
   kind: http

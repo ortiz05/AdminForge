@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.sharepoint-endpoint
-version: 1.0.1
+version: 1.0.2
 title: SharePoint Online front door
 summary: >-
   Calls the tenant's SharePoint REST endpoint (<tenant>.sharepoint.com/_api/web) without signing in. SharePoint
@@ -12,7 +12,7 @@ tags: [synthetic, sharepoint, http, sweep-15m]
 group: sharepoint
 remedy: >-
   SharePoint Online didn't answer as expected. Check Service health for SharePoint Online. If there's no incident and
-  it continues, check this host's network, then open a Microsoft support request.
+  it continues, check the cluster's outbound network, then open a Microsoft support request.
 link: { label: Open Service health, href: "/p/m365.service-health?service=SharePoint%20Online" }
 check:
   kind: http

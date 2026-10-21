@@ -23,6 +23,12 @@ BeforeDiscovery {
         @{ Code = '1..3 | ForEach-Object { $_ > "row-$_.txt" }'; Text = '> "row-$_.txt"' }
         @{ Code = 'function Get-Thing { Get-Date >> log.txt }; Get-Thing'; Text = '>> log.txt' }
         @{ Code = '$x = $(Get-Date > out.txt)'; Text = '> out.txt' }
+        @{ Code = '"now: $(Get-Date > out.txt)"'; Text = '> out.txt' }
+        @{ Code = "`$t = @`"`n`$(Get-Date > here.txt)`n`"@"; Text = '> here.txt' }
+        @{ Code = 'param($When = $(Get-Date > default.txt)) $When'; Text = '> default.txt' }
+        @{ Code = 'param([ValidateScript({ Get-Date > check.txt; $true })]$Value) $Value'; Text = '> check.txt' }
+        @{ Code = 'trap { Get-Date > trap.txt; continue }; Get-Date'; Text = '> trap.txt' }
+        @{ Code = '$sb = { Get-Date > later.txt }'; Text = '> later.txt' }
     )
 
     $allowed = @(
@@ -73,7 +79,7 @@ Describe 'Static read-only policy: file redirection' {
         $finding = @(Test-AdminForgeReadOnlyScript -Content "Get-Date`nGet-Date 2> err.txt") | Select-Object -First 1
         $finding.Line | Should -Be 2
         $finding.Column | Should -Be 10
-        $finding.Message | Should -Be "'2> err.txt' is not allowed in read-only mode. Read-only scripts can't redirect output to a file (to discard it, pipe to Out-Null or use -ErrorAction SilentlyContinue). (line 2)"
+        $finding.Message | Should -Be "'2> err.txt' is not allowed in read-only mode. Read-only scripts can't redirect output to a file (to discard output, pipe it to Out-Null; to silence a stream, use -ErrorAction or -WarningAction SilentlyContinue). (line 2)"
     }
 }
 

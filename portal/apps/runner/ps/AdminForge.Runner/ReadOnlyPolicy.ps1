@@ -314,7 +314,7 @@ function Test-AdminForgeReadOnlyScript {
             }
             # > out.txt, >>, 2>, *>, n>: writes a file without calling a command (Out-File and Set-Content are refused
             # as commands). A MergingRedirectionAst (2>&1, *>&1) only merges a stream into the output: allowed.
-            'FileRedirectionAst' { & $flag $node $node.Extent.Text "Read-only scripts can't redirect output to a file (to discard it, pipe to Out-Null or use -ErrorAction SilentlyContinue)." }
+            'FileRedirectionAst' { & $flag $node $node.Extent.Text "Read-only scripts can't redirect output to a file (to discard output, pipe it to Out-Null; to silence a stream, use -ErrorAction or -WarningAction SilentlyContinue)." }
             'UsingStatementAst' { & $flag $node $node.Extent.Text 'Using statements are not allowed in read-only mode.' }
             'TypeDefinitionAst' { & $flag $node "class $($node.Name)" 'Classes and enums are not allowed in read-only mode.' }
             'ConfigurationDefinitionAst' { & $flag $node 'configuration' 'Configurations are not allowed in read-only mode.' }

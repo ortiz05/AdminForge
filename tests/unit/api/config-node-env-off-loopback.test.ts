@@ -4,7 +4,8 @@ import { loadConfig } from '@adminforge/api/src/config';
 // DATABASE_PATH, no admin credentials) and content from the database — keys off NODE_ENV, which defaults to
 // development. The container image and the Kubernetes ConfigMap set production (tests/guards/image-node-env.test.ts);
 // a portal other machines reach that lost it would quietly run without all of that. So Entra sign-in refuses to start
-// beyond loopback outside production, while development against the tenant on this machine keeps working (S-01, D-04).
+// beyond loopback outside production — a non-loopback API_HOST, or a PUBLIC_BASE_URL on another host, http or https —
+// while development against the tenant on this machine keeps working (S-01, D-04).
 const entra: Record<string, string> = {
   PUBLIC_BASE_URL: 'http://localhost:5173',
   AUTH_MODE: 'entra',
@@ -43,16 +44,17 @@ describe('Entra sign-in beyond this machine needs NODE_ENV=production', () => {
       expect(message).toContain('API_HOST=127.0.0.1');
     });
 
-    it.each(['https://adminforge.example.com', 'https://10.1.2.3:8443', 'https://devbox:5173'])(
-      'refuses PUBLIC_BASE_URL=%s (an https name other machines reach)',
-      (url) => {
-        const message = problem({ ...base, PUBLIC_BASE_URL: url });
-        expect(message).toMatch(
-          /PUBLIC_BASE_URL: is an https address other machines reach[^\n]*NODE_ENV=production/,
-        );
-        expect(message).toContain('http://localhost:<port>');
-      },
-    );
+    it.each([
+      'https://adminforge.example.com',
+      'https://10.1.2.3:8443',
+      'https://devbox:5173',
+      'http://10.1.2.3:5173',
+      'http://devbox.example.com:5173',
+    ])('refuses PUBLIC_BASE_URL=%s (an address other machines reach)', (url) => {
+      const message = problem({ ...base, PUBLIC_BASE_URL: url });
+      expect(message).toMatch(/PUBLIC_BASE_URL: is an address other machines reach[^\n]*NODE_ENV=production/);
+      expect(message).toContain('http://localhost:<port>');
+    });
   });
 
   it('starts with the same settings in production (the pod: 0.0.0.0 behind the Ingress name)', () => {

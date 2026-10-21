@@ -289,13 +289,13 @@ const Schema = z
           message:
             'listens beyond this machine (not loopback), which needs NODE_ENV=production (the container image and the Kubernetes ConfigMap set it); for development against the tenant keep API_HOST=127.0.0.1',
         });
-      const url = new URL(env.PUBLIC_BASE_URL);
-      if (url.protocol === 'https:' && !isLoopbackHost(url.hostname))
+      // Any scheme: on http the development session cookie isn't even Secure.
+      if (!isLoopbackHost(new URL(env.PUBLIC_BASE_URL).hostname))
         ctx.addIssue({
           code: 'custom',
           path: ['PUBLIC_BASE_URL'],
           message:
-            'is an https address other machines reach, which needs NODE_ENV=production (HSTS, the __Host- session cookie, the production checks); for development against the tenant use http://localhost:<port>',
+            'is an address other machines reach, which needs NODE_ENV=production (HSTS, the __Host- session cookie, the production checks); for development against the tenant use http://localhost:<port>',
         });
     }
     for (const prev of (env.TOKEN_CACHE_PREVIOUS_KEYS ?? '')
@@ -340,8 +340,10 @@ const Schema = z
         });
     }
     // Mock sign-in hands every visitor every portal role without a password: only ever on this machine, on
-    // synthetic data, with no credentials that could reach the tenant. "This machine" is both ends: the interface the
-    // API listens on, and the address the browser uses (a proxy or tunnel on loopback could publish it under a name).
+    // synthetic data, with no credentials that could reach the tenant. "This machine" is the interface the API listens
+    // on and the address the portal is configured to be reached at (PUBLIC_BASE_URL: a proxy or a tunnel set up for
+    // it). Configuration only: a tunnel to the loopback port that leaves PUBLIC_BASE_URL alone still gets through, as
+    // the API doesn't check the Host header (docs/backlog.md).
     if (env.AUTH_MODE === 'mock') {
       if (env.DATA_MODE !== 'fixtures')
         ctx.addIssue({

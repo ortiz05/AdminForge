@@ -1,6 +1,6 @@
 import type { SessionRecord } from '@adminforge/api/src/auth/session-store';
 import { TokenBroker } from '@adminforge/api/src/auth/token-broker';
-import type { AuthClient } from '@adminforge/api/src/auth/types';
+import { ReauthRequired, type AuthClient } from '@adminforge/api/src/auth/types';
 import { AppError } from '@adminforge/api/src/errors';
 import { createOutboundExecutor } from '@adminforge/api/src/execution/outbound';
 import { isSensitiveWrite, permissionGrantIds } from '@adminforge/api/src/execution/protected';
@@ -46,7 +46,15 @@ const ARMED: ExecutionIdentity = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-function setup(opts: { grantRead?: (id: string, auth: string | undefined) => Response | undefined } = {}) {
+function setup(
+  opts: {
+    grantRead?: (id: string, auth: string | undefined) => Response | undefined;
+    /** The directory can't be read: the protected set stays incomplete. */
+    directoryDown?: boolean;
+    /** The caller's Read sign-in (default: a token). */
+    readToken?: () => Promise<string>;
+  } = {},
+) {
   const sent: Array<{ method: string; url: string; auth: string | undefined }> = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = decodeURIComponent(String(input));
@@ -64,11 +72,16 @@ function setup(opts: { grantRead?: (id: string, auth: string | undefined) => Res
         ? json({ id, clientId, consentType: 'AllPrincipals', resourceId: GRAPH_SP, scope: 'User.Read' })
         : json({ error: { code: 'Request_ResourceNotFound', message: 'Not found.' } }, 404);
     }
+    if (opts.directoryDown && !grant)
+      return json({ error: { code: 'ServiceUnavailable', message: 'Down.' } }, 503);
     const byAppId = /\/(applications|servicePrincipals)\(appId='([^']+)'\)/.exec(url);
     if (byAppId) return json({ id: spObject(byAppId[2]!), appId: byAppId[2] });
     return json({ value: [] });
   };
-  const auth = { token: async (i: { kind: string }) => `token-${i.kind}` } as unknown as AuthClient;
+  const auth = {
+    token: async (i: { kind: string }) =>
+      i.kind === 'read' && opts.readToken ? opts.readToken() : `token-${i.kind}`,
+  } as unknown as AuthClient;
   const out = createOutboundExecutor({
     config: {
       DATA_MODE: 'live',
@@ -98,7 +111,7 @@ const write = (call: Partial<ServiceCall> & Pick<ServiceCall, 'method' | 'path'>
 const outcome = (p: Promise<unknown>) =>
   p.then(
     () => 'went ahead',
-    (e: unknown) => (e instanceof AppError ? e.code : String(e)),
+    (e: unknown) => (e instanceof AppError ? e.code : e instanceof Error ? e.name : String(e)),
   );
 const changes = (sent: Array<{ method: string; url: string }>) => sent.filter((s) => s.method !== 'GET');
 
@@ -113,7 +126,19 @@ describe('protected objects: delegated permission grants', () => {
     expect(permissionGrantIds(t('/OAuth2PermissionGrants//grant-af-read', 'PATCH'))).toEqual([
       'grant-af-read',
     ]);
+    expect(permissionGrantIds(t("/oauth2PermissionGrants(id='grant-af-read')"))).toEqual(['grant-af-read']);
+    // Under another object, and spelled as .NET would still match it (dotless i).
+    expect(permissionGrantIds(t(`/users/${OTHER_SP}/oauth2PermissionGrants/grant-af-read`))).toEqual([
+      'grant-af-read',
+    ]);
+    expect(permissionGrantIds(t('/me/oauth2Perm\u{131}ssionGrants/grant-af-read'))).toEqual([
+      'grant-af-read',
+    ]);
+    expect(permissionGrantIds(t('/oauth2PermissionGrant%73/grant-af-read/%ZZ'))).toEqual(['grant-af-read']);
     expect(permissionGrantIds(t('/oauth2PermissionGrants', 'POST'))).toEqual([]);
+    expect(isSensitiveWrite(t('/oauth2PermissionGrants', 'POST'))).toBe(true);
+    expect(isSensitiveWrite(t(`/users/${OTHER_SP}/oauth2PermissionGrants/x`))).toBe(true);
+    expect(isSensitiveWrite(t('//oauth2PermissionGrants/x'))).toBe(true);
     expect(permissionGrantIds({ ...t('/oauth2PermissionGrants/x'), service: 'arm' as never })).toEqual([]);
     expect(isSensitiveWrite(t('/oauth2PermissionGrants/grant-af-read'))).toBe(true);
   });
@@ -140,6 +165,68 @@ describe('protected objects: delegated permission grants', () => {
     const reads = sent.filter((s) => s.method === 'GET' && s.url.includes(`/oauth2PermissionGrants/${id}`));
     expect(reads.length).toBeGreaterThan(0);
     expect(reads.every((r) => r.auth !== 'Bearer token-write')).toBe(true);
+  });
+
+  it.each([
+    `/users/${OTHER_SP}/oauth2PermissionGrants/grant-af-read`,
+    `/servicePrincipals/${spObject(READ_APP)}/oauth2PermissionGrants/grant-af-read`,
+    '//oauth2PermissionGrants/grant-af-read',
+    '/oauth2Perm\u{131}ssionGrants/grant-af-read',
+  ])('refuses it under any spelling of the path: %s', async (path) => {
+    const { out, sent } = setup();
+    expect(await outcome(out.execute(ARMED, write({ method: 'DELETE', path })))).toBe('protected_object');
+    expect(changes(sent)).toEqual([]);
+  });
+
+  it('never sends a grant write while the protected set can’t be read', async () => {
+    const { out, sent } = setup({ directoryDown: true });
+    for (const path of [
+      '/oauth2PermissionGrants/grant-pdf-mchen',
+      `/users/${OTHER_SP}/oauth2PermissionGrants/grant-af-read`,
+    ])
+      expect(await outcome(out.execute(ARMED, write({ method: 'DELETE', path })))).toBe(
+        'protected_objects_unavailable',
+      );
+    expect(changes(sent)).toEqual([]);
+  });
+
+  it('refuses what isn’t a grant key (a cast, $count) and an answer that isn’t the grant asked for', async () => {
+    const { out, sent } = setup();
+    for (const path of [
+      '/oauth2PermissionGrants/microsoft.graph.oAuth2PermissionGrant/grant-af-read',
+      '/oauth2PermissionGrants/$count',
+    ])
+      expect(await outcome(out.execute(ARMED, write({ method: 'DELETE', path })))).toBe(
+        'protected_objects_unavailable',
+      );
+    const other = setup({ grantRead: () => json({ id: 'grant-other', clientId: OTHER_SP }) });
+    expect(
+      await outcome(
+        other.out.execute(
+          ARMED,
+          write({ method: 'DELETE', path: '/oauth2PermissionGrants/grant-pdf-mchen' }),
+        ),
+      ),
+    ).toBe('protected_objects_unavailable');
+    expect([...changes(sent), ...changes(other.sent)]).toEqual([]);
+  });
+
+  it('asks the caller to sign in again when only their Read sign-in could read the grant', async () => {
+    const { out, sent } = setup({
+      grantRead: (_id, auth) =>
+        auth === 'Bearer token-app'
+          ? json({ error: { code: 'Authorization_RequestDenied', message: 'No.' } }, 403)
+          : undefined,
+      readToken: async () => {
+        throw new ReauthRequired('read');
+      },
+    });
+    expect(
+      await outcome(
+        out.execute(ARMED, write({ method: 'DELETE', path: '/oauth2PermissionGrants/grant-pdf-mchen' })),
+      ),
+    ).toBe('ReauthRequired');
+    expect(changes(sent)).toEqual([]);
   });
 
   it('refuses it inside a $batch too', async () => {

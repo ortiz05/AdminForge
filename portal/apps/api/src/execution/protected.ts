@@ -1,4 +1,5 @@
 import type { ServiceId } from '@adminforge/connectors';
+import { ReauthRequired } from '../auth/types';
 import type { Config } from '../config';
 import { AppError } from '../errors';
 import { identityCacheKey, type ExecutionIdentity } from './types';
@@ -80,7 +81,6 @@ const SENSITIVE_GRAPH = [
   /\/(appRoleAssignments|appRoleAssignedTo)(\/|\(|$)/i,
   /^\/users\/[^/]+\/authentication(\/|$)/i,
   /^\/directoryObjects\/[^/]+\/?$/i,
-  /^\/oauth2PermissionGrants(\/|\(|$)/i,
 ];
 
 /** "a, b c" → lower-case GUIDs. */
@@ -206,35 +206,56 @@ export const userNotById = () =>
     },
   );
 
+const GRANTS = 'OAUTH2PERMISSIONGRANTS';
+/** What a delegated permission grant's id looks like (base64url). */
+const GRANT_ID = /^[A-Za-z0-9_-]{1,256}$/;
+/** A segment naming the grant collection, matched as .NET would (`toUpperCase` folds dotless ı and long ſ too). */
+const isGrants = (name: string) => name.trim().toUpperCase() === GRANTS;
+
 /**
- * `/oauth2PermissionGrants/{id}` (group 1) or `oauth2PermissionGrants('{id}')` (group 2): a delegated permission grant,
- * matched after runs of `/` are collapsed.
+ * Where a Graph path names delegated permission grants: the key after each `oauth2PermissionGrants` segment (`/{id}`,
+ * `('{id}')`, `(id='{id}')`), at the top level or under another object (`/users/{id}/oauth2PermissionGrants/{id}`),
+ * each segment percent-decoded on its own and runs of `/` collapsed. `mentioned` is true even without a key.
  */
-const GRANT_REF = /(?:^|\/)oauth2PermissionGrants(?:\/([^/?#()]+)|\(\s*(?:id\s*=\s*)?'?([^)']*)'?\s*\))/gi;
+function grantRefs(t: Pick<WriteTarget, 'service' | 'path'>): { mentioned: boolean; ids: string[] } {
+  if (t.service !== 'graph') return { mentioned: false, ids: [] };
+  const segments = t.path
+    .split('?')[0]!
+    .split('/')
+    .filter((x) => x !== '')
+    .map(decode);
+  let mentioned = false;
+  const ids = new Set<string>();
+  segments.forEach((seg, i) => {
+    const call = /^([^(]*)\((.*)\)$/s.exec(seg);
+    if (call && isGrants(call[1]!)) {
+      mentioned = true;
+      const key = call[2]!
+        .trim()
+        .replace(/^id\s*=\s*/i, '')
+        .replace(/^'(.*)'$/s, '$1');
+      if (key) ids.add(key);
+    } else if (isGrants(seg)) {
+      mentioned = true;
+      const key = segments[i + 1];
+      if (key) ids.add(key);
+    }
+  });
+  return { mentioned, ids: [...ids] };
+}
 
 /**
  * The delegated permission grants a Graph write deletes or changes (their ids: base64url, not GUIDs, so
  * `referencedIds` can't tell whose grant it is). Creating one (`POST /oauth2PermissionGrants`) names its `clientId` in
  * the body, which `referencedIds` checks.
  */
-export function permissionGrantIds(t: Pick<WriteTarget, 'service' | 'path'>): string[] {
-  if (t.service !== 'graph') return [];
-  const path = decode(t.path.split('?')[0]!)
-    .replace(/\/{2,}/g, '/')
-    .replace(/^\/(v1\.0|beta)(?=\/)/, '');
-  const out = new Set<string>();
-  for (const m of path.matchAll(GRANT_REF)) {
-    const id = (m[1] ?? m[2] ?? '').trim();
-    if (id) out.add(id);
-  }
-  return [...out];
-}
+export const permissionGrantIds = (t: Pick<WriteTarget, 'service' | 'path'>): string[] => grantRefs(t).ids;
 
 /** Whether a write is one that must not go ahead without the protected set. */
 export function isSensitiveWrite(t: WriteTarget): boolean {
   if (t.service !== 'graph') return false;
   const path = decode(t.path.split('?')[0]!).replace(/^\/(v1\.0|beta)(?=\/)/, '');
-  return SENSITIVE_GRAPH.some((re) => re.test(path));
+  return SENSITIVE_GRAPH.some((re) => re.test(path)) || grantRefs(t).mentioned;
 }
 
 export const protectedObjectRefused = () =>
@@ -315,9 +336,14 @@ export class ProtectedObjects {
     const { ids, complete } = await this.current(identity, correlationId);
     for (const id of named) if (ids.has(id)) throw protectedObjectRefused();
     if (!complete && targets.some(isSensitiveWrite)) throw protectedObjectsUnavailable();
-    // Delegated permission grants: whose grant it is, read from Graph (the protected set is complete here, since
-    // grant writes are sensitive ones).
-    for (const grantId of new Set(targets.flatMap(permissionGrantIds))) {
+    // Delegated permission grants: whose grant it is, read from Graph (the protected set is complete here: grant
+    // writes are sensitive ones).
+    const grants = new Set(targets.flatMap(permissionGrantIds));
+    if (grants.size && !complete) throw protectedObjectsUnavailable();
+    // Grant ids are base64url: anything else after the segment (a cast, `$count`, a stray key) isn't a grant this
+    // guard can look up, so it isn't sent.
+    if ([...grants].some((g) => !GRANT_ID.test(g))) throw protectedObjectsUnavailable();
+    for (const grantId of grants) {
       const clientId = await this.grantClient(identity, grantId, correlationId);
       if (clientId !== null && ids.has(clientId)) throw protectedObjectRefused();
     }
@@ -327,7 +353,9 @@ export class ProtectedObjects {
    * The service principal holding a delegated permission grant (lower-case object id), read through the executor
    * like the rest of the protected set: the automation identity first, then the caller's own Read sign-in. Null when
    * Graph doesn't know the grant (404: the write will get the same answer). Throws `protected_objects_unavailable`
-   * when no reader can read it, or the answer names no client (fail closed). Not cached: grants come and go.
+   * when no reader can read it, or the answer isn't that grant with a client (fail closed: a cast or other segment
+   * read in place of a key answers something else). A caller who must sign in again is told so. Not cached: grants
+   * come and go.
    */
   private async grantClient(
     identity: ExecutionIdentity,
@@ -343,12 +371,14 @@ export class ProtectedObjects {
           { $select: 'id,clientId' },
           { correlationId },
         );
-      } catch {
+      } catch (err) {
+        if (who.kind === 'delegated' && err instanceof ReauthRequired) throw err;
         continue; // the next reader may have the permission this one lacks
       }
       if (data === null) return null;
-      const clientId = (data as { clientId?: unknown }).clientId;
-      if (typeof clientId === 'string' && GUID.test(clientId)) return clientId.toLowerCase();
+      const grant = data as { id?: unknown; clientId?: unknown };
+      if (grant.id === grantId && typeof grant.clientId === 'string' && GUID.test(grant.clientId))
+        return grant.clientId.toLowerCase();
       break;
     }
     throw protectedObjectsUnavailable();

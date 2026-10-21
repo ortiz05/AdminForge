@@ -15,6 +15,20 @@ const ENTITIES: Record<string, string> = {
 const looksLikeHtml = (s: string) => /<\/?[a-z][a-z0-9]*(\s[^>]*)?\/?>/i.test(s);
 
 /**
+ * The character a numeric reference (`#65`, `#x41`, lower-cased) names, or null when it names none: zero, past
+ * U+10FFFF, a surrogate, or not a plain number. `String.fromCodePoint` throws on the first two, and a throw while a
+ * widget renders would take the page down, so such a reference stays as written. Same rule as the API's feed text
+ * (`apps/api/src/news/text.ts`).
+ */
+function numericReference(ref: string): string | null {
+  const digits = /^#(?:x([0-9a-f]+)|([0-9]+))$/.exec(ref);
+  if (!digits) return null;
+  const n = digits[1] !== undefined ? parseInt(digits[1], 16) : Number(digits[2]);
+  if (!Number.isSafeInteger(n) || n <= 0 || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff)) return null;
+  return String.fromCodePoint(n);
+}
+
+/**
  * HTML from Microsoft APIs (message center posts, service health updates) → plain text with paragraph breaks.
  * Nothing is ever rendered as HTML: tags are dropped (block tags become line breaks, list items become "- ")
  * and entities decoded. Script/style contents are removed entirely.
@@ -30,8 +44,7 @@ export function htmlToText(input: string): string {
     .replace(/&(#?[a-z0-9]+);/gi, (m, e: string) => {
       const k = e.toLowerCase();
       if (ENTITIES[k]) return ENTITIES[k]!;
-      if (k.startsWith('#x')) return String.fromCodePoint(parseInt(k.slice(2), 16) || 32);
-      if (k.startsWith('#')) return String.fromCodePoint(Number(k.slice(1)) || 32);
+      if (k.startsWith('#')) return numericReference(k) ?? m;
       return m;
     })
     .replace(/[ \t]+\n/g, '\n')

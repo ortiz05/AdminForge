@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Component, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
 import {
   Badge,
   Button,
@@ -10,7 +10,7 @@ import {
   Skeleton,
   cn,
 } from '@adminforge/ui';
-import type { WidgetData, WidgetRuntime } from '../types';
+import type { WidgetData, WidgetProps, WidgetRuntime } from '../types';
 import { ActionButton } from './actions';
 import { signInErrorView, signInNote } from './sign-in-error';
 import type { EmptySpec } from './schema-common';
@@ -43,6 +43,105 @@ function DefaultSkeleton() {
       <Skeleton className="w-2/3" />
     </div>
   );
+}
+
+/** A reference for a crash in the browser (no server request to carry one): shown, and logged with the error. */
+function localReference(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+  }
+}
+
+interface BoundaryProps {
+  /** The block's title (or its name) for the message: "Sign-ins couldn’t be shown". */
+  label?: string;
+  /** New data clears the error and renders the block again. */
+  resetKey: unknown;
+  /** Draw the fallback inside its own panel (a whole block failed) rather than inside the panel it replaces. */
+  framed?: boolean;
+  children: ReactNode;
+}
+
+interface BoundaryState {
+  failed: boolean;
+  reference?: string;
+  resetKey?: unknown;
+}
+
+/**
+ * One block's crash stays in that block. A value no widget expected (hostile or malformed tenant data) would
+ * otherwise throw while rendering and the router's error view would replace the whole `/p/<key>` page for everyone
+ * who opens it. The block says it couldn't be shown, with a local reference (logged to the browser console with the
+ * error, so a report can be matched up) and Try again; new data renders it again by itself. Never the error text or
+ * a stack trace.
+ */
+export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
+  state: BoundaryState = { failed: false };
+
+  static getDerivedStateFromError(): Partial<BoundaryState> {
+    return { failed: true, reference: localReference() };
+  }
+
+  static getDerivedStateFromProps(props: BoundaryProps, state: BoundaryState): Partial<BoundaryState> | null {
+    if (Object.is(props.resetKey, state.resetKey)) return null;
+    return { resetKey: props.resetKey, failed: false };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error(
+      `AdminForge widget error (reference ${this.state.reference ?? 'unknown'})`,
+      error,
+      info.componentStack,
+    );
+  }
+
+  private readonly retry = () => this.setState({ failed: false });
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    const { label, framed } = this.props;
+    const view = (
+      <ErrorState
+        compact
+        title={`${label ?? 'This panel'} couldn’t be shown`}
+        message="Something in its data couldn’t be displayed. The rest of the page still works, and nothing was changed."
+        hint="Try again. If it keeps happening, give a portal administrator the reference and the page you were on."
+        correlationId={this.state.reference}
+        action={
+          <Button size="sm" onClick={this.retry}>
+            Try again
+          </Button>
+        }
+      />
+    );
+    return framed ? <Panel title={label}>{view}</Panel> : view;
+  }
+}
+
+/**
+ * Every widget renders inside a `WidgetBoundary` (the registry wraps them), so a crash in the widget itself — not
+ * only in the parts `WidgetPanel` draws — costs that block only. KPI cells keep their place in the strip without a
+ * panel of their own.
+ */
+export function withWidgetBoundary<C>(Inner: ComponentType<WidgetProps<C>>): ComponentType<WidgetProps<C>> {
+  function Guarded(props: WidgetProps<C>) {
+    const config = props.config as { title?: unknown; label?: unknown };
+    const label =
+      typeof config.title === 'string' && config.title
+        ? config.title
+        : typeof config.label === 'string' && config.label
+          ? config.label
+          : undefined;
+    return (
+      <WidgetBoundary label={label} resetKey={props.data.value} framed={props.variant !== 'cell'}>
+        <Inner {...props} />
+      </WidgetBoundary>
+    );
+  }
+  Guarded.displayName = `WidgetBoundary(${Inner.displayName ?? Inner.name})`;
+  return Guarded;
 }
 
 /**
@@ -160,7 +259,9 @@ export function WidgetPanel({
         )
       }
     >
-      {body}
+      <WidgetBoundary label={label} resetKey={data.value}>
+        {body}
+      </WidgetBoundary>
     </Panel>
   );
 }

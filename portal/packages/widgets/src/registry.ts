@@ -1,3 +1,4 @@
+import { withWidgetBoundary } from './lib/WidgetPanel';
 import type { WidgetDefinition } from './types';
 import { actionBarWidget } from './widgets/action-bar';
 import { chartWidget } from './widgets/chart';
@@ -12,13 +13,9 @@ import { tableWidget } from './widgets/table';
 import { timelineWidget } from './widgets/timeline';
 import './schemas';
 
-/**
- * `widget:` type → { schema, component } (§7.4). The page renderer looks blocks up here; unknown types are
- * rejected by validation (and shown as a configuration error, never a crash).
- */
 // Component prop types differ per widget; the renderer validates config with `schema` before rendering.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const WIDGETS: Record<string, WidgetDefinition<any>> = {
+const DEFINITIONS: Record<string, WidgetDefinition<any>> = {
   kpi: kpiWidget,
   table: tableWidget,
   chart: chartWidget,
@@ -31,6 +28,19 @@ export const WIDGETS: Record<string, WidgetDefinition<any>> = {
   licenceGate: licenceGateWidget,
   probeStatus: probeStatusWidget,
 };
+
+/**
+ * `widget:` type → { schema, component } (§7.4). The page renderer looks blocks up here; unknown types are
+ * rejected by validation (and shown as a configuration error, never a crash). Each component renders inside an error
+ * boundary, so a value a widget can't display costs that block only, never the page.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const WIDGETS: Record<string, WidgetDefinition<any>> = Object.fromEntries(
+  Object.entries(DEFINITIONS).map(([type, def]) => [
+    type,
+    { ...def, component: withWidgetBoundary(def.component) },
+  ]),
+);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getWidget(type: string): WidgetDefinition<any> | undefined {

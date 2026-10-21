@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: m365.overview
-version: 1.1.1
+version: 1.1.2
 title: Microsoft 365 overview
 summary: Service health, changes that need action, licence headroom, adoption and team ownership at a glance.
 owner: m365-team
@@ -167,7 +167,8 @@ layout:
     label: Teams without any owner
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
-    hint: Teams owned only by apps (no person) are in the Teams without owners report.
+    # No hint: beside the status there is no room for one at span 2. The report it opens also lists the teams owned
+    # only by apps (no person), which this figure doesn't count.
     href: /p/m365.teams-without-owners
   - widget: statusGrid
     id: services
@@ -214,6 +215,7 @@ layout:
     data: activeUsers
     x: reportDate
     y: [office365, exchange, teams, oneDrive, sharePoint]
+    labels: { office365: Any service, exchange: Exchange, teams: Teams, oneDrive: OneDrive, sharePoint: SharePoint }
     format: number
   - widget: list
     id: actionRequired

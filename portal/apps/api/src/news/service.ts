@@ -12,6 +12,7 @@ import {
 } from '@adminforge/schemas';
 import { hasRole } from '../auth/guards';
 import type { DefinitionRegistry } from '../definitions/types';
+import type { PruneBudget } from '../housekeeping/budget';
 import { AppError, toAppError } from '../errors';
 import { isBreaking } from './breaking';
 import { classify } from './classify';
@@ -548,13 +549,16 @@ export class NewsService {
     };
   }
 
-  /** Retention (housekeeping): per-feed retentionDays; items of feeds no longer defined after ORPHAN_DAYS. */
-  async prune(now: Date): Promise<number> {
+  /**
+   * Retention (housekeeping): per-feed retentionDays; items of feeds no longer defined after ORPHAN_DAYS. Within the
+   * housekeeping pass's `budget` (batches, time limit; see NewsStore.prune).
+   */
+  async prune(now: Date, budget?: PruneBudget): Promise<number> {
     const defined = new Map<string, number>();
     for (const r of await this.deps.definitions.list('feed')) {
       const parsed = Feed.safeParse(r.def);
       defined.set(r.key, parsed.success ? parsed.data.retentionDays : 180);
     }
-    return this.deps.store.prune({ now, feeds: defined, orphanDays: ORPHAN_DAYS });
+    return this.deps.store.prune({ now, feeds: defined, orphanDays: ORPHAN_DAYS }, budget);
   }
 }

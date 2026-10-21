@@ -1,4 +1,5 @@
 import type { NewsArea, NewsKind, NewsSeverity, PortalRole } from '@adminforge/schemas';
+import type { PruneBudget } from '../housekeeping/budget';
 
 /**
  * News and changes (docs/plans/2026-10-15-news-and-changes.md): what collectors produce, what the store keeps, and the
@@ -157,5 +158,9 @@ export interface NewsStore {
   getState(feedKey: string): Promise<FeedState | null>;
   listStates(): Promise<FeedState[]>;
   saveState(state: FeedState): Promise<void>;
-  prune(policy: PrunePolicy): Promise<number>;
+  /**
+   * Deletes items past retention — in `budget.batch` rows with the event loop let in between, stopping when the budget
+   * is spent (`budget.pending`); default: batches of 2,000 without a time limit. Returns how many went.
+   */
+  prune(policy: PrunePolicy, budget?: PruneBudget): Promise<number>;
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { ArtifactStore } from '../artifacts/store';
 import type { AuditWriter } from '../audit/writer';
-import { writeTx, yieldToLoop, type Db } from '../db/client';
+import { writeTx, type Db } from '../db/client';
 import {
   approvals,
   probeResults,
@@ -12,6 +12,9 @@ import {
   scheduleRuns,
   schedules,
 } from '../db/schema';
+import { pruneBudget, type PruneBudget, type PruneBudgetOptions } from './budget';
+
+export { RETENTION_BATCH, RETENTION_BUDGET_MS } from './budget';
 
 export interface RetentionPolicy {
   runDays: number;
@@ -38,28 +41,18 @@ export interface RetentionResult {
 
 /** Runs that are over and need nobody: parked runs and `needs_review` (a person must look) are never purged. */
 const FINISHED = ['succeeded', 'failed', 'cancelled', 'compensated'];
-/** Rows per delete statement: each one holds the write lock and the event loop only briefly. */
-export const RETENTION_BATCH = 2_000;
-/** Longest a pass keeps deleting; the rest goes at the next housekeeping pass. */
-export const RETENTION_BUDGET_MS = 2_000;
 const DAY_MS = 86_400_000;
 
-export interface RetentionOptions {
-  /** Rows per delete (default 2,000). */
-  batch?: number;
-  /** Time budget per pass (default 2 s). */
-  budgetMs?: number;
-  /** Milliseconds for the budget (tests); default `performance.now`. */
-  clock?: () => number;
-}
+/** Rows per delete (default 2,000), the time budget per pass (default 2 s) and its clock (tests). */
+export type RetentionOptions = PruneBudgetOptions;
 
 /**
  * Deletes history older than the policy: finished runs (with their steps, events and decided run approvals), schedule
  * run history, deleted portal schedules without history, probe results, report files and News and changes items past
- * their feed's retention. Every table is purged in batches of `RETENTION_BATCH` rows with the event loop let in
- * between, and a pass stops after `RETENTION_BUDGET_MS` (`pending`: the caller runs it again soon) — so a large
- * backlog never holds the write lock or the API for long (D-02). The audit log is append-only and is never touched;
- * the purge itself is audited (counts only).
+ * their feed's retention. Every table — and the report files and news items after them — is purged in batches of
+ * `RETENTION_BATCH` rows (files) with the event loop let in between, and a pass stops after `RETENTION_BUDGET_MS`
+ * (`pending`: the caller runs it again soon) — so a large backlog never holds the write lock or the API for long
+ * (D-02). The audit log is append-only and is never touched; the purge itself is audited (counts only).
  */
 export async function applyRetention(
   db: Db,
@@ -68,15 +61,13 @@ export async function applyRetention(
     audit: AuditWriter;
     now: Date;
     /** News and changes retention (per-feed retentionDays; feeds.prune). */
-    news?: { prune(now: Date): Promise<number> } | null;
+    news?: { prune(now: Date, budget?: PruneBudget): Promise<number> } | null;
   },
   policy: RetentionPolicy,
   opts: RetentionOptions = {},
 ): Promise<RetentionResult> {
-  const batch = opts.batch ?? RETENTION_BATCH;
-  const budgetMs = opts.budgetMs ?? RETENTION_BUDGET_MS;
-  const clock = opts.clock ?? (() => performance.now());
-  const startedAt = clock();
+  const budget = pruneBudget(opts);
+  const batch = budget.batch;
   const cutoff = (days: number) => new Date(deps.now.getTime() - days * DAY_MS);
   const result: RetentionResult = {
     news: 0,
@@ -199,17 +190,14 @@ export async function applyRetention(
       const n = step();
       result[field] += n;
       if (n < batch) break;
-      if (clock() - startedAt >= budgetMs) {
-        result.pending = true;
-        break purging;
-      }
-      await yieldToLoop();
+      if (!(await budget.next())) break purging;
     }
   }
-  if (!result.pending) {
-    if (deps.artifacts) result.artifacts = await deps.artifacts.pruneOlderThan(cutoff(policy.artifactDays));
-    if (deps.news) result.news = await deps.news.prune(deps.now);
-  }
+  // Report files and News and changes items within what is left of the same budget.
+  if (deps.artifacts && !budget.pending)
+    result.artifacts = await deps.artifacts.pruneOlderThan(cutoff(policy.artifactDays), budget);
+  if (deps.news && !budget.pending) result.news = await deps.news.prune(deps.now, budget);
+  result.pending = budget.pending;
 
   const { pending: _pending, ...counts } = result;
   if (Object.values(counts).some((n) => n > 0))

@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, open, readdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+import { pruneBudget, type PruneBudget } from '../housekeeping/budget';
 
 /**
  * Report files written by scheduled jobs: `<ADMINFORGE_ARTIFACTS_DIR>/<schedule key>/<timestamp>.<ext>`. Paths stored
@@ -41,6 +42,8 @@ export interface OpenedArtifact {
 
 export class ArtifactStore {
   readonly dir: string;
+  /** Where a retention sweep stopped at its time budget (folder, file): the next one goes on from there. */
+  private sweepFrom: { folder: string; file: string } | null = null;
   constructor(dir: string) {
     this.dir = path.resolve(dir);
   }
@@ -125,23 +128,36 @@ export class ArtifactStore {
     }
   }
 
-  /** Deletes report files last modified before `cutoff`, in every schedule folder. Returns how many were removed. */
-  async pruneOlderThan(cutoff: Date): Promise<number> {
+  /**
+   * Deletes report files last modified before `cutoff`, in every schedule folder. Returns how many were removed.
+   * Within the housekeeping pass's `budget`: `budget.batch` files at a time with the event loop let in between; when
+   * the time is spent (`budget.pending`) the sweep stops, and the next one goes on after the last file it looked at —
+   * files kept at the front never hold back the folders after them. Default: no time limit.
+   */
+  async pruneOlderThan(
+    cutoff: Date,
+    budget: PruneBudget = pruneBudget({ budgetMs: Infinity }),
+  ): Promise<number> {
     let removed = 0;
     let folders: string[];
     try {
-      folders = (await readdir(this.dir)).filter((n) => SAFE_SEGMENT.test(n));
+      folders = (await readdir(this.dir)).filter((n) => SAFE_SEGMENT.test(n)).sort();
     } catch {
       return 0;
     }
+    const from = this.sweepFrom;
+    this.sweepFrom = null;
+    let seen = 0;
     for (const folder of folders) {
+      if (from && folder < from.folder) continue;
       let names: string[];
       try {
-        names = (await readdir(path.join(this.dir, folder))).filter((n) => SAFE_FILE.test(n));
+        names = (await readdir(path.join(this.dir, folder))).filter((n) => SAFE_FILE.test(n)).sort();
       } catch {
         continue;
       }
       for (const n of names) {
+        if (from && folder === from.folder && n <= from.file) continue;
         const abs = path.join(this.dir, folder, n);
         try {
           if ((await stat(abs)).mtime.getTime() < cutoff.getTime()) {
@@ -150,6 +166,10 @@ export class ArtifactStore {
           }
         } catch {
           /* raced with another prune */
+        }
+        if (++seen % budget.batch === 0 && !(await budget.next())) {
+          this.sweepFrom = { folder, file: n };
+          return removed;
         }
       }
     }

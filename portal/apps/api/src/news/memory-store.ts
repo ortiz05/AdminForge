@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { PruneBudget } from '../housekeeping/budget';
 import { isBreaking } from './breaking';
 import { ACTIVE_INCIDENT_SEEN_DAYS } from './types';
 import type {
@@ -145,7 +146,8 @@ export class MemoryNewsStore implements NewsStore {
     this.states.set(state.feedKey, { ...state });
   }
 
-  async prune(policy: PrunePolicy): Promise<number> {
+  /** In memory (mock mode, tests): one sweep; the budget's batches only matter to the database. */
+  async prune(policy: PrunePolicy, _budget?: PruneBudget): Promise<number> {
     const t = policy.now.getTime();
     let removed = 0;
     for (const r of [...this.items.values()]) {

@@ -117,8 +117,9 @@ lease — so a scheduler whose ticks fail goes stale after two minutes although 
 shows only that the process runs (`docs/backlog.md`).
 
 Every 10 minutes the API removes expired sessions' tokens, sign-in round trips and signals older than an hour; every 6
-hours it applies **retention** (`RETENTION_*`). Each purge deletes 2,000 rows per statement and lets the event loop run
-between batches, a pass stops after 2 seconds and continues at the next 10-minute pass, and the freed pages go back to
+hours it applies **retention** (`RETENTION_*`). Each purge — report files and News and changes items included —
+deletes 2,000 rows (files) per batch and lets the event loop run between batches, a pass stops after 2 seconds and
+continues at the next 10-minute pass (report files from where it stopped), and the freed pages go back to
 the file system in steps (`incremental_vacuum`) — better-sqlite3 is synchronous, so housekeeping never holds HTTP, runs
 or schedules for long. The audit log is never purged; `probes.audit-chain` checks it hourly from the last verified
 checkpoint and walks the whole chain at start, once a day and after any break it found. An event older than the

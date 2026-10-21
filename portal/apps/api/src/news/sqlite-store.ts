@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/client';
+import { pruneBudget, type PruneBudget } from '../housekeeping/budget';
 import { BREAKING, DAY_MS } from './breaking';
 import { ACTIVE_INCIDENT_SEEN_DAYS } from './types';
 import type {
@@ -353,24 +354,39 @@ export class SqliteNewsStore implements NewsStore {
       );
   }
 
-  async prune(policy: PrunePolicy): Promise<number> {
+  async prune(
+    policy: PrunePolicy,
+    budget: PruneBudget = pruneBudget({ budgetMs: Infinity }),
+  ): Promise<number> {
     let removed = 0;
     const t = policy.now.getTime();
     const byFeed = this.sqlite.prepare(
-      `delete from news_items where feed_key = ? and last_seen_at < ? and activity_at < ?
-         and not (kind = 'incident' and coalesce(status, '') <> 'resolved' and last_seen_at >= ?)`,
+      `delete from news_items where id in (select id from news_items where feed_key = ? and last_seen_at < ?
+         and activity_at < ? and not (kind = 'incident' and coalesce(status, '') <> 'resolved' and last_seen_at >= ?)
+         limit ?)`,
     );
-    for (const [feedKey, days] of policy.feeds) {
-      const cutoff = t - days * DAY_MS;
-      removed += byFeed.run(feedKey, cutoff, cutoff, t - ACTIVE_INCIDENT_SEEN_DAYS * DAY_MS).changes;
-    }
     const orphanCutoff = t - policy.orphanDays * DAY_MS;
     const defined = JSON.stringify([...policy.feeds.keys()]);
-    removed += this.sqlite
-      .prepare(
-        'delete from news_items where feed_key not in (select value from json_each(?)) and last_seen_at < ?',
-      )
-      .run(defined, orphanCutoff).changes;
+    const orphans = this.sqlite.prepare(
+      `delete from news_items where id in (select id from news_items
+         where feed_key not in (select value from json_each(?)) and last_seen_at < ? limit ?)`,
+    );
+    // One batch per step: each feed's items past its retention, then the items of feeds no longer defined.
+    const steps: Array<() => number> = [
+      ...[...policy.feeds].map(([feedKey, days]) => () => {
+        const cutoff = t - days * DAY_MS;
+        return byFeed.run(feedKey, cutoff, cutoff, t - ACTIVE_INCIDENT_SEEN_DAYS * DAY_MS, budget.batch)
+          .changes;
+      }),
+      () => orphans.run(defined, orphanCutoff, budget.batch).changes,
+    ];
+    for (const step of steps)
+      for (;;) {
+        const n = step();
+        removed += n;
+        if (n < budget.batch) break;
+        if (!(await budget.next())) return removed;
+      }
     this.sqlite
       .prepare(
         'delete from news_feed_state where feed_key not in (select value from json_each(?)) and coalesce(last_run_at, 0) < ?',

@@ -92,7 +92,7 @@ describe('commit message convention', () => {
       try {
         const good = path.join(dir, 'good');
         const bad = path.join(dir, 'bad');
-        writeFileSync(good, 'docs(plan): mark the master plan historical\n');
+        writeFileSync(good, 'docs: mark the master plan historical\n');
         writeFileSync(bad, 'updated stuff\n');
         expect(run([good]).code).toBe(0);
         const failed = run([bad]);

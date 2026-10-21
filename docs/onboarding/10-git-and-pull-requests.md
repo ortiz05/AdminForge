@@ -52,7 +52,12 @@ Optional; one or more, comma-separated with no spaces (`fix(security,ux): …`).
 - **Apps and packages:** `api`, `web`, `scheduler`, `runner`, `cli`, `ui`, `widgets`, `engine`, `connectors`,
   `schemas`, `expressions`, `design-tokens`, `config`
 - **Content and features:** `content`, `news`, `reports`, `schedules`, `runs`, `query`, `audit`
-- **Cross-cutting:** `auth`, `security`, `ux`, `deploy`, `dev`, `deps`, `docs`, `plan`, `tests`, `e2e`, `live`
+- **Cross-cutting:** `auth`, `security`, `ux`, `deploy`, `tooling`, `deps`, `docs`, `tests`, `e2e`, `live`
+  (**tooling:** git hooks, `tooling/` — lint, git and CI helpers — and the workspace and build configuration such as
+  `turbo.json`, `pnpm-workspace.yaml` and the tsconfigs; plans and designs under `docs/plans/` are **docs**)
+
+The scopes "plan" and "dev" were retired (plans are docs; dev became tooling). Only new messages are checked — the hook
+sees the message you are writing and CI the pull request title — so older commits keep them.
 
 A new area needs a new scope: add it to `SCOPES` in `tooling/git/commit-message.mjs`, to this list and to
 `templates/commit-message.txt` in the same PR.

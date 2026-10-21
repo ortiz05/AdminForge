@@ -12,7 +12,11 @@
 
 export const TYPES = ['feat', 'fix', 'docs', 'test', 'refactor', 'perf', 'chore', 'ci', 'build', 'revert'];
 
-/** Packages, apps and cross-cutting areas. Add a scope here (and to the onboarding guide) when a new area appears. */
+/**
+ * Packages, apps and cross-cutting areas. Add a scope here (and to the onboarding guide) when a new area appears.
+ * Retired: `plan` (plans are `docs`); renamed: `dev` → `tooling`. Only new messages are checked (the hook and the
+ * pull request title), so older commits keep them.
+ */
 export const SCOPES = [
   // apps and packages
   'api',
@@ -41,10 +45,9 @@ export const SCOPES = [
   'security',
   'ux',
   'deploy',
-  'dev',
+  'tooling',
   'deps',
   'docs',
-  'plan',
   'tests',
   'e2e',
   'live',

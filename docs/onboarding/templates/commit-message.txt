@@ -5,7 +5,7 @@
 # Types:  feat fix docs test refactor perf chore ci build revert
 # Scopes: api web scheduler runner cli ui widgets engine connectors schemas expressions
 #         design-tokens config content news reports schedules runs query audit auth
-#         security ux deploy dev deps docs plan tests e2e live   (optional; comma-separated)
+#         security ux deploy tooling deps docs tests e2e live   (optional; comma-separated)
 #
 # Body (after a blank line): why the change was needed and what people will notice.
 # Mention migrations, new configuration keys, permissions, anything an operator must do.

@@ -5,7 +5,7 @@ import { ProvenanceFooter } from '@adminforge/ui';
 // · 14 ms · cached 51 s ago") was wider than its panel and widened the whole page to 427 px. The line stays one line
 // and never pushes past its container: the path is cut off first (it takes no room until the rest is placed), the
 // request time is left out on a phone (it is in the hover text), and a part that still doesn't fit drops to a second
-// line that the footer's fixed height hides.
+// line that the footer's one-line height cap hides.
 
 const footer = () => screen.getByText('Data source:').parentElement!;
 
@@ -19,7 +19,7 @@ describe('ProvenanceFooter in a narrow panel', () => {
         preview
       />,
     );
-    expect(footer()).toHaveClass('h-4', 'min-w-0', 'flex-wrap', 'overflow-hidden');
+    expect(footer()).toHaveClass('max-h-lh', 'min-w-0', 'flex-wrap', 'overflow-hidden');
   });
 
   it('cuts the path first and leaves the request time out on a phone, keeping it in the hover text', () => {

@@ -254,6 +254,22 @@ export class DbDefinitionStore {
     return [...restored].sort();
   }
 
+  /** The latest version of `key` when it is retired (null when the latest is published, or nothing is). */
+  async retired(kind: Kind, key: string): Promise<DefinitionRecord | null> {
+    const latest = latestOf(await this.metasOf(kind, key));
+    if (latest?.status !== 'retired') return null;
+    const [row] = await this.db.select().from(definitions).where(eq(definitions.id, latest.id)).limit(1);
+    return row ? toRecord(row) : null;
+  }
+
+  /** Id, version and status of every live version of one key. */
+  private metasOf(kind: Kind, key: string) {
+    return this.db
+      .select({ id: definitions.id, version: definitions.version, status: definitions.status })
+      .from(definitions)
+      .where(and(eq(definitions.kind, kind), eq(definitions.key, key), inArray(definitions.status, LIVE)));
+  }
+
   /** Exact version (published or retired), or the latest version when it is not retired. */
   async get(kind: Kind, key: string, version?: string): Promise<DefinitionRecord | null> {
     if (version) {
@@ -271,11 +287,7 @@ export class DbDefinitionStore {
         .limit(1);
       return row ? toRecord(row) : null;
     }
-    const metas = await this.db
-      .select({ id: definitions.id, version: definitions.version, status: definitions.status })
-      .from(definitions)
-      .where(and(eq(definitions.kind, kind), eq(definitions.key, key), inArray(definitions.status, LIVE)));
-    const latest = latestOf(metas);
+    const latest = latestOf(await this.metasOf(kind, key));
     if (!latest || latest.status === 'retired') return null;
     const [row] = await this.db.select().from(definitions).where(eq(definitions.id, latest.id)).limit(1);
     return row ? toRecord(row) : null;

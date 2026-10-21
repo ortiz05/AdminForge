@@ -218,6 +218,13 @@ export class FsDefinitionSource implements DefinitionSource {
     return r.status === 'retired' ? null : r;
   }
 
+  /** The file's definition when it is retired (a file holds one version). */
+  async retired(kind: Kind, key: string): Promise<DefinitionRecord | null> {
+    const { records } = await this.ensure();
+    const r = records.get(recordKey(kind, key));
+    return r?.status === 'retired' ? r : null;
+  }
+
   onChange(listener: ChangeListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

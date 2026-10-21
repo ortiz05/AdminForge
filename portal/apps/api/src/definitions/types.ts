@@ -52,6 +52,11 @@ export interface DefinitionSource {
   list(kind?: Kind): Promise<DefinitionRecord[]>;
   /** Exact version (published or retired), or the latest non-retired version. */
   get(kind: Kind, key: string, version?: string): Promise<DefinitionRecord | null>;
+  /**
+   * The latest version of `key` when that version is retired — null when the key has a current version or was never
+   * published — so someone asking for it hears "retired, and why" instead of "not found". Optional for test doubles.
+   */
+  retired?(kind: Kind, key: string): Promise<DefinitionRecord | null>;
   onChange(listener: ChangeListener): () => void;
   /** Content problems found while loading (fs source; empty for db). */
   problems(): ContentError[];

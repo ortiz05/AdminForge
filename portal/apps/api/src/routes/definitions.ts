@@ -4,6 +4,7 @@ import { hasRole, requireSession } from '../auth/guards';
 import { missingLicences, requiresBadge } from '../capabilities/licences';
 import type { AppContext } from '../context';
 import { clientDefinition } from '../definitions/client-safe';
+import { definitionRetired, retirementNote } from '../definitions/current';
 import { definitionNotFound } from '../definitions/registry';
 import { AppError } from '../errors';
 import { definitionHref } from './nav';
@@ -46,7 +47,10 @@ export function definitionRoutes(api: FastifyInstance, ctx: AppContext) {
         typeof request.query.version === 'string' && request.query.version
           ? request.query.version
           : undefined;
-      const rec = await ctx.definitions.get(kind.data, request.params.key, version);
+      // No current version: a retired key says so (after the role check below), a never-published one is a 404.
+      const rec =
+        (await ctx.definitions.get(kind.data, request.params.key, version)) ??
+        (version ? null : ((await ctx.definitions.retired?.(kind.data, request.params.key)) ?? null));
       if (!rec) throw definitionNotFound(kind.data, request.params.key, version);
       // An exact older version (a run's pinned one) also needs the roles the current version asks for: a role added
       // later can't be side-stepped by asking for the version before it.
@@ -59,6 +63,8 @@ export function definitionRoutes(api: FastifyInstance, ctx: AppContext) {
             `This ${rec.kind} needs the ${def.requires!.portalRoles!.join(' and ')} role.`,
             { hint: 'Ask a portal administrator for access.' },
           );
+      if (!version && rec.status === 'retired')
+        throw definitionRetired(rec.def.title, undefined, retirementNote(rec.def.summary));
       return { ...clientDefinition(rec.def), version: rec.version, sha256: rec.sha256 };
     },
   );

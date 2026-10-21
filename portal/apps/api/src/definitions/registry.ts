@@ -25,7 +25,7 @@ export const definitionNotFound = (kind: string, key: string, version?: string) 
     {
       hint: version
         ? 'The version may never have been published.'
-        : 'Check the id, or publish the content (adminforge publish).',
+        : 'Check the address, or open it from the navigation.',
     },
   );
 
@@ -58,7 +58,7 @@ export class CachedDbSource implements DefinitionSource {
     else
       for (const k of change.keys)
         for (const ck of [...this.cache.keys()])
-          if (ck === k || ck.startsWith(`${k}@`)) this.cache.delete(ck);
+          if (ck === k || ck.startsWith(`${k}@`) || ck.startsWith(`${k}#`)) this.cache.delete(ck);
     this.lists.clear();
     for (const l of this.listeners) l(change);
   }
@@ -82,6 +82,10 @@ export class CachedDbSource implements DefinitionSource {
     return this.memo(this.cache, `${recordKey(kind, key)}${version ? `@${version}` : ''}`, () =>
       this.store.get(kind, key, version),
     );
+  }
+
+  retired(kind: Kind, key: string): Promise<DefinitionRecord | null> {
+    return this.memo(this.cache, `${recordKey(kind, key)}#retired`, () => this.store.retired(kind, key));
   }
 
   onChange(listener: ChangeListener): () => void {
@@ -125,6 +129,7 @@ export function registryFrom(source: DefinitionSource, origin: 'fs' | 'db'): Def
     origin,
     list: (kind) => source.list(kind),
     get: (kind, key, version) => source.get(kind, key, version),
+    retired: async (kind, key) => (await source.retired?.(kind, key)) ?? null,
     onChange: (l) => source.onChange(l),
     problems: () => source.problems(),
     close: () => source.close(),

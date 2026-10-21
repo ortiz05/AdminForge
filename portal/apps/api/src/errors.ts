@@ -302,6 +302,8 @@ export const AUDITED_DENIALS: ReadonlySet<string> = new Set([
   'preview_required',
   'preview_stale',
   'protected_object',
+  // A Graph write naming a user by sign-in name (the protected-object guard matches ids, S-15).
+  'user_not_by_id',
   'writes_paused',
   'session_mismatch',
 ]);

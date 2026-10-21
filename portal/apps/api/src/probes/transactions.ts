@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError, readBodyText } from '@adminforge/connectors';
-import { syntheticTargetKey, type ProbeCheck } from '@adminforge/schemas';
+import { isGuid, syntheticTargetKey, type ProbeCheck } from '@adminforge/schemas';
 import { AppError } from '../errors';
 import { readableMessage } from '../execution/outbound';
 import { identityName, type ExecutionIdentity, type ServiceCall } from '../execution/types';
@@ -24,7 +24,6 @@ type FileRoundTrip = Extract<ProbeCheck, { kind: 'fileRoundTrip' }>;
 type OnlineMeeting = Extract<ProbeCheck, { kind: 'onlineMeeting' }>;
 
 const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** A Graph site id: `<host>,<site collection id>,<web id>` (or another id Graph accepts in /sites/{id}). */
 const SITE_ID = /^[A-Za-z0-9.-]+(,[0-9a-f-]{36}){2}$|^[0-9a-f-]{36}$/i;
 /** Hosts SharePoint serves file downloads from: commercial and GCC, GCC High, DoD, 21Vianet, Microsoft's own (df). */
@@ -181,7 +180,7 @@ async function accountId(x: CheckContext, address: string, key: string, denied: 
     },
     { label: `Looking up ${address}`, denied },
   );
-  const ids = (res.data?.value ?? []).map((u) => u.id).filter((id): id is string => !!id && GUID.test(id));
+  const ids = (res.data?.value ?? []).map((u) => u.id).filter((id): id is string => !!id && isGuid(id));
   if (ids.length !== 1)
     throw notConfigured(
       ids.length
@@ -587,7 +586,7 @@ const meetingDenied = (user: string) =>
 
 export async function onlineMeeting(c: OnlineMeeting, x: CheckContext): Promise<CheckResult> {
   const { key: organizerKey, value: organizer } = configured(x, c.organizer, 'a Teams test user');
-  if (!GUID.test(organizer))
+  if (!isGuid(organizer))
     throw notConfigured(
       `${organizerKey} is not a user object id.`,
       'Set it to the test user’s object id (Entra ID › Users › the user › Object ID).',

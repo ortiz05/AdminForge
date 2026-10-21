@@ -34,6 +34,7 @@ import {
   Textarea,
   TextField,
 } from '@adminforge/ui';
+import { isGuid } from '@adminforge/schemas';
 import { useMe } from '../lib/session';
 import { Callout, useDocumentTitle } from '../ops/ui';
 import {
@@ -62,7 +63,6 @@ export interface QuerySearch {
   q?: string;
 }
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_WS = 'default';
 const CUSTOM_WS = 'custom';
 /** Longest query that is put in the URL after a run (longer ones stay in history only). */
@@ -186,7 +186,7 @@ function WorkspacePicker({
     ...(ws.data ?? []).map((o) => ({ value: o.value, label: o.label, description: o.description })),
     { value: CUSTOM_WS, label: 'Another workspace…', description: 'Enter a workspace id' },
   ];
-  const invalid = value === CUSTOM_WS && custom.trim() !== '' && !GUID.test(custom.trim());
+  const invalid = value === CUSTOM_WS && custom.trim() !== '' && !isGuid(custom.trim());
   return (
     <div className="flex flex-wrap items-start gap-3">
       <Select label="Workspace" className="w-60" value={value} onValueChange={onChange} options={options} />
@@ -283,7 +283,7 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
       if (src === 'resourceGraph' && subscriptions.length) req.subscriptions = subscriptions;
       if (src === 'logAnalytics') {
         if (workspace === CUSTOM_WS) {
-          if (!GUID.test(customWorkspace.trim()))
+          if (!isGuid(customWorkspace.trim()))
             return 'Enter the workspace id (a GUID) or choose a workspace.';
           req.workspace = customWorkspace.trim().toLowerCase();
         } else if (workspace !== DEFAULT_WS) req.workspace = workspace;

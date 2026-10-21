@@ -2,6 +2,7 @@ import {
   DEFAULT_LOG_ANALYTICS_WORKSPACE,
   DefinitionId,
   formatContentError,
+  GUID_PATTERN,
   KqlMetric,
   KqlSource,
   parseDefinition,
@@ -68,7 +69,7 @@ export interface TenantValue {
   value: string;
 }
 
-const GUID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const GUID_IN_TEXT = new RegExp(GUID_PATTERN);
 const ONMICROSOFT = /[a-z0-9-]+\.onmicrosoft\.(com|us|de)\b/i;
 
 /**

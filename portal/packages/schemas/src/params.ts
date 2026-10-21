@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Expr, Identifier, exprOr } from './common';
+import { GUID_RE } from './guid';
 import { patternProblem } from './regex-safety';
 
 /**
@@ -24,7 +25,6 @@ const base = {
   redact: z.boolean().optional(),
 };
 
-const GUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 export const Guid = z.string().regex(GUID_RE, 'Expected a GUID');
 const IsoDate = z
   .string()

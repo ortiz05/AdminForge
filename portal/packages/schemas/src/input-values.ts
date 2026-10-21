@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { parseDuration } from './common';
+import { GUID_RE } from './guid';
 import {
   EMAIL_RE,
-  GUID_RE,
   HOSTNAME_RE,
   ISO_DURATION_RE,
   RELATIVE_DATE_RE,

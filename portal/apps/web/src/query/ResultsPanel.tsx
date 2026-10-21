@@ -28,6 +28,7 @@ import {
   useToast,
   type DataColumn,
 } from '@adminforge/ui';
+import { isGuid } from '@adminforge/schemas';
 import { ApiRequestError } from '../lib/api';
 import type { QueryRequest, QueryResult, ResultColumn } from './contracts';
 import type { ChartHint } from './gallery';
@@ -58,15 +59,13 @@ interface Row {
   r: Record<string, unknown>;
 }
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** A string column whose sampled values are all GUIDs reads better as id chips (subscriptionId, tenantId…). */
 function looksLikeGuids(rows: Array<Record<string, unknown>>, name: string): boolean {
   let seen = 0;
   for (const r of rows.slice(0, 50)) {
     const v = r[name];
     if (v === null || v === undefined || v === '') continue;
-    if (typeof v !== 'string' || !GUID.test(v)) return false;
+    if (typeof v !== 'string' || !isGuid(v)) return false;
     seen++;
   }
   return seen > 0;

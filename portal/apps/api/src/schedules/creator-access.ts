@@ -1,4 +1,5 @@
 import { ApiError } from '@adminforge/connectors';
+import { isGuid } from '@adminforge/schemas';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 
 /**
@@ -42,7 +43,6 @@ export interface AutomationGraph {
 }
 
 const AUTOMATION_READ: ExecutionIdentity = { kind: 'automation', mode: 'read' };
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** checkMemberObjects takes at most 20 ids per request. */
 const MEMBER_CHUNK = 20;
 
@@ -94,7 +94,7 @@ interface RoleHolders {
 
 type Facts = { exists: false } | { exists: true; enabled: boolean; guest: boolean; held: Set<string> };
 
-const lower = (v: unknown) => (typeof v === 'string' && GUID.test(v) ? v.toLowerCase() : null);
+const lower = (v: unknown) => (typeof v === 'string' && isGuid(v) ? v.toLowerCase() : null);
 
 export class CreatorAccess implements CreatorAccessChecker {
   private roles: { at: number; byRole: Map<string, RoleHolders> } | null = null;

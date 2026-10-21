@@ -25,6 +25,7 @@ export * from './references';
 export * from './json-schema';
 export * from './input-values';
 export * from './param-check';
+export * from './guid';
 export * from './path';
 export * from './regex-safety';
 export * from './eval-probe';

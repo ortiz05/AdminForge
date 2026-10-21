@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, lt, lte, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { isGuid } from '@adminforge/schemas';
 import type { AuditRow, AuditWriter } from '../audit/writer';
 import type { Database } from '../db/client';
 import { auditEvents } from '../db/schema';
@@ -35,7 +36,6 @@ export interface AuditPage {
   cursor?: string;
 }
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 const prefixOf = (action: string) => (/[.*]$/.test(action) ? action.replace(/\*$/, '') : undefined);
 
@@ -79,7 +79,7 @@ export async function queryAudit(
     if (before !== undefined) where.push(lt(auditEvents.seq, before));
     if (q.actor)
       where.push(
-        GUID.test(q.actor)
+        isGuid(q.actor)
           ? eq(auditEvents.actorOid, q.actor.toLowerCase())
           : likeEscaped(auditEvents.actorUpn, `%${escapeLike(q.actor)}%`),
       );
@@ -107,7 +107,7 @@ export async function queryAudit(
       .filter(
         (r) =>
           !actor ||
-          (GUID.test(actor)
+          (isGuid(actor)
             ? r.actorOid?.toLowerCase() === actor
             : (r.actorUpn ?? '').toLowerCase().includes(actor)),
       )

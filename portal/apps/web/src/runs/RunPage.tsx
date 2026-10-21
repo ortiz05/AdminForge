@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import { errorDescription } from '../lib/errors';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import type { Playbook, Runbook } from '@adminforge/schemas';
+import { isGuid, type Playbook, type Runbook } from '@adminforge/schemas';
 import {
   ArrowClockwiseIcon,
   Badge,
@@ -44,7 +44,6 @@ import { MaskedSecret, SecretNotices, SecretPanel } from './SecretPanel';
 import { isSecretMask, maskSecrets, secretKey } from './secrets';
 import { useRunLive } from './useRunLive';
 
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TRIGGER: Record<string, string> = {
   interactive: 'Started in the portal',
   bulk: 'Bulk action',
@@ -57,7 +56,7 @@ function InputValue({ value, unit }: { value: unknown; unit?: string }) {
   if (isSecretMask(value)) return <MaskedSecret value={value} />;
   if (value === '[redacted]' || value === '***')
     return <span className="font-mono text-xs text-fg-3">redacted</span>;
-  if (typeof value === 'string' && GUID_RE.test(value))
+  if (typeof value === 'string' && isGuid(value))
     return <IdChip value={value} showLabel={false} label="Id" />;
   if (typeof value === 'boolean') return <span>{value ? 'Yes' : 'No'}</span>;
   if (typeof value === 'number' && unit)
@@ -66,11 +65,7 @@ function InputValue({ value, unit }: { value: unknown; unit?: string }) {
     return (
       <span className="flex flex-wrap gap-1">
         {value.map((v) =>
-          GUID_RE.test(v) ? (
-            <IdChip key={v} value={v} showLabel={false} label="Id" />
-          ) : (
-            <Badge key={v}>{v}</Badge>
-          ),
+          isGuid(v) ? <IdChip key={v} value={v} showLabel={false} label="Id" /> : <Badge key={v}>{v}</Badge>,
         )}
       </span>
     );

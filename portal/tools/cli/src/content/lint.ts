@@ -17,7 +17,7 @@
  * handed a `sha256Of` lookup.
  */
 import { collectExpressions, compile, splitTemplate } from '@adminforge/expressions';
-import { formatPath } from '@adminforge/schemas';
+import { formatPath, isGuid } from '@adminforge/schemas';
 
 /**
  * A datasource's `when`, request or runner parameters that name another datasource without `ds.` (`group.id` instead
@@ -126,7 +126,6 @@ export interface UsersWriteProblem {
   message: string;
 }
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** `/users/` or `/users(` (optionally `/users('`), with what follows in the same text. */
 const USERS_AT = /(?:^|\/)users(\/|\('?)/gi;
 const SAFE_METHODS = new Set(['GET', 'HEAD']);
@@ -159,7 +158,7 @@ function textNamesUser(raw: string, next: AstNode | undefined): boolean {
     const rest = text.slice(m.index + m[0].length);
     const key = (m[1] === '/' ? /^[^/?#()]*/ : /^[^')]*/).exec(rest)![0];
     if (key !== '') {
-      if (!GUID.test(key)) return true;
+      if (!isGuid(key)) return true;
     } else if (rest === '' && !isGuidCall(next)) return true;
   }
   return false;

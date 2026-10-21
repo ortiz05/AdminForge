@@ -5,6 +5,7 @@ import { ADMIN_ENV_KEYS, loadEnv } from '@adminforge/config';
 import {
   IDENTITY_NAME,
   identityEnvPrefix,
+  isGuid,
   KQL_SOURCES,
   PORTAL_ROLES,
   type PortalRole,
@@ -440,8 +441,6 @@ export type Config = z.infer<typeof Schema> & {
   SCHEDULE_IDENTITIES?: readonly AppIdentityConfig[];
 };
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * The named app identities from AF_SCHEDULE_IDENTITIES and their AF_IDENTITY_<NAME>_* keys. Problems name keys only,
  * never values. Mock sign-in may name identities but never hold their credentials.
@@ -487,7 +486,7 @@ export function scheduleIdentities(
     const clientId = env[`${prefix}CLIENT_ID`];
     const certPath = env[`${prefix}CERT_PATH`];
     const clientSecret = env[`${prefix}CLIENT_SECRET`];
-    if (!clientId || !GUID.test(clientId)) {
+    if (!clientId || !isGuid(clientId)) {
       problems.push(
         `${prefix}CLIENT_ID: must be the application (client) id of the ${name} app registration`,
       );

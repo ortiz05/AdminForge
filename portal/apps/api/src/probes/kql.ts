@@ -1,5 +1,5 @@
 import { RESOURCE_GRAPH_API_VERSION, RESOURCE_GRAPH_PATH, type Provenance } from '@adminforge/connectors';
-import type { KqlSource } from '@adminforge/schemas';
+import { isGuid, type KqlSource } from '@adminforge/schemas';
 import { AppError } from '../errors';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 
@@ -38,7 +38,6 @@ export interface KqlResult {
   partialError?: { code: string; message: string };
 }
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
 
 /** Top-level `;` and `|` positions of a KQL text (outside strings, comments and brackets). */
@@ -198,7 +197,7 @@ export async function runKql(
   if (req.source === 'logAnalytics') {
     const ws = req.workspace?.trim();
     if (!ws) throw workspaceNotConfigured();
-    if (!GUID.test(ws))
+    if (!isGuid(ws))
       throw new AppError(
         400,
         'invalid_workspace',

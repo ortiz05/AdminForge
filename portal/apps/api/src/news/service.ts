@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   Feed,
   isCitationUrl,
+  isGuid,
   isTenantCollector,
   type NewsFeedStatus,
   type NewsItemDto,
@@ -187,12 +188,7 @@ export function decodeCursor(raw: string): NewsCursor {
   try {
     const v = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as { a?: unknown; i?: unknown };
     const at = typeof v.a === 'string' ? new Date(v.a) : null;
-    if (
-      at &&
-      Number.isFinite(at.getTime()) &&
-      typeof v.i === 'string' &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.i)
-    )
+    if (at && Number.isFinite(at.getTime()) && typeof v.i === 'string' && isGuid(v.i))
       return { activityAt: at, id: v.i.toLowerCase() };
   } catch {
     // fall through
@@ -474,7 +470,7 @@ export class NewsService {
   }
 
   async get(reader: NewsReader, id: string): Promise<NewsItemDto | null> {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+    if (!isGuid(id)) return null;
     const feeds = await this.feedMap(reader.roles);
     const row = await this.deps.store.get(id.toLowerCase(), reader.roles);
     if (!row || !feeds.has(row.feedKey)) return null;

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Provenance } from '@adminforge/connectors';
-import { KqlSource, ResourceGraphSpec } from '@adminforge/schemas';
+import { Guid, KqlSource, ResourceGraphSpec } from '@adminforge/schemas';
 import { z } from 'zod';
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { requireRole } from '../auth/guards';
@@ -18,9 +18,6 @@ import { requireQuerySource } from './sources';
  */
 
 export const QUERY_MAX_ROWS = 5000;
-const GUID = z
-  .string()
-  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'Expected a GUID');
 const ISO_DURATION = z
   .string()
   .regex(
@@ -32,10 +29,10 @@ export const QueryRequest = z
   .object({
     source: KqlSource,
     query: z.string().trim().min(1).max(100_000),
-    subscriptions: z.array(GUID).max(1000).optional(),
+    subscriptions: z.array(Guid).max(1000).optional(),
     managementGroups: z.array(z.string().min(1).max(90)).max(100).optional(),
     /** Log Analytics workspace (customer) id; default AF_LOG_ANALYTICS_WORKSPACE_ID. */
-    workspace: GUID.optional(),
+    workspace: Guid.optional(),
     timespan: ISO_DURATION.optional(),
   })
   .superRefine((b, ctx) => {

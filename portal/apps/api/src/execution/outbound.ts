@@ -28,7 +28,7 @@ import {
   type TokenProvider,
 } from '@adminforge/connectors';
 import { renderString } from '@adminforge/expressions';
-import { identityEnvPrefix, type Connection, type Requires } from '@adminforge/schemas';
+import { identityEnvPrefix, isGuid, type Connection, type Requires } from '@adminforge/schemas';
 import { appOnlyScope, type AppIdentityRegistry, type AutomationTokenProvider } from '../auth/automation';
 import { isArmed, type SessionRecord } from '../auth/session-store';
 import {
@@ -76,7 +76,6 @@ export const ARM_BASE = 'https://management.azure.com';
 const DEFAULT_MAX_ITEMS = 5000;
 const MAX_ITEMS = 100_000;
 const MAX_PAGES = 1000;
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PS_SERVICES = new Set<ServiceId>(['exchange', 'teams', 'sharepointAdmin', 'runner']);
 const SAFE_METHODS = new Set(['GET', 'HEAD']);
 
@@ -222,11 +221,11 @@ const isMicrosoftAppId = (id: string) =>
 /** A Microsoft first-party resource (by host, well-known application id or token-exchange URI). */
 export function isMicrosoftResource(audience: string): boolean {
   const a = audience.trim().replace(/\/+$/, '');
-  if (GUID.test(a)) return isMicrosoftAppId(a);
+  if (isGuid(a)) return isMicrosoftAppId(a);
   if (/^api:\/\//i.test(a)) {
     if (MICROSOFT_API_URIS.has(a.toLowerCase())) return true;
     const first = a.slice('api://'.length).split('/')[0] ?? '';
-    return GUID.test(first) && isMicrosoftAppId(first);
+    return isGuid(first) && isMicrosoftAppId(first);
   }
   if (!/^https?:\/\//i.test(a)) return false;
   try {
@@ -257,7 +256,7 @@ export function connectionAudienceProblem(
   const a = audience.trim().replace(/\/+$/, '');
   if (!a || /\s/.test(a) || hasControlChars(a)) return 'invalid';
   if (isMicrosoftResource(a)) return 'microsoft';
-  if (GUID.test(a)) return undefined;
+  if (isGuid(a)) return undefined;
   if (/^api:\/\/[^/\s]+(\/[^\s]*)?$/i.test(a)) return undefined;
   if (!/^https:\/\//i.test(a)) return 'invalid';
   let host: string;
@@ -529,7 +528,7 @@ export function templatePath(path: string): string {
       .replace(/\('([^']*)'\)/g, "('{id}')")
       .replace(/=\s*'[^']*'/g, "='{id}'");
     const prev = segments[i - 1]?.toLowerCase();
-    if (GUID.test(d)) out.push(prev === 'subscriptions' ? '{subscriptionId}' : '{id}');
+    if (isGuid(d)) out.push(prev === 'subscriptions' ? '{subscriptionId}' : '{id}');
     else if (d.includes('@')) out.push('{upn}');
     else if (prev === 'resourcegroups') out.push('{resourceGroup}');
     else if (/^\d{3,}$/.test(d) || (/^[A-Za-z0-9+/=_-]{24,}$/.test(d) && /\d/.test(d))) out.push('{id}');

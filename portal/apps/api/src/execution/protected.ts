@@ -1,4 +1,5 @@
 import type { ServiceId } from '@adminforge/connectors';
+import { GUID_PATTERN, isGuid } from '@adminforge/schemas';
 import { ReauthRequired } from '../auth/types';
 import type { Config } from '../config';
 import { AppError } from '../errors';
@@ -70,8 +71,7 @@ export interface WriteTarget {
   body?: unknown;
 }
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const GUID_ANY = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const GUID_ANY = new RegExp(GUID_PATTERN, 'g');
 const MAX_DEPTH = 32;
 
 /** Graph writes refused while the protected set can't be read: where AdminForge's own access lives. */
@@ -88,7 +88,7 @@ export const idList = (value: string | undefined): string[] =>
   (value ?? '')
     .split(/[\s,]+/)
     .map((s) => s.trim().toLowerCase())
-    .filter((s) => GUID.test(s));
+    .filter((s) => isGuid(s));
 
 const decode = (s: string) => {
   try {
@@ -153,7 +153,7 @@ function userKeyNotGuid(ref: string): boolean {
         .replace(/^id\s*=\s*/i, '')
         .replace(/^'(.*)'$/, '$1')
     ).trim();
-    if (key !== '' && !GUID.test(key)) return true;
+    if (key !== '' && !isGuid(key)) return true;
   }
   return false;
 }
@@ -377,7 +377,7 @@ export class ProtectedObjects {
       }
       if (data === null) return null;
       const grant = data as { id?: unknown; clientId?: unknown };
-      if (grant.id === grantId && typeof grant.clientId === 'string' && GUID.test(grant.clientId))
+      if (grant.id === grantId && typeof grant.clientId === 'string' && isGuid(grant.clientId))
         return grant.clientId.toLowerCase();
       break;
     }
@@ -440,7 +440,7 @@ export class ProtectedObjects {
       this.o.read(who, path, query, { all, correlationId });
     const idOf = (data: unknown) => {
       const id = (data as { id?: unknown } | null)?.id;
-      return typeof id === 'string' && GUID.test(id) ? id.toLowerCase() : undefined;
+      return typeof id === 'string' && isGuid(id) ? id.toLowerCase() : undefined;
     };
     // Named app identities no longer configured (removed from AF_SCHEDULE_IDENTITIES, ADR-014) keep their
     // registrations and application permissions until someone deletes them: still AdminForge's, still protected.
@@ -454,7 +454,7 @@ export class ProtectedObjects {
       : null;
     const known = new Set(this.appIds);
     const retiredIds = ((retired as { value?: Array<{ appId?: unknown }> } | null)?.value ?? [])
-      .map((a) => (typeof a?.appId === 'string' && GUID.test(a.appId) ? a.appId.toLowerCase() : null))
+      .map((a) => (typeof a?.appId === 'string' && isGuid(a.appId) ? a.appId.toLowerCase() : null))
       .filter((a): a is string => !!a && !known.has(a));
     for (const appId of retiredIds) ids.add(appId);
     // An app id with no registration or service principal in this tenant (404) is simply skipped.
@@ -482,8 +482,7 @@ export class ProtectedObjects {
     );
     for (const data of holders)
       for (const a of (data as { value?: Array<{ principalId?: unknown }> } | null)?.value ?? [])
-        if (typeof a?.principalId === 'string' && GUID.test(a.principalId))
-          ids.add(a.principalId.toLowerCase());
+        if (typeof a?.principalId === 'string' && isGuid(a.principalId)) ids.add(a.principalId.toLowerCase());
     return ids;
   }
 }

@@ -1,4 +1,5 @@
 import { parseDuration } from './common';
+import { GUID_RE } from './guid';
 import type { AdvancedField } from './page';
 import type { Param } from './params';
 import { MAX_PATTERN_INPUT, testContentPattern } from './regex-safety';
@@ -13,7 +14,6 @@ import { MAX_PATTERN_INPUT, testContentPattern } from './regex-safety';
  * (`top: must be at most 999`).
  */
 
-export const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** RFC 1123 host name: labels of 1–63 letters, digits and hyphens (not at either end), 253 characters in all. */
 export const HOSTNAME_RE =

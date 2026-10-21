@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Expr, HttpMethod, Identifier, Mode, envelopeShape } from './common';
+import { GUID_PATTERN } from './guid';
 
 /**
  * Connections describe external Entra-secured APIs (your Function Apps, §7.5). Only the named operations can be called,
@@ -21,7 +22,7 @@ const Audience = z.union([
   z
     .string()
     .regex(
-      /^(api:\/\/\S+|https:\/\/\S+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/,
+      new RegExp(String.raw`^(api:\/\/\S+|https:\/\/\S+|${GUID_PATTERN})$`),
       'Expected api://…, https://… or an application id',
     ),
 ]);

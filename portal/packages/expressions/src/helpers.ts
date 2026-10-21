@@ -1,3 +1,4 @@
+import { isGuid } from '@adminforge/schemas';
 import type jsonata from 'jsonata';
 import { DEADLINE_BINDING, checkDeadline } from './budget';
 import { checkGrowth, MAX_SEQUENCE, PERCENT_GROWTH } from './limits';
@@ -8,7 +9,6 @@ import type * as NodeCrypto from 'node:crypto';
  * (e.g. the query-builder compiler) quotes values exactly the same way.
  */
 
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DAY_MS = 86_400_000;
 
 const preview = (v: unknown) => {
@@ -127,7 +127,7 @@ export function secureRandom(
 
 /** Validates a GUID and returns it lower-cased; throws otherwise. */
 export function assertGuid(value: unknown): string {
-  if (typeof value !== 'string' || !GUID_RE.test(value.trim()))
+  if (typeof value !== 'string' || !isGuid(value.trim()))
     throw new Error(`$guid: not a valid GUID: ${preview(value)}`);
   return value.trim().toLowerCase();
 }

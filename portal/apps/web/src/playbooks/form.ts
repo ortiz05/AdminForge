@@ -2,6 +2,7 @@ import {
   inputErrors,
   inputsSchema,
   inputValueSchema,
+  isGuid,
   literalDefault,
   type Param,
   type Params,
@@ -82,10 +83,9 @@ export function stableJson(value: unknown): string {
 export const visibleInputs = (params: Params, omit: readonly string[] = []) =>
   Object.entries(params).filter(([name, p]) => !p.hidden && !omit.includes(name));
 
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Object ids compare case-insensitively and numbers typed as text equal numbers (the server coerces both). */
 const normInput = (v: unknown): unknown =>
-  typeof v === 'string' && GUID_RE.test(v.trim())
+  typeof v === 'string' && isGuid(v.trim())
     ? v.trim().toLowerCase()
     : Array.isArray(v)
       ? v.map(normInput)

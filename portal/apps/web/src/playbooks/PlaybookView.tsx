@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   confirmationMatches,
+  isGuid,
   unusualCharacters,
   withoutBidiControls,
   type UnusualCharacter,
@@ -36,11 +37,9 @@ import { Requirements, RiskBanner } from './Preflight';
 import { isConfirmationError, isPreviewError, type PlaybookFlow } from './usePlaybookFlow';
 import { itemInputs, itemLabel } from './url';
 
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function Value({ value }: { value: unknown }) {
   if (value === undefined || value === null || value === '') return <span className="text-fg-3">—</span>;
-  if (typeof value === 'string' && GUID_RE.test(value))
+  if (typeof value === 'string' && isGuid(value))
     return <IdChip value={value} showLabel={false} label="Id" />;
   if (Array.isArray(value)) return <span className="font-mono text-xs">{value.map(String).join(', ')}</span>;
   if (typeof value === 'object')

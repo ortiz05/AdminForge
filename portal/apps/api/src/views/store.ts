@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, or, sql } from 'drizzle-orm';
+import { isGuid } from '@adminforge/schemas';
 import type { Db } from '../db/client';
 import { savedViews } from '../db/schema';
 
@@ -29,7 +30,6 @@ export interface ViewStore {
   own(pageKey: string, userOid: string): Promise<ViewRecord[]>;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const byName = (a: ViewRecord, b: ViewRecord) =>
   a.name.localeCompare(b.name) || a.createdAt.getTime() - b.createdAt.getTime();
 const toRecord = (r: typeof savedViews.$inferSelect): ViewRecord => ({
@@ -63,7 +63,7 @@ export class SqliteViewStore implements ViewStore {
   }
 
   async get(id: string): Promise<ViewRecord | null> {
-    if (!UUID.test(id)) return null;
+    if (!isGuid(id)) return null;
     const [row] = await this.db.select().from(savedViews).where(eq(savedViews.id, id)).limit(1);
     return row ? toRecord(row) : null;
   }
@@ -77,7 +77,7 @@ export class SqliteViewStore implements ViewStore {
   }
 
   async update(id: string, patch: ViewPatch, now: Date): Promise<ViewRecord | null> {
-    if (!UUID.test(id)) return null;
+    if (!isGuid(id)) return null;
     const [row] = await this.db
       .update(savedViews)
       .set({ ...patch, updatedAt: now })
@@ -87,7 +87,7 @@ export class SqliteViewStore implements ViewStore {
   }
 
   async delete(id: string): Promise<void> {
-    if (!UUID.test(id)) return;
+    if (!isGuid(id)) return;
     await this.db.delete(savedViews).where(eq(savedViews.id, id));
   }
 

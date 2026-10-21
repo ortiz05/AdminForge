@@ -17,6 +17,7 @@ import {
 } from '@adminforge/engine';
 import {
   confirmationMatches,
+  GUID_RE as UUID,
   normalizeConfirmation,
   PORTAL_ROLES,
   type Connection,
@@ -116,7 +117,6 @@ export interface ListRunsInput {
 }
 
 const SEES_ALL: PortalRole[] = ['Portal.Operator', 'Playbook.Approver', 'Portal.Admin'];
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const hasAny = (s: SessionRecord, roles: readonly string[]) => roles.some((r) => s.roles.includes(r));
 const hasEvery = (s: SessionRecord, roles: readonly string[]) => roles.every((r) => s.roles.includes(r));

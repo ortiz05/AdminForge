@@ -13,11 +13,11 @@ import {
   shorten,
   XIcon,
 } from '@adminforge/ui';
+import { isGuid } from '@adminforge/schemas';
 import { api } from '../lib/api';
 import { query } from '../runs/json';
 import { SearchResponse, type SearchResult } from './contracts';
 
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 const NOUN: Record<string, string> = {
@@ -32,7 +32,7 @@ const NOUN: Record<string, string> = {
 /** Ids an engineer may paste directly (object id, UPN for users, resource id for resources). */
 function pastedId(kind: string, text: string): string | null {
   const t = text.trim();
-  if (GUID_RE.test(t)) return t.toLowerCase();
+  if (isGuid(t)) return t.toLowerCase();
   if (kind === 'user' && EMAIL_RE.test(t)) return t;
   if (kind === 'resource' && /^\/subscriptions\/[^/]+\//i.test(t)) return t;
   return null;
@@ -77,7 +77,7 @@ function SelectedEntity({
         <span className="truncate font-medium text-fg">{match?.title ?? shorten(id, 8, 6)}</span>
         {match?.subtitle && <span className="truncate text-xs text-fg-3">{match.subtitle}</span>}
       </span>
-      {GUID_RE.test(id) && <IdChip value={id} label="Object ID" showLabel={false} className="shrink-0" />}
+      {isGuid(id) && <IdChip value={id} label="Object ID" showLabel={false} className="shrink-0" />}
       <button
         type="button"
         onClick={onRemove}

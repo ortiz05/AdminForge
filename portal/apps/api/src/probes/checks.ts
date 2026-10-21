@@ -7,6 +7,7 @@ import { ApiError, FIXTURE_NOT_FOUND, readBodyText } from '@adminforge/connector
 import { ExpressionError, renderString, renderTemplate, type Scope } from '@adminforge/expressions';
 import {
   DEFAULT_LOG_ANALYTICS_WORKSPACE,
+  isGuid,
   parseDuration,
   type Connection,
   type Probe,
@@ -113,7 +114,6 @@ export interface ProbeDeps {
 
 const AUTOMATION: ExecutionIdentity = { kind: 'automation', mode: 'read' };
 const DAY_MS = 86_400_000;
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
 
 /** What a check reports; status defaults to the metric against the thresholds. */
@@ -879,7 +879,7 @@ async function signInHealth(
   let appId: string | undefined;
   if (c.appId) {
     appId = await text(c.appId, x.scope);
-    if (!GUID.test(appId))
+    if (!isGuid(appId))
       throw new NotConfigured(
         'The application id to check is not configured.',
         'Set the env key the probe uses (for example AF_READ_CLIENT_ID).',
@@ -888,7 +888,7 @@ async function signInHealth(
   let resourceId: string | undefined;
   if (c.resourceId) {
     resourceId = await text(c.resourceId, x.scope);
-    if (!GUID.test(resourceId))
+    if (!isGuid(resourceId))
       throw new NotConfigured(
         'The resource id to check is not configured.',
         'Set the env key the probe uses, or use the resource application id itself.',

@@ -38,7 +38,10 @@ export interface DefinitionResolver {
   ): Promise<ResolvedDefinition<DefinitionOf<K>>>;
 }
 
-/** Payload of the `definitions_changed` signal and the SSE `definitions.changed` event. Keys are `kind:key`. */
+/**
+ * Payload of the `definitions_changed` signal and of change listeners. Keys are `kind:key`. Browsers (the SSE
+ * `definitions.changed` event) only ever get `{all: true}` — events/bus.ts.
+ */
 export interface DefinitionsChanged {
   keys?: string[];
   all?: boolean;

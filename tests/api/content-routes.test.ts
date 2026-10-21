@@ -449,9 +449,8 @@ describe('GET /api/events (SSE)', () => {
         'kind: page\nid: identity.new-page\nversion: 1.0.0\ntitle: New\nowner: t\ntemplate: list-detail\nlayout:\n  - { widget: kpi }\n',
       );
       await s.waitFor(() => s.events.some((e) => e.event === 'definitions.changed'));
-      expect(s.events.find((e) => e.event === 'definitions.changed')!.data).toEqual({
-        keys: ['page:identity.new-page'],
-      });
+      // Browsers are told that content changed, never which keys (definitions-changed-audience.test.ts).
+      expect(s.events.find((e) => e.event === 'definitions.changed')!.data).toEqual({ all: true });
       await s.close();
       await t.app.close();
     } finally {

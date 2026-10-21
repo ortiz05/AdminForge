@@ -1,4 +1,4 @@
-import type { DefinitionSource } from '../definitions/types';
+import type { DefinitionsChanged, DefinitionSource } from '../definitions/types';
 
 /** An event for browsers (`GET /api/events`). `userOid` restricts delivery to one user's connections. */
 export interface PortalEvent {
@@ -47,11 +47,17 @@ export class EventBus {
     }
   }
 
-  /** Relays definition changes. */
+  /**
+   * Relays definition changes to every signed-in browser as `{all: true}`, never with the changed keys: those would
+   * tell people which definitions their roles don't let them open exist and when they change (a Reader learning of an
+   * admin-only page or playbook). Browsers refetch their content on any change anyway; the keys stay server-side,
+   * where the caches use them (datasource executor, scheduler).
+   */
   wire(opts: { definitions: DefinitionSource }): void {
-    this.unsubscribe = opts.definitions.onChange((change) =>
-      this.publish({ type: 'definitions.changed', data: change }),
-    );
+    this.unsubscribe = opts.definitions.onChange((change) => {
+      if (!change.all && !change.keys?.length) return;
+      this.publish({ type: 'definitions.changed', data: { all: true } satisfies DefinitionsChanged });
+    });
   }
 
   /**

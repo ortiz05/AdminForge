@@ -19,7 +19,7 @@ const modeOf = (s: SessionRecord, now: Date) =>
 /**
  * GET /api/events — Server-Sent Events for the signed-in session:
  *   ready               {mode, armedUntil}                 on connect
- *   definitions.changed {keys?: ["kind:key"], all?: true}   content published / reloaded → refetch definitions
+ *   definitions.changed {all: true}                        content published / reloaded → refetch (no keys: bus.ts)
  *   session.mode        {mode: read|armed, armedUntil}       armed, disarmed, extended or expired
  *   session.ended       {}                                   signed out or expired (the stream then closes)
  *   run.updated         <runs worker payload>              relayed from NOTIFY run_events

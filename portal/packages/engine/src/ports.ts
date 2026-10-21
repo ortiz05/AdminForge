@@ -86,6 +86,8 @@ export interface ServiceCall {
   maxItems?: number;
   /** arm: wait for long-running operations. */
   poll?: boolean;
+  /** An `idempotent: false` step's call: never sent again when its outcome is unknown (5xx, network, timeout). */
+  idempotent?: false;
 }
 
 export interface ServiceResult {

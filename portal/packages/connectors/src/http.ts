@@ -89,7 +89,8 @@ export interface HttpRequest {
   body?: unknown;
   /**
    * Safe to retry after 5xx / network errors. Defaults to true for GET, HEAD, OPTIONS, PUT and DELETE.
-   * 429 (and 503 with Retry-After) are always retried: the service did not process the request.
+   * 429 (and 503 with Retry-After) are always retried: the service did not process the request. The client's
+   * `sendOnce` overrides it for anything but a read.
    */
   idempotent?: boolean;
   signal?: AbortSignal;
@@ -133,6 +134,14 @@ export interface HttpClientOptions {
   maxTimeoutRetries?: number;
   /** Called before every retry (telemetry: retried throttling is otherwise invisible). Never throws into the call. */
   onRetry?: (info: RetryInfo) => void;
+  /**
+   * A request other than GET, HEAD or OPTIONS goes out at most once whenever its outcome is unknown: never again after
+   * a server error (a 503 with Retry-After included), a network failure or a timeout, whatever its method or
+   * `idempotent` say — only after a 429, which Microsoft answers before processing it. For the calls of an
+   * `idempotent: false` playbook step (a write whose second send would hurt). Reads, such as an ARM long-running
+   * operation's polls, keep their retries.
+   */
+  sendOnce?: boolean;
 }
 
 /** Wraps one attempt (see HttpClientOptions.gate). */
@@ -186,6 +195,7 @@ export function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> 
 
 const SERVER_RETRYABLE = new Set([500, 502, 503, 504]);
 const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
  * Headers AdminForge owns on every outbound call (S-02), lower case: the bearer token, the correlation id Microsoft
@@ -375,7 +385,9 @@ export function createHttpClient(opts: HttpClientOptions) {
 
   async function send<T>(req: HttpRequest): Promise<HttpResult<T>> {
     const method = (req.method ?? 'GET').toUpperCase();
-    const idempotent = req.idempotent ?? IDEMPOTENT_METHODS.has(method);
+    // sendOnce: only a 429 sends it again (below, `retryable`); otherwise as the request and its method say.
+    const once = opts.sendOnce === true && !READ_METHODS.has(method);
+    const idempotent = !once && (req.idempotent ?? IDEMPOTENT_METHODS.has(method));
     const signal = req.signal ?? opts.signal;
     let timeouts = 0;
     for (let attempt = 0; ; attempt++) {
@@ -409,7 +421,7 @@ export function createHttpClient(opts: HttpClientOptions) {
         const retryAfter = res.headers.get('retry-after');
         const retryable =
           res.status === 429 ||
-          (res.status === 503 && retryAfter !== null) ||
+          (res.status === 503 && retryAfter !== null && !once) ||
           (idempotent && SERVER_RETRYABLE.has(res.status));
         if (retryable && attempt < maxRetries) {
           await res.body?.cancel().catch(() => undefined);

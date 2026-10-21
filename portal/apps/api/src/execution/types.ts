@@ -111,6 +111,11 @@ export interface ServiceCall {
    * on — the tenant name at sign-in — asks for none: it falls back instead of holding the person up.
    */
   maxRetries?: number;
+  /**
+   * Set only by the playbook engine, for a step marked `idempotent: false`: the call goes out at most once whenever its
+   * outcome is unknown — never again after a server error, a network failure or a timeout (connectors › `sendOnce`).
+   */
+  idempotent?: false;
 }
 
 export interface ServiceCallResult<T = unknown> {

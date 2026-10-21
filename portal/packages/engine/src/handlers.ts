@@ -87,6 +87,10 @@ async function callService(prep: Prepared, ctx: StepContext): Promise<StepResult
 
 const declared = (ctx: StepContext) => (ctx.mode === 'write' ? { declaredWrite: true } : {});
 
+/** `idempotent: false` (a write whose second send would hurt): the executor sends its call at most once (L2). */
+const once = (step: Step | Compensation) =>
+  'idempotent' in step && step.idempotent === false ? { idempotent: false as const } : {};
+
 const graph: StepHandler = {
   external: true,
   async prepare(step: StepOf<'graph'>, ctx) {
@@ -100,6 +104,7 @@ const graph: StepHandler = {
       body: r.body,
       ...(r.beta ? { beta: true } : {}),
       ...declared(ctx),
+      ...once(step),
       paging: step.paging ?? 'none',
       ...(step.maxItems ? { maxItems: step.maxItems } : {}),
     });
@@ -141,6 +146,7 @@ const graphBatch: StepHandler = {
       path: '/$batch',
       body: { requests },
       ...declared(ctx),
+      ...once(step),
     });
   },
   async execute(prep, ctx) {
@@ -188,6 +194,7 @@ const arm: StepHandler = {
       headers: asHeaders(r.headers),
       body: r.body,
       ...declared(ctx),
+      ...once(step),
       paging: step.paging ?? 'none',
       ...(step.poll === false ? { poll: false } : { poll: true }),
     });
@@ -257,6 +264,7 @@ const fn: StepHandler = {
       headers: asHeaders(step.headers === undefined ? undefined : await ctx.render(step.headers)),
       body: step.body === undefined ? undefined : await ctx.render(step.body),
       ...declared(ctx),
+      ...once(step),
     };
     const p = prepared(call);
     return { ...p, plan: { ...p.plan!, method: 'CALL', path: `${step.connection}/${step.operation}` } };
@@ -280,6 +288,7 @@ const http: StepHandler = {
       headers: asHeaders(r.headers),
       body: r.body,
       ...declared(ctx),
+      ...once(step),
     });
   },
   execute: callService,

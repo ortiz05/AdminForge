@@ -163,7 +163,10 @@ const stepBase = {
   retry: RetryPolicy.optional(),
   onError: OnError.optional(),
   compensate: Compensation.optional(),
-  /** false → a crash while in flight marks the step `needs_review` instead of retrying (§7.8). Default true. */
+  /**
+   * false → a crash while in flight marks the step `needs_review` instead of retrying (§7.8), and its request is sent at
+   * most once: no automatic resend after a server error, a network failure or a timeout (only after a 429). Default true.
+   */
   idempotent: z.boolean().optional(),
   /** Output used for this step in dry runs when it is a write (templated). */
   dryRunOutput: z.unknown().optional(),

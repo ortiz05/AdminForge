@@ -1063,8 +1063,7 @@ export class Outbound implements OutboundExecutor {
     let attempts = 0;
     return (attempt) => {
       const n = attempts++;
-      // `crawlAfter`: the first attempts of a `paging: all` are interactive (a user's groups fit in a page or two);
-      // only a call that keeps going becomes a crawl.
+      // `crawlAfter`: a `paging: all` is interactive for its first attempts (most fit in a page or two), then a crawl.
       const lane =
         opts.lane ?? (opts.crawlAfter !== undefined && n >= opts.crawlAfter ? 'crawl' : 'interactive');
       return this.limiter.run(service, identityCacheKey(identity), attempt, {
@@ -1404,6 +1403,7 @@ export class Outbound implements OutboundExecutor {
       ...((d.call.maxRetries ?? this.deps.maxRetries) !== undefined
         ? { maxRetries: d.call.maxRetries ?? this.deps.maxRetries }
         : {}),
+      ...(d.call.idempotent === false ? { sendOnce: true } : {}),
     };
   }
 

@@ -53,14 +53,11 @@ describe('synthetic monitoring content', () => {
         group,
       ).toEqual([]);
     }
-    // Every section with probes links to them; AdminForge's own checks (tokens, readiness) stay under Automation.
-    for (const group of new Set(probes.map((p) => p.group!).filter((g) => g !== 'platform'))) {
-      const items = navigation.sections.find((s) => s.key === group)?.items ?? [];
-      expect(
-        items.map((i) => i.href),
-        group,
-      ).toContain(`/monitoring?group=${group}`);
-    }
+    // Every group with probes is a navigation section, whose row shows their status and links to them
+    // (/monitoring?group=<key>); AdminForge's own checks (tokens, readiness) are under Synthetic monitoring.
+    const sections = new Set(navigation.sections.map((s) => s.key));
+    for (const group of new Set(probes.map((p) => p.group!).filter((g) => g !== 'platform')))
+      expect(sections.has(group), group).toBe(true);
     expect(
       probes.filter((p) => p.check.kind === 'tokenAcquisition').every((p) => p.group === 'platform'),
     ).toBe(true);

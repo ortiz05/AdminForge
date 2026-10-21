@@ -127,7 +127,7 @@ async function run(id: string, input: Record<string, unknown> = {}, env: Record<
 describe('Azure Virtual Desktop in the navigation', () => {
   const navigation = def('portal.navigation') as Navigation;
 
-  it('is a parent of its own after Azure, opening with its overview and ending with its checks', () => {
+  it('is a parent of its own after Azure, opening with its overview; its checks are on its row', () => {
     const order = [...navigation.sections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((s) => s.key);
     expect(order.indexOf('avd')).toBe(order.indexOf('azure') + 1);
     const nav = composeNav({
@@ -142,8 +142,11 @@ describe('Azure Virtual Desktop in the navigation', () => {
       '/p/avd.session-hosts',
       '/p/avd.user-sessions',
       '/p/avd.connections',
-      '/monitoring?group=avd',
     ]);
+    // The rail shows the AVD probes' status on the section's row (their group is the section key).
+    expect(records.some((r) => r.kind === 'probe' && (r.def as { group?: string }).group === 'avd')).toBe(
+      true,
+    );
   });
 
   it.each(VIEWS)('%s is a Reader view owned by the AVD team', (id) => {

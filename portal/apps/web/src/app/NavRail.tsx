@@ -8,10 +8,12 @@ import {
   Icon,
   LockKeyIcon,
   Skeleton,
+  STATUS_ICON,
   Tooltip,
   tv,
 } from '@adminforge/ui';
 import { contentKeyOf, splitHref } from '../lib/links';
+import { checksText, useSectionChecks, type SectionCheck } from './section-checks';
 
 const nav = tv({
   slots: {
@@ -20,16 +22,28 @@ const nav = tv({
       'w-(--af-layout-nav-w) transition-all duration-(--af-motion-base) ease-(--af-motion-ease) nav-collapsed:w-(--af-layout-nav-w-collapsed)',
     ],
     scroll:
-      'flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto px-3 py-4 nav-collapsed:px-2',
+      'flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto px-3 py-4 nav-collapsed:gap-4 nav-collapsed:px-2',
     section: 'flex flex-col gap-0.5',
-    heading: 'af-eyebrow flex h-6 items-center gap-2 px-2 nav-collapsed:sr-only',
-    /** Section headings toggle their section (not in the icon rail, where headings are hidden). */
+    /** The section's row: its toggle (or label) and, when it has probes, its check status at the end. */
+    headingRow: 'flex min-w-0 items-center',
+    /** A group label that doesn't toggle anything: the eyebrow style is kept for those. */
+    heading: 'af-eyebrow flex h-6 min-w-0 flex-1 items-center gap-2 px-2 nav-collapsed:sr-only',
+    /** Section rows toggle their section (not in the icon rail, where headings are hidden): full size, like a page. */
     headingToggle: [
-      'af-eyebrow flex h-6 w-full items-center gap-2 rounded-sm px-2 text-left',
-      'transition-colors duration-(--af-motion-fast) hover:bg-hover hover:text-fg-2',
+      'flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md pr-1.5 pl-2 text-left text-md font-semibold text-fg-2',
+      'transition-colors duration-(--af-motion-fast) hover:bg-hover hover:text-fg',
     ],
-    caret: 'shrink-0 transition-transform duration-(--af-motion-fast)',
-    hiddenCount: 'font-normal text-fg-3 tabular-nums',
+    caret: 'shrink-0 text-fg-3 transition-transform duration-(--af-motion-fast)',
+    hiddenCount: 'text-xs font-normal text-fg-3 tabular-nums',
+    /** The section's open pages, set off from the next section's row. */
+    list: 'flex flex-col gap-0.5 pb-2 nav-collapsed:pb-0',
+    /** Check status: a dot when healthy, a ring with no result yet, the status glyph when degraded or failing. */
+    check: [
+      'inline-flex size-6 shrink-0 items-center justify-center rounded-sm',
+      'transition-colors duration-(--af-motion-fast) hover:bg-hover',
+    ],
+    checkActive: 'bg-selected hover:bg-selected',
+    checkSlot: 'size-6 shrink-0',
     item: [
       'group flex h-(--af-control-h) min-w-0 items-center gap-2.5 rounded-md px-2 text-fg-2',
       'transition-colors duration-(--af-motion-fast) hover:bg-hover hover:text-fg',
@@ -122,6 +136,12 @@ export interface NavCount {
 
 const countText = (n: number) => (n > 99 ? '99+' : String(n));
 
+/**
+ * The rail decides what's current (`isActive`). TanStack would also mark `/monitoring` current on
+ * `/monitoring?group=…` (it matches search partially) and set `aria-current` itself; exact matching leaves it to us.
+ */
+const EXACT = { exact: true } as const;
+
 function NavLink({
   item,
   section,
@@ -185,12 +205,25 @@ function NavLink({
       {content}
     </a>
   ) : key ? (
-    <Link to="/p/$key" params={{ key }} search={search as never} className={className} aria-current={current}>
+    <Link
+      to="/p/$key"
+      params={{ key }}
+      search={search as never}
+      className={className}
+      aria-current={current}
+      activeOptions={EXACT}
+    >
       {content}
     </Link>
   ) : (
     // Coded routes (/runs, /admin/audit, …) and the catch-all resolve by path.
-    <Link to={pathname as never} search={search as never} className={className} aria-current={current}>
+    <Link
+      to={pathname as never}
+      search={search as never}
+      className={className}
+      aria-current={current}
+      activeOptions={EXACT}
+    >
       {content}
     </Link>
   );
@@ -203,6 +236,55 @@ function NavLink({
       disabled={!collapsed}
     >
       {link}
+    </Tooltip>
+  );
+}
+
+/** Dot when healthy, ring with no result yet, the status glyph (warning, cross) when degraded or failing. */
+function CheckGlyph({ status }: { status: SectionCheck['status'] }) {
+  if (status === 'crit' || status === 'warn') {
+    const Glyph = STATUS_ICON[status];
+    return (
+      <Glyph size={14} weight="fill" aria-hidden className={status === 'crit' ? 'text-crit' : 'text-warn'} />
+    );
+  }
+  return (
+    <span
+      className={cn('size-2 rounded-pill', status === 'ok' ? 'bg-ok' : 'border border-fg-3')}
+      aria-hidden
+    />
+  );
+}
+
+/**
+ * The section's check status at the end of its row, linking to Synthetic monitoring for the section's own probes
+ * (`/monitoring?group=<key>`). Never colour alone: the shape differs per state (dot, ring, warning, cross) and the
+ * link's name and tooltip say it in words.
+ */
+function SectionCheckLink({
+  section,
+  check,
+  active,
+}: {
+  section: NavSection;
+  check: SectionCheck;
+  active: boolean;
+}) {
+  const s = nav();
+  const text = checksText(check);
+  return (
+    <Tooltip content={`Service checks · ${text}`} side="right">
+      <Link
+        to="/monitoring"
+        search={{ group: section.key } as never}
+        activeOptions={EXACT}
+        className={cn(s.check(), active && s.checkActive())}
+        aria-label={`${section.label} service checks: ${text}`}
+        aria-current={active ? 'page' : undefined}
+        data-status={check.status}
+      >
+        <CheckGlyph status={check.status} />
+      </Link>
     </Tooltip>
   );
 }
@@ -223,8 +305,9 @@ export interface NavRailProps {
 }
 
 /**
- * Sections and pages from GET /api/nav, collapsible to a 56 px icon rail. Section headings open and close their
- * section; the icon rail always shows every page (its headings are hidden).
+ * Sections and pages from GET /api/nav, collapsible to a 56 px icon rail. Section rows open and close their section
+ * and, when the section has probes, end with its check status (a link to `/monitoring?group=<key>`); the icon rail
+ * always shows every page (its headings and check status are hidden).
  */
 export function NavRail({
   sections,
@@ -237,7 +320,13 @@ export function NavRail({
 }: NavRailProps) {
   const pathname = useRouterState({ select: (st) => st.location.pathname });
   const search = useRouterState({ select: (st) => st.location.search }) as Record<string, unknown>;
-  const hrefs = sections?.flatMap((x) => x.items.map((i) => i.href)) ?? [];
+  const checks = useSectionChecks();
+  const checkHref = (key: string) => `/monitoring?group=${key}`;
+  // A section's check view (/monitoring?group=…) is its dot's place, not Synthetic monitoring's.
+  const hrefs = [
+    ...(sections?.flatMap((x) => x.items.map((i) => i.href)) ?? []),
+    ...(sections ?? []).filter((x) => checks?.[x.key]).map((x) => checkHref(x.key)),
+  ];
   const active = (href: string) => isActive(href, pathname, search, hrefs);
   const s = nav();
   return (
@@ -257,43 +346,56 @@ export function NavRail({
             ? section.items.filter((item) => active(item.href) || counts?.[item.key])
             : section.items;
           const hidden = section.items.length - items.length;
+          // In the icon rail headings are hidden, and so is the check status (Synthetic monitoring has every probe).
+          const check = collapsed ? undefined : checks?.[section.key];
+          // Only when some section has checks does every row keep the status column, so the carets line up.
+          const status = check ? (
+            <SectionCheckLink section={section} check={check} active={active(checkHref(section.key))} />
+          ) : checks && Object.keys(checks).length > 0 && !collapsed ? (
+            <span className={s.checkSlot()} aria-hidden />
+          ) : null;
           return (
             <div key={section.key} className={s.section()}>
               {i > 0 && <div className={s.divider()} aria-hidden />}
-              {collapsed || !onToggleSection ? (
-                <h2 className={s.heading()} id={`nav-${section.key}`}>
-                  {section.label}
-                </h2>
-              ) : (
-                <h2 className="nav-collapsed:sr-only" id={`nav-${section.key}`}>
-                  <button
-                    type="button"
-                    className={s.headingToggle()}
-                    aria-expanded={!closed}
-                    aria-controls={`nav-list-${section.key}`}
-                    aria-label={closed ? `${section.label} (${hidden} pages hidden)` : section.label}
-                    onClick={() => onToggleSection(section.key)}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{section.label}</span>
-                    {closed && hidden > 0 && (
-                      <span className={s.hiddenCount()} aria-hidden>
-                        {hidden}
+              <div className={s.headingRow()}>
+                {collapsed || !onToggleSection ? (
+                  <h2 className={s.heading()} id={`nav-${section.key}`}>
+                    {section.label}
+                  </h2>
+                ) : (
+                  <h2 className="min-w-0 flex-1 nav-collapsed:sr-only" id={`nav-${section.key}`}>
+                    <button
+                      type="button"
+                      className={s.headingToggle()}
+                      aria-expanded={!closed}
+                      aria-controls={`nav-list-${section.key}`}
+                      aria-label={closed ? `${section.label} (${hidden} pages hidden)` : section.label}
+                      onClick={() => onToggleSection(section.key)}
+                    >
+                      <span className="min-w-0 flex-1 truncate" title={section.label}>
+                        {section.label}
                       </span>
-                    )}
-                    <CaretDownIcon
-                      size={10}
-                      weight="bold"
-                      aria-hidden
-                      className={cn(s.caret(), closed && '-rotate-90')}
-                    />
-                  </button>
-                </h2>
-              )}
+                      {closed && hidden > 0 && (
+                        <span className={s.hiddenCount()} aria-hidden>
+                          {hidden}
+                        </span>
+                      )}
+                      <CaretDownIcon
+                        size={12}
+                        weight="bold"
+                        aria-hidden
+                        className={cn(s.caret(), closed && '-rotate-90')}
+                      />
+                    </button>
+                  </h2>
+                )}
+                {status}
+              </div>
               {/* Always in the DOM so the heading's aria-controls resolves; hidden when nothing in it is shown. */}
               <ul
                 id={`nav-list-${section.key}`}
                 aria-labelledby={`nav-${section.key}`}
-                className="flex flex-col gap-0.5"
+                className={s.list()}
                 hidden={items.length === 0}
               >
                 {items.map((item) => (

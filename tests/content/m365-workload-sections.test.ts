@@ -84,9 +84,14 @@ describe('Microsoft 365 workloads in the navigation', () => {
     const keys = [...navigation.sections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((s) => s.key);
     const m365 = keys.indexOf('m365');
     expect(keys.slice(m365, m365 + 4)).toEqual(['m365', 'exchange', 'sharepoint', 'teams']);
+    // The section's checks are the status mark on its row (its key is the probes' group), not an item of their own.
     for (const key of WORKLOADS) {
       const section = navigation.sections.find((s) => s.key === key)!;
-      expect(section.items?.map((i) => i.href)).toContain(`/monitoring?group=${key}`);
+      expect(section.items ?? []).toEqual([]);
+      expect(
+        records.some((r) => r.kind === 'probe' && (r.def as Def).group === key),
+        key,
+      ).toBe(true);
     }
   });
 
@@ -106,7 +111,7 @@ describe('Microsoft 365 workloads in the navigation', () => {
     );
   });
 
-  it('the rail opens each workload with its overview and ends with its checks', () => {
+  it('the rail opens each workload with its overview and lists only its pages', () => {
     const nav = composeNav({ navigation, definitions: records, roles: ALL_ROLES, licences: null });
     const items = (key: string) => nav.sections.find((s) => s.key === key)!.items;
     expect(items('exchange').map((i) => i.label)).toEqual([
@@ -115,20 +120,9 @@ describe('Microsoft 365 workloads in the navigation', () => {
       'Shared mailboxes',
       'Distribution lists',
       'Mail forwarding',
-      'Service checks',
     ]);
-    expect(items('sharepoint').map((i) => i.label)).toEqual([
-      'Overview',
-      'Sites',
-      'Sharing',
-      'Service checks',
-    ]);
-    expect(items('teams').map((i) => i.label)).toEqual([
-      'Overview',
-      'All teams',
-      'User policies',
-      'Service checks',
-    ]);
+    expect(items('sharepoint').map((i) => i.label)).toEqual(['Overview', 'Sites', 'Sharing']);
+    expect(items('teams').map((i) => i.label)).toEqual(['Overview', 'All teams', 'User policies']);
     expect(items('m365').map((i) => i.href)).toEqual([
       '/p/m365.overview',
       '/p/m365.service-health',
@@ -136,8 +130,9 @@ describe('Microsoft 365 workloads in the navigation', () => {
       '/p/m365.licences',
       '/p/m365.usage',
       '/p/m365.groups',
-      '/monitoring?group=m365',
     ]);
+    // No section lists its checks as a page any more: the rail draws them on the section's row (D-14).
+    expect(nav.sections.flatMap((s) => s.items).filter((i) => i.href.includes('group='))).toEqual([]);
   });
 });
 

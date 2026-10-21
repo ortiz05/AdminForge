@@ -1,9 +1,12 @@
 $schema: ../packages/schemas/generated/navigation.schema.json
 kind: navigation
 id: portal.navigation
-version: 1.4.0
+version: 1.5.0
 title: Navigation
-summary: Section order, labels and icons for the navigation rail. Pages join a section through nav.section.
+summary: >-
+  Section order, labels and icons for the navigation rail. Pages join a section through nav.section. A section whose
+  key is a probe group (identity, exchange, …) shows its check status at the end of its row, linking to
+  /monitoring?group=<key>.
 owner: portal-admins
 
 sections:
@@ -17,41 +20,28 @@ sections:
     label: Identity
     icon: identification-card
     order: 20
-    items:
-      - { key: identity-checks, label: Service checks, href: /monitoring?group=identity, icon: pulse, order: 90 }
   - key: m365
     label: Microsoft 365
     icon: squares-four
     order: 30
-    items:
-      - { key: m365-checks, label: Service checks, href: /monitoring?group=m365, icon: pulse, order: 90 }
   # Each Microsoft 365 workload is its own parent; Microsoft 365 keeps what spans them (service health, Message
   # center, licences, usage, groups). Page keys stay `m365.*`: a page moves with its nav.section, links keep working.
-  # "Service checks" opens Synthetic monitoring for the section's own probes (a probe's `group`).
   - key: exchange
     label: Exchange Online
     icon: envelope-simple
     order: 32
-    items:
-      - { key: exchange-checks, label: Service checks, href: /monitoring?group=exchange, icon: pulse, order: 90 }
   - key: sharepoint
     label: SharePoint Online
     icon: globe-hemisphere-west
     order: 34
-    items:
-      - { key: sharepoint-checks, label: Service checks, href: /monitoring?group=sharepoint, icon: pulse, order: 90 }
   - key: teams
     label: Teams
     icon: microsoft-teams-logo
     order: 36
-    items:
-      - { key: teams-checks, label: Service checks, href: /monitoring?group=teams, icon: pulse, order: 90 }
   - key: endpoint
     label: Endpoint
     icon: devices
     order: 40
-    items:
-      - { key: endpoint-checks, label: Service checks, href: /monitoring?group=endpoint, icon: pulse, order: 90 }
   - key: security
     label: Security
     icon: shield-check
@@ -60,15 +50,11 @@ sections:
     label: Azure
     icon: cloud
     order: 60
-    items:
-      - { key: azure-checks, label: Configuration checks, href: /monitoring?group=azure, icon: pulse, order: 90 }
   # Azure Virtual Desktop: host pools, session hosts and user sessions across every subscription.
   - key: avd
     label: Azure Virtual Desktop
     icon: desktop-tower
     order: 62
-    items:
-      - { key: avd-checks, label: Service checks, href: /monitoring?group=avd, icon: pulse, order: 90 }
   # Cost and billing across every subscription, for the people who manage Azure spend (finance and engineering).
   # Its reports are listed in the Reports catalogue (area billing).
   - key: billing

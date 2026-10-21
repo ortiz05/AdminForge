@@ -420,7 +420,7 @@ function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; 
 /**
  * Synthetic monitoring (R6): probe tiles grouped by the service they watch (Exchange Online, Teams, sign-in, …; or by
  * check type), worst group first, with sparkline and thresholds; detail chart. `?group=` narrows it to one service —
- * the "Service checks" item of each service's section links there.
+ * the check status at the end of each service's section row in the navigation links there.
  */
 export function MonitoringPage({ search }: { search: MonitoringSearch }) {
   const navigate = useNavigate();

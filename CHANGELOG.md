@@ -6,10 +6,322 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Platform review (2026-10-21)
+
+The SQLite-on-Kubernetes build was reviewed for security, functionality, design and organization
+(`docs/plans/2026-10-21-platform-review-*.md`; ids in parentheses: S security, F functionality, D design, O
+organization). There was no critical or high security finding; the fixes are below, and what remains is in
+`docs/backlog.md`.
+
+#### Added
+
+- **Cluster preflight** (`portal/deploy/kubernetes/preflight.sh`): a read-only check of the cluster AdminForge goes
+  to — Kubernetes 1.29 or later, the namespace's restricted Pod Security label, a storage class on block storage (not
+  network or FUSE file systems; CSI, `fsGroup`, binding mode, expansion) with a ReadWriteOncePod dry run, an enforcing
+  NetworkPolicy engine, the cluster DNS pods, cluster addresses in the ranges egress refuses, amd64 nodes with room,
+  the IngressClass (a warning for the retired ingress-nginx) and the pull secret's type. It never reads a Secret's
+  data. The Kubernetes README's **Requirements** say what the cluster must provide, measured, with a readiness
+  checklist.
+- **Content schema version** (D-07; `CONTENT_SCHEMA_VERSION` in `@adminforge/schemas`, now 2): `adminforge publish`
+  stamps it on every definition row (migration `0002`, a plain `ADD COLUMN`; earlier rows are version 1), and
+  `publish --dry-run` lists rows stamped with an older version and whether they still pass. Version 2 is the stricter
+  `pattern:` rule and the `status`/`enum` column rule below; after upgrading, publish the content again.
+  `build-images.sh --dry-run` prints the build record.
+- **`adminforge list [--kind] [--section] [--status] [--search] [--json]`** (O-05): every content definition with its
+  id, kind, section, status and file. The section is where it shows (`nav.section`, a report's `area`, a probe's
+  `group`, a schedule's target); `--section` also matches the id prefix and tags, so `--section exchange` finds the
+  Exchange pages, reports and playbooks kept under `m365/`. It reads the content directory only, never the admin env
+  file. `portal/content/README.md` describes where content goes.
+- **Preview** (F-11, F-19): `preview: true` marks a definition not yet confirmed to work against a live tenant. Its
+  page shows a quiet "Preview" badge ("Not yet confirmed to work against a live tenant: what it shows may differ from
+  what Microsoft returns"), and `adminforge validate` lists every preview; `m365.teams-user-policies` is the first.
+- **`enum` table column kind** (D-16): a category shown as plain text with its label
+  (`map: { AzureAd: Entra joined }`) and a facet filter, in tables and exports; `status` is for values that are fine
+  or not. 43 category columns moved from neutral status pills to `enum`. `wrap: true` gives a text column two lines.
+- **`entity:` on pages** (D-08; `user|group|device|app|resource`): the command palette opens that kind of search
+  result on the declaring page. `validate` allows one active page per kind, and that page needs an `id` param.
+- **Write playbooks run end to end in mock mode** (F-02): with mock sign-in on fixtures, a write no fixture describes
+  is accepted (nothing changes: there is no tenant), a read with no fixture fails with a message that names no file,
+  and the API log names the fixture to add.
+- **Every page renders from the fixtures** (F-03, O-16): `tests/content/fixtures-complete.test.ts` renders every
+  active page, dashboard and report datasource from the fixtures, and every KQL probe from its `af:` variant (eight
+  KQL probes gained one); an API test runs a write playbook through the real executor down to its compensation.
+
+#### Changed
+
+- **Restarts no longer cancel runs** (D-01): a stop (every deploy) lets each run finish the step it is on and stop at
+  its next checkpoint; a step still in flight after 10 s is interrupted. The runs stay `running`, their jobs are
+  queued again, and the next process resumes them where they stopped — an interrupted step is retried, or, if it is
+  `idempotent: false`, the run ends `needs_review`. A resumed run passes the same version and role re-checks as a
+  parked one. A worker whose run lock lapsed stops at its next checkpoint once its lease renewal notices. A person's
+  cancel still cancels. Writes whose second send would hurt say `idempotent: false`: `avd.log-off-user-session` and
+  `avd.send-user-message` (the session number may belong to someone else by then), `endpoint.restart-device` and
+  `endpoint.wipe-device` (all 1.0.1; `tests/content/non-idempotent-writes.test.ts`).
+- **At most 5 open runs per person** (F-08, `RUN_MAX_OPEN_PER_USER`): starting a run, preview or bulk run over the
+  cap — or resuming a parked run of yours over it — answers 429 `too_many_runs`. Runs parked on an approval, input,
+  write access or a sign-in, finished runs and scheduled runs don't count; a bulk run counts once.
+  `RUN_WORKER_CONCURRENCY` now defaults to 8 (was 4).
+- **Shutdown deadline** (D-24, `SHUTDOWN_TIMEOUT_SECONDS`, default 50): a stop that takes longer logs what is still
+  open and exits 1, before the pod's 60 s grace ends; a second signal exits at once. At most 5 run streams
+  (`GET /api/runs/:id/events`) per session (429 `too_many_streams`).
+- **Retention within a budget** (D-02): each pass deletes 2,000 rows at a time, lets requests in between and stops
+  after 2 s; the rest continues at the next 10-minute pass, and freed space goes back to the volume in steps. Report
+  files and News and changes items are pruned within the same budget; report files continue where the last pass
+  stopped, and symbolic links are never followed.
+- **Audit chain check** (D-05): `probes.audit-chain` checks the events since the last verified checkpoint every hour,
+  and walks the whole chain after a restart, once a day and after any break; a changed event, or one removed from
+  the middle, stays reported on the checks after it.
+- **Missed schedule times** (F-09): a time missed by more than an hour (the pod was down) is recorded as a skipped run
+  (`schedule_missed`) that says when and why, and it is audited.
+- **Run now on a switched-off schedule** (F-10) only writes the file: no email, Teams post or notification; the
+  button, the toast and the history say so.
+- **Heartbeats from progress** (D-09): the scheduler's heartbeat comes from its ticks and the run worker's from its
+  queue polls, not from timers, so `/readyz` and `GET /api/schedules` (`scheduler`) show one that stopped working as
+  `degraded`. A timed-out scheduled job keeps its slot until it ends (at most 2 minutes more), and a report job told
+  to stop sends nothing (D-23).
+- **Error messages in plain words** (F-13): validation names the field and what it must be ("format must be csv or
+  xlsx") instead of zod's text; an oversized body is 413 `body_too_large` (was `ctp_body_too_large`), a non-JSON body
+  415 `unsupported_media_type`, unreadable JSON `invalid_request`; common codes carry a hint when the thrower gave
+  none; an unknown address no longer echoes its path.
+- **Retired content says so** (F-05): a retired page, report or playbook answers 409 `definition_retired` with its
+  retirement note, shown only to people who may open it, instead of 404; an unknown key's hint is worded for the
+  person.
+- **Navigation rail** (D-14, F-16): section rows are full size with their hidden-page count. Each section with probes
+  ends with its check status (a dot when healthy, a ring with no result yet, a warning or cross when degraded or
+  failing; its name and tooltip give the counts), linking to Synthetic monitoring for that section
+  (`/monitoring?group=<key>`). The eight "Service checks" items are gone (navigation 1.5.0). Only Readers' rails ask
+  for probe status. The "N new breaking" pill in the top bar uses the info tone, without a pulse or an outline, and
+  its name starts with what it shows (D-13); the News page keeps its own tones.
+- **Probe drawer** (D-17): "What to do" appears only for degraded or failing results; healthy probes keep their link
+  under "What this checks". The history is under "Last 24 hours" and says why there is no chart. Tile messages wrap
+  to two lines, and times are never cut. **Token probes** (1.0.4) say what the administrator checks and where renewal
+  is described; the SharePoint token's summary no longer names configuration keys.
+- **Charts** (D-12): whole-number data steps by whole numbers; value labels that would overlap are dropped, and a
+  value axis with less than about 160 px shows none. Panel titles wrap to two lines and are whole on hover. The
+  inactive guests domains chart is full width (2.0.1).
+- **List pages put more rows above the fold** (D-11): actions on the title row, a one-line description with More, a
+  KPI strip that folds to one line (remembered per page; its warnings stay visible) and a filter bar that stays at the
+  top while the list scrolls. The inspector is 920 px wide and stays beside the list at 1440 and 1920 px (D-10).
+- **Content write actions show the lock** (D-18): buttons and "More actions" that run a write playbook show a lock and
+  "Arm write access to run this; previewing it doesn't need it" while unarmed (without the Operator role: "Running
+  this needs the Portal Operator role") and the ember dot once armed; they stay clickable, to preview. Table row and
+  bulk actions don't show it yet.
+- A widget with a broken configuration names the part for the reader and keeps the details "For the content author";
+  the user page's copy is plain (D-19).
+- **One check for params and inputs** (D-06, D-15, D-21): page params, query-builder values and run inputs are
+  checked by the same code in the browser and the API (`@adminforge/schemas`, which has a browser entry without
+  `yaml`); page-param messages read after the label. Exports read `[n]` column paths and the table's labels and tags.
+  KPI labels wrap to two lines; time cells never truncate; truncated table text shows in full on hover.
+- **Folders follow ids** (O-05): `adminforge validate` (and so `publish`) refuses a definition outside the folder its
+  id prefix names (`identity.users` belongs in `pages/identity/`) and names the right folder. `probes.*` and `feeds.*`
+  sit directly in `probes/` and `feeds/`; three older folders are listed exceptions (flat section overview
+  dashboards, `sweep.*` in `schedules/probes/`, `integrations.hr-sync`). Nothing moved.
+  `adminforge new probe probes/<name>` writes `probes/<name>.probe.yaml`, not `probes/probes/`.
+- **Kubernetes manifests:** amd64 nodes only (the runner's base image is amd64 only), a startup probe for the runner,
+  requests from measurements (api 500m CPU and 1 GiB, runner 250m and 1 GiB), a 3 GiB memory limit for the runner
+  and 4 GiB of `/tmp` for the api (room for the copy `db backup -` stages there). The Dockerfiles name their base
+  images literally instead of through build arguments.
+- **Tests pick their project by file name** (O-06, O-03): `*.scale.test.ts` (wall-clock budgets, one at a time) and
+  `*.pwsh.test.ts` (real PowerShell, the new `pwsh` project: `pnpm --filter @adminforge/tests test:pwsh`); guards keep
+  the names honest and keep runtime code to other packages' declared entry points.
+- **Tooling** (O-11, O-13): `pnpm typecheck` no longer builds packages first (no `dist/` written). Commit scope `plan`
+  is retired and `dev` is renamed `tooling`.
+- **Claude Code kit** (O-08): every skill follows one template (Overview, When not to use, Steps, Done when, Common
+  mistakes, See also); new skills for coded screens, configuration keys, expression helpers, CLI commands and ADRs;
+  `docs/content-recipes.md` holds the expression helpers, quoting rules, Microsoft quirks, fixtures and lifecycle the
+  page skill used to carry; the design reviewer states the design direction itself;
+  `tests/unit/docs/skills-shape.test.ts` keeps the kit's shape and every path it cites.
+- **Documentation** (O-01, O-09, O-10, O-12): one index, `docs/README.md` (every document, what it owns, its
+  audience, when to update it); CLAUDE.md states one rule for checkouts a running service serves; every plan opens
+  with a status line and finished plans carry no agent directive; the glossary names each term's code identifier and
+  UI label and makes British spelling the rule for new identifiers and UI text; ADR-001 to ADR-010 are back-filled
+  with context, options and consequences; `tests/unit/docs/` checks every path, link and heading reference in
+  CLAUDE.md, `.claude/`, the onboarding guides and the index, an index row per document, and a status line per plan.
+
+#### Fixed
+
+- **`pnpm test` is green on any day and on a busy machine** (F-01): the m365 overview sort test counts from its pinned
+  clock; unit, component and content allow 15 s per test; the importer test uses only `TEST_POSTGRES_URL` (never the
+  env file's database), skips without it locally and fails in CI.
+- **Mock mode never reaches the network** (F-20, F-04): HTTP, DNS and certificate probes answer from host, DNS and TLS
+  fixtures (`tests/fixtures/{hosts,dns,tls}`), and Teams delivery — scheduled, the approvers' message of a run
+  waiting for approval, and scheduler one-shots with a delivery override — posts through the fixtures. Before, every
+  mock `pnpm dev` sent anonymous requests to Microsoft and public DNS every 15 minutes and Monitoring showed false
+  crits.
+- **Probes on fixtures say what they couldn't do:** a probe whose URL or DNS name uses only settings that aren't set
+  says "not configured"; a missing or broken fixture is "could not evaluate", never a crit — for a Graph, ARM or KQL
+  request `fixture_not_found`, with a message that never names the fixture file — and a probe expecting a 404 no
+  longer passes on a missing fixture. Only fixtures mode reads a missing fixture that way.
+- **Query Studio refuses Resource Graph queries Azure would refuse** (F-06) — more than three `join`/`union`, a second
+  join to another table or a union across tables (unless all are `resources` ↔ `resourcecontainers`), a leading
+  `union` — with the same rules `adminforge validate`
+  applies, before anything is sent or audited (before, "Save as report" failed after the query seemed to work). The
+  join lint runs in linear time (100,000 newlines or escaped quotes blocked the API for 5–10 s).
+- `docs/api.md` lists every registered route (70) and the right sign-in limits; a test keeps the index honest in both
+  sign-in modes (F-07).
+- **Throttling** (D-03): when Microsoft throttles, waiting calls no longer all retry on the same second — Retry-After
+  is spread ±20 % (still at most 120 s), ARM long-running-operation polls included. Scheduler one-shots (`--schedule`,
+  `--probe`, `--once`) log a `microsoft call` line per call, like the API.
+- An ARM long-running operation stops waiting between polls as soon as its run is cancelled, its pod stops or its
+  schedule times out (D-23).
+- A datasource expression that fails while a page loads says what went wrong in plain words; the expression's path
+  and its JSONata code are in the details and the log under the reference, never JSONata's message or the data
+  (D-19).
+- Out-of-range relative dates or durations (`-999999999d`, `P300000Y`) are refused instead of causing a 500.
+- `identity.create-user` 1.1.1 passes the new user's id through `$guid()` in its manager step and compensation.
+- Wording: `billing.month-close` 1.0.1 says in words what to configure instead of naming configuration keys;
+  `probes.m365-workload-incidents` 1.2.1 says it is retired and what replaced it.
+
+#### Removed
+
+- The content "Probe dashboard" (`automation.monitoring`) is retired (1.3.0): Synthetic monitoring (`/monitoring`)
+  shows every probe by service, with history and what to do.
+- The "Coming soon" placeholder and its page catalogue (D-08): an address without a page shows "There's no page at
+  this address".
+- Unused dependencies: `jose` from the runner, five workspace packages from the scheduler (S-39, D-21).
+
+#### Security
+
+- **Production fence** (S-01, D-04): with `AUTH_MODE=entra` the API refuses to start outside `NODE_ENV=production`
+  when it listens beyond loopback (`API_HOST`) or `PUBLIC_BASE_URL` names a host other than localhost or a loopback
+  address, so a portal others reach can't quietly lose HSTS, the `__Host-` cookie and the production checks. The app
+  image and the base ConfigMap set production (`tests/guards/image-node-env.test.ts`); development against the tenant
+  on this machine is unchanged.
+- **Mock sign-in stays on this machine** (S-16, F-12): it also needs `PUBLIC_BASE_URL` on localhost, and it ends a
+  session left without any AdminForge role (403 `no_portal_role`), as Entra sign-in does. Only under mock sign-in
+  does the fixture fetch accept a write no fixture describes, and never a POST the request policy lists as a read;
+  with Entra sign-in on fixtures an unfixtured write stays a 404.
+- **A new session id at every arm** (S-08): turning on write access gives the session a new id and CSRF token and
+  moves its unfinished runs, approval decisions, pending sign-in round trips and Microsoft token partitions (sealed
+  again) with it in one transaction; held show-once secrets follow once it commits, and the Write app's tokens go
+  straight to the new id. The old id stops working at once; its open streams end and the browser reconnects with the
+  new cookie. Runs bound to the session while it was read-only keep reading but wait for a resume before they write.
+  Extending and disarming keep the id.
+- **Someone else's run shows what ran, not what it found** (S-25): a delegated run's inputs, outputs, step requests
+  and outputs, plan, logs, error messages, task messages and comments are shown only to its initiator (of that run or
+  one above it), its approvers (while a gate they may decide is pending and not expired, or once they decided), the
+  person a manual step waits for, and Portal Admins. Other Operators and Approvers who may open it see the playbook,
+  who, when, status, step names and states, and references (`run.access: metadata`). The run stream does the same and
+  drops logs; the approvals inbox shows gates decided by others, and gates on runs the approver can't open (except a
+  gate they are asked to decide), as metadata. The run and runbook pages say who can see the inputs and results ("Only
+  … can see the inputs and results"). Scheduled runs are unchanged.
+- **A connection's read operation may POST only with `readPost: true`** (S-23): validate refuses a `mode: read` POST
+  without it, and the request policy refuses one at run time; `readPost` comes from the published connection only.
+  Read operations can no longer use PUT, PATCH or DELETE unarmed.
+- **Content can't set the headers AdminForge owns** (S-02): `Authorization`, `Cookie`, `Proxy-Authorization`,
+  `Host`, `client-request-id`, `x-ms-client-request-id` and the method-override headers (`X-HTTP-Method-Override`,
+  `X-HTTP-Method`, `X-Method-Override`), in any case. Validate refuses them in datasource requests and in Graph,
+  `$batch`, ARM, function and `http` steps; the executor refuses them at run time (`invalid_request`), `$batch`
+  sub-requests included; and the HTTP client drops them before adding the bearer token and the correlation id.
+- **Graph writes name users by object id** (S-15): a declared write that names a user by sign-in name or address —
+  in the path (`/users/{upn}`, `users('{upn}')`), in an `@odata.id` / `…@odata.bind` reference or in a `$id` query
+  — is refused (`user_not_by_id`): the protected-object guard matches ids, so a UPN could otherwise reach a
+  break-glass account. `adminforge validate` requires `$guid()` on the `/users/` segment of every Graph write (write
+  steps, changing batch requests, compensations).
+- **Delegated permission grants are protected objects:** a write to `/oauth2PermissionGrants/{id}` (any path
+  spelling, `$batch` included) reads the grant's client and is refused (`protected_object`) when it is one of
+  AdminForge's own apps or one in `AF_PROTECTED_APP_IDS`. A grant key that isn't a plain id, a grant that can't be
+  read, or a grant write while the protected set can't be read is refused (`protected_objects_unavailable`).
+- **Typed confirmations:** high- and critical-risk playbooks confirm by typing
+  (`tests/content/high-risk-typed-confirm.test.ts`; runbooks not yet): `identity.revoke-consent-grant` 1.2.0 asks for
+  the app's name (it was one click), `azure.remove-role-assignment` 1.1.0 for the role's name — its plan and summary
+  name the role and who loses it — and `identity.add-app-owner` 1.3.0 for the app's name; in bulk, for the number of
+  items. The API renders the message and the text to type from the preview (`run.confirm` on `GET /api/runs/:id`, only
+  for the person who previewed), so the dialog and the risk banner no longer show `${ … }`. The browser and the API
+  compare the typed text one way (Unicode NFKC, invisible characters, spacing and case ignored), and the dialog marks
+  and lists characters that can make a name pass for another (invisible characters, unusual spaces, styled letters,
+  letters of a look-alike alphabet). `identity.remove-group-owner` 1.2.1 names an app owner in its confirmation.
+- **The injection lint follows user data through wrappers, functions and variables** (S-03, S-13).
+  `adminforge validate` / `publish` and the content health check used to recognise `params.q` only on its own:
+  `$lowercase(params.q)`, `$string`, `$join([…])`, a block variable, `$map`, `$trim(params.id)` in a path and anything
+  in `$expand` all passed. A taint analysis now follows params, inputs, rows, items, `forEach` items, a transform's
+  `value`, datasource results (`ds.<name>`, per field; a Microsoft response is tenant data), step outputs and
+  `advanced` on `dialect: rows` pages — through functions, functions kept as values, lambdas, `~>`, variables, the
+  context JSONata hands a built-in, and object/array constructors. An encoder counts only in its own kind of text and
+  position: `$odata` and `$kql` outside a quoted literal, `$odataSearch` inside its `"…"`, `$encode` in paths, `$guid`
+  anywhere; a value taken apart again (`$substring`, `$replace`) is user data again. Also linted: `$expand`;
+  `filter`/`orderby`/`expand` without the `$`; bodies written as one `${ { … } }`; a `$batch` url's query string (only
+  `$guid`, numbers and literal allowlists). A whole path/url may come straight only from a guid or entity param; a
+  whole KQL query from a param needs `/* adminforge: user-query */`. Enum params count as allowlists. `$x := …` is
+  allowed only as a block statement, the whole expression or a function body. All shipped definitions stay clean.
+- **Size caps** (S-34): `&` is size-checked like `$join`, and the encoders (`$encodeUrl`, `$encodeUrlComponent`,
+  `$base64encode`, `$encode`, `$odata`, `$odataSearch`, `$kql`) refuse an input whose result could pass 10 million
+  characters, like the other string built-ins. `$__af…` names are refused as `@`/`#` bindings too.
+- **Regular expressions are checked for unbounded backtracking** (S-14): content `pattern:`s are refused at validate
+  time when they can backtrack without bound, always match the whole value (`u` flag) and never see values over 4,096
+  characters. Every regular expression in an expression (`$match`, `$contains`, `$replace`, `$split`, anywhere) gets
+  the same shape check, with its `i` flag — but it runs unanchored on values of any length, so the check is not a
+  proof there. Run inputs refuse control characters like page params. `m365.add-distribution-list-members`,
+  `m365.remove-distribution-list-members` and `m365.create-distribution-list` (1.0.1) check typed addresses in
+  linear time; a local part over 64 characters or an empty domain label is now refused.
+- **Hostile tenant text can't take a page down** (S-05, S-21, S-32): a numeric character reference that names no
+  character (`&#1114112;`, surrogates) stays as written instead of blanking the whole `/p/<key>` page; HTML in values,
+  the Markdown widget's inline syntax and the links in runbook sections, manual-step instructions and approval
+  messages are read in linear time (64,000 `<` or `[` used to freeze the page for seconds; a label now ends at the
+  next `[` or `]` and a target at `(`, `)` or whitespace — percent-encode parentheses in a target); every widget
+  renders inside its own error boundary — a block that still can't render names itself and says it couldn't be
+  shown, with a reference and Try again, and the rest of the page keeps working.
+- **One rule for links from data** (S-11): a templated target becomes a link only for `https://`, `http://`,
+  `mailto:`, an in-app `/…` path (never `//host` or `/\host`) or `#anchor`; anything else stays text. `AppLink` and
+  the list, KPI, status-grid, key-value, table, action and Markdown widgets render through `safeUrl`, and navigation
+  from data — the web app's and the widgets' `followHref`, table row actions — goes through `followSafeUrl`
+  (`@adminforge/ui`), next to it. Content action buttons and "More actions" say why an unsafe address is shown as
+  text.
+- **Query Studio history** leaves the browser on any 401 (an expired session, a tab left open), not only at sign-out
+  (S-32).
+- **HTTP probes pin their connection** to the address the SSRF guard checked (the news feeds' dispatcher), closing
+  the DNS-rebinding window; the portal's own origin is not pinned (S-24).
+- A notify step's Teams chat target is bound as a quoted OData literal, so an apostrophe can't close it early (S-31).
+  The tenant name read at sign-in goes through the outbound executor (request policy, concurrency, `microsoft call`
+  line, correlation id) and still never holds sign-in up (S-26).
+- **Published definitions are re-validated when loaded** (S-07): against their schema, and they must match their row
+  (kind, id, version, status); a row that fails is refused (`definition_unavailable`, logged, reported by the content
+  health check) and never runs. `definitions.changed` no longer names the changed keys (`{all: true}`, S-27).
+- **Publish review is checked against origin's `main` as it is now** (S-06): `git ls-remote` (`build-images.sh`
+  fetches `refs/heads/main`), ignoring tags, replace refs and grafts. It fails closed, and BUILD.json and the
+  `content.published` event record `mainCommit` and `remote` (no credentials).
+- An approver refused for a change that grants them access (`own_access`), or someone completing another engineer's
+  step (`not_your_step`), now leaves `request.denied` (S-12).
+- **Pending sign-ins are capped at 5,000** (S-28): when full, the oldest one that has had two minutes makes room;
+  starts are refused (503 `signin_busy`, nothing written) only beyond about 2,500 a minute; arming and schedule
+  consent are never refused.
+- **Content reads only declared settings** (S-29): expressions see the `AF_*` keys `config/example.env` declares,
+  minus secret-looking names — an allow-list, where before it was a denylist over the whole environment. Run
+  approvals' notifications likewise read only the delivery keys (sender, recipient lists, webhooks), as schedules'
+  delivery does.
+- **Env files must be private** (S-19): the API, the scheduler's one-shots and every CLI command but `env check`
+  refuse an env file with any group or world permission, naming the file and `chmod 600` (never its contents);
+  `/dev/null` and the pod's environment-only configuration are unaffected.
+- The CLI reads `<env>.admin.env` only for `provision …`, `validate --scopes` and `env check` (key states only)
+  (S-18): content commands, `audit verify` and `db` no longer hold the provisioner's credentials.
+- `provision test-identities` re-reads the registration campaign after each write and stops with what differs
+  (S-22).
+- **`adminforge db backup` is audited** (S-41): a `database.backup` event (account and machine, stdout or file,
+  plaintext, bytes, the copy's audit tail) is written before the copy leaves — no event, no copy; a file copy takes
+  its name only then; failed copies are recorded too. It now needs write access to the database.
+- A schedule that names an app identity (ADR-014) ran its runs as the automation identity on SQLite: the run
+  repository didn't store `identity_name`. Fixed. Runs created before the fix that are still queued, parked or
+  waiting keep the automation identity: cancel them and run the schedule again.
+- **Dependencies wait seven days** (S-04): `minimumReleaseAge` (strict, no missing publish times) in
+  `pnpm-workspace.yaml` and a Dependabot `cooldown` on npm, GitHub Actions and both images' base images; an urgent
+  fix excludes one exact version, with a comment saying why. dompurify 3.4.17 under monaco-editor clears two low
+  advisories (S-30).
+- Read-only runner scripts can't redirect output to a file (`>`, `>>`, `2>`, `*>`, also `> $null`); `2>&1` stays
+  allowed (S-35).
+- `.gitignore` keeps env files and their backups, key material (`*.key`, `*.pem`, `*.pfx`, `*.p12`, `*.jks`, SSH
+  keys) and SQLite files out of git (S-20, `tests/guards/gitignore-secrets.test.ts`).
+- **Egress to public addresses only** (S-40): the pod's 443 egress refuses every private and reserved range, an
+  installation's exceptions live in a policy of the overlay's own
+  (`tests/guards/networkpolicy-private-egress.test.ts`), and the loader pod gets no network at all.
+- **Images pinned by digest** (S-37): both images' bases and the Dockerfile frontend name `image:tag@sha256:…`
+  (`tests/guards/image-digests.test.ts`).
+
+### Before the platform review
+
 Closes the gaps found by comparing the build with the original plan (see the plan's "Revision 3" block and
 `docs/decisions.md` → Plan review).
 
-### Added
+#### Added
 
 - **Kubernetes deployment** (ADR-017, `portal/deploy/kubernetes`): the app image (API, web, `adminforge` CLI,
   content; non-root, read-only root file system), the runner as the pod's sidecar on loopback, kustomize base (one
@@ -323,7 +635,7 @@ Closes the gaps found by comparing the build with the original plan (see the pla
   (`RecipientProvisioning.Tests.ps1`), content tests (`exchange-recipient-provisioning.test.ts`) and mock-mode
   fixtures.
 
-### Changed
+#### Changed
 
 - **One SQLite file on a persistent volume holds all state** (ADR-016; supersedes ADR-004): better-sqlite3 with
   synchronous `BEGIN IMMEDIATE` write transactions, a new migration baseline with the append-only triggers, and SQLite
@@ -524,7 +836,7 @@ adminforge-<process>`) and a configurable pool size (`DATABASE_POOL_MAX` [10]); 
 - Recent pages and closed navigation sections are saved without an audit event; every page visit used to add a
   `prefs.updated` entry. Settings changes (theme, density, pins) are still audited.
 
-### Removed
+#### Removed
 
 - The host deployment (ADR-008, superseded by ADR-017): the systemd units and their hardening drop-ins, Caddy's
   configuration, `install-service-account.sh`, `install-units.sh`, the Postgres container (`pnpm db:up` / `db:down`),
@@ -545,7 +857,7 @@ adminforge-<process>`) and a configurable pool size (`DATABASE_POOL_MAX` [10]); 
   Defender application permissions are removed with `provision entra --prune` (run `--dry-run --prune` first). Query Studio's advanced hunting can be switched off with
   `AF_QUERY_SOURCES` (above). A content test keeps active definitions from linking to retired ones.
 
-### Security
+#### Security
 
 - The database's protection moves from Postgres roles to the file (ADR-016): 0600 file, 0700 folder, local block
   storage only, a volume only one pod can mount. The audit log's triggers no longer hold against the service itself
@@ -717,7 +1029,7 @@ Security review of the licensed build-out (2026-10-16) fixed:
 - The tenant-data guard and `fixtures` sanitiser exempt `AF_LICENCE_SKU_<n>` values only when they look like a SKU part
   number (`^[A-Z0-9_]{2,64}$`). The runner's read-only policy classifies `Format-AdminForgeMessage` as internal.
 
-### Fixed
+#### Fixed
 
 - Every page load logged a Content-Security-Policy violation in the browser console ("blocked a JavaScript eval …
   params-….js"): Zod 4 probes `Function('')` to decide whether to compile its validators, which `script-src 'self'`

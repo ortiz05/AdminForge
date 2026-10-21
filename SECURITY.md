@@ -15,7 +15,7 @@ contact the repository owner directly. Don't file a public issue.
 | AdminForge Read `[<label>]`  | Delegated (signed-in user)              | Everyone with a portal role     | Not through AdminForge: the request policy allows reads only. Workload scopes that can write at the token level (ARM `user_impersonation`; on licensed tenants Exchange `Exchange.Manage`, SharePoint `AllSites.FullControl`, Teams) are flagged by provisioning                                                                                                                                                                                                                                                                              |
 | AdminForge Write `[<label>]` | Delegated                               | Operators, only while **armed** | Yes, as the user, within their Entra roles; assigned to the Operator group only. Tier-0 scopes (role management and PIM, app credentials, app-role and consent grants, `Directory.AccessAsUser.All`, tenant policies) only with `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`                                                                                                                                                                                                                                                                       |
 | AdminForge Automation        | Application                             | Scheduler and scheduled runs    | Read-only by default: write permissions need `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`; reads of mail, files, sites, chats, calendars, contacts, notes, presence, BitLocker keys, meeting transcripts or authentication methods need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`. `Sites.Selected` needs neither: it reaches only the sites an administrator grants it (synthetic transactions: write on one test site — never `fullcontrol`). Assignment required; a certificate replaces its secret when `AF_AUTOMATION_CERT_PATH` is set |
-| Provisioner                  | Application (created by you, not by us) | `adminforge provision …` only   | Yes (creates apps, groups, consent). Lives in `<env>.admin.env`, never read by the services and never backed up. Give it Global Administrator only while provisioning; prefer a short-lived secret per run (`docs/operations.md`). Graph application permissions granted for the test fixtures (several tier-0) survive removing its directory role: remove them between runs too — `provision status` warns while it holds them                                                                                                              |
+| Provisioner                  | Application (created by you, not by us) | `adminforge provision …` only   | Yes (creates apps, groups, consent). Lives in `<env>.admin.env`, read only by `provision …`, `validate --scopes`, `env check` (key states only) and the live tests — never by the services, never backed up. Give it Global Administrator only while provisioning; prefer a short-lived secret per run (`docs/operations.md`). Graph application permissions granted for the test fixtures (several tier-0) survive removing its directory role: remove them between runs too — `provision status` warns while it holds them                  |
 
 Delegated calls can never do more than the signed-in person could do in the Entra admin centre; AdminForge adds
 restrictions, never privileges.
@@ -100,6 +100,10 @@ the reason.
   pending sign-in, and the callback must present it. A callback URL captured from someone else's sign-in can't be
   completed in your browser (login CSRF / session swap).
 - `returnTo` is restricted to same-origin paths after normalisation (no `//host`, no dot-segment tricks).
+- At most 5,000 sign-ins may be pending. When the table is full, the oldest pending sign-in that has had two minutes
+  is dropped to make room (its callback answers `invalid_state`). A start is refused with 503 `signin_busy`, writing
+  nothing, only when every pending sign-in is younger than that. Arming and schedule consent are never refused or
+  dropped. Refusals log at info, with a warning once a minute.
 - Portal roles come from the **app-role** claim (assigned through `SG-AdminForge-<label>-<Role>` groups), not group
   claims. They are **re-read every 5 minutes** with a forced token refresh: changes apply within minutes, a session
   with no AdminForge role left ends, and so does one Entra refuses to refresh (`invalid_grant`: disabled account,
@@ -120,12 +124,23 @@ the reason.
   idle timer, and event streams never do. An idle tab shows "You're signed out" and waits; it never starts a sign-in
   by itself.
 - Every `/api` route needs `Portal.Reader`, except reading your own profile and preferences, the appearance
-  stylesheet, the emergency-stop state and the event stream. At most 5 event streams per session.
+  stylesheet, the emergency-stop state and the event stream. At most 5 event streams per session, at most 5 run
+  streams per session, and at most 5 open runs per person (`RUN_MAX_OPEN_PER_USER`).
 - Every state-changing request needs the per-session `X-AdminForge-CSRF` header (constant-time compare).
 - Microsoft tokens never reach the browser. The MSAL cache is sealed with AES-256-GCM (`TOKEN_CACHE_KEY`), with the
   partition key as associated data, and stored in the database.
+- **A new session id at every arm.** Turning on write access moves the session to a new random id and CSRF token in
+  one database transaction, together with what is kept under the old id: its unfinished runs and the approval
+  decisions on them, the sign-in round trips it started, and its Microsoft token partitions (sealed again: the
+  partition key is their associated data). The Write app's tokens are redeemed straight into the new id's partition.
+  Held show-once secrets follow; open event and run streams of the old id end and the browser reconnects with the new
+  cookie. The old id stops working at once (a request still carrying it within a minute is refused without clearing
+  the browser's new cookie). A run bound to the session while it was read-only keeps reading, but its next write waits
+  (`awaiting_arm`) until the person resumes it. Extending or ending write access keeps the id.
 - Sign-out deletes the session and both token partitions and goes through Entra's end-session endpoint; the
   signed-out page never signs the person back in automatically.
+- Query Studio history (`localStorage`, per user) is removed at sign-out and on any 401; after a session ends nothing
+  is stored again until a signed-in session names its owner.
 
 ## Write access ("arming")
 
@@ -142,6 +157,14 @@ the reason.
   `confirm` / `approval`). There is no generic write proxy. Reads go through a default-deny request policy.
 - Risky playbooks must be previewed first; the server checks that the confirmation matches the preview (same user,
   version, inputs, under 15 minutes old), and a preview confirms at most one run. Drafts can be previewed, never run.
+  High- and critical-risk playbooks confirm by typing a value the person recognises — in bulk, the number of items
+  (`tests/content/high-risk-typed-confirm.test.ts`); runbooks not yet (`identity.compromised-account` and
+  `identity.leaver` are high-risk and confirm with a click). The text to type and the message are rendered by the API
+  from the preview and shown only to the person who previewed; a value that can't be rendered, has nothing visible or
+  holds a masked value can't be confirmed. Typed confirmations are compared the same way in the browser and the API
+  (`confirmationMatches`: invisible characters removed, NFKC, whitespace collapsed, case ignored), and the dialog
+  marks and lists characters that can make a name pass for another (invisible characters, unusual spaces, styled
+  letters, letters of a look-alike alphabet).
 - Interactive calls — runs, page data, exports — use only the **current** published version; older or retired
   versions answer 409 (`version_superseded`, `definition_retired`), so a later access rule or fix can't be sidestepped.
   Child playbooks start on their current version too (a pin to an older one fails `version_superseded`).
@@ -150,7 +173,12 @@ the reason.
   (otherwise it ends `run_outdated`; start a new one). A run that already sent a change finishes on the version that
   started it, and runbooks (checklists) carry on, since every playbook they start runs its current version. A
   confirmed change whose preview is more than 15 minutes old stops before writing (`preview_stale`). Runs waiting for
-  write access or a new sign-in stop after 24 hours (`run_expired`).
+  write access or a new sign-in stop after 24 hours (`run_expired`). A restart interrupts runs instead of cancelling
+  them: a resumed run passes the same re-checks (the current version unless it may have written; the initiator's
+  roles), and every write step re-checks arming. A step in flight at the restart is retried unless it is
+  `idempotent: false` (then the run ends `needs_review`), so write steps whose second send would hurt declare
+  `idempotent: false` (`tests/content/non-idempotent-writes.test.ts`). A worker whose run lock lapsed stops at its
+  next checkpoint once its lease renewal notices.
 - Run approvals need a second person with `Playbook.Approver`; self-approval is refused, and an approver must be armed
   when the steps after the approval write as them — and hold the playbook's portal roles. **Nobody can approve a change
   that grants them access**: approval gates name the beneficiaries (`approval.excludes` — e.g. the principal getting a
@@ -159,13 +187,24 @@ the reason.
   own roles from whoever runs them. Only the person a manual step waits for can confirm it or supply its values (others
   may only decline); the values are audited with `redact` fields masked.
 - **Protected objects:** AdminForge can't be used to change its own access. The executor refuses every write — REST
-  or PowerShell — that names, in its path, query or body, AdminForge's own app registrations and service principals,
-  any app in `AF_PROTECTED_APP_IDS` (such as the provisioner), every principal assigned an AdminForge app role (the
-  `SG-AdminForge-*` groups — the groups, not their members) or an account in `AF_PROTECTED_USER_IDS` (break-glass
-  accounts): `protected_object`. The set is read from Microsoft Graph by id (automation identity, else the caller's
-  Read sign-in) and cached for 10 minutes; when it can't be read, writes to groups' members and owners, apps, service
-  principals, app-role assignments and authentication methods are refused (`protected_objects_unavailable`).
-  PowerShell inputs are matched by object id only (names and UPNs aren't). Playbooks keep friendly early checks.
+  or PowerShell — that names by object id, in its path, query or body, AdminForge's own app registrations and service
+  principals (the schedules' app identities, retired ones included), any app in `AF_PROTECTED_APP_IDS` (such as the
+  provisioner), every principal assigned an AdminForge app role (the `SG-AdminForge-*` groups — the groups, not their
+  members) or an account in `AF_PROTECTED_USER_IDS` (break-glass accounts): `protected_object`. The set is read from
+  Microsoft Graph by id (automation identity, else the caller's Read sign-in) and cached for 10 minutes; when it can't
+  be read, the ids already known are still refused, and writes to groups (and their members and owners), apps,
+  service principals, app-role assignments, authentication methods, directory objects and delegated permission
+  grants are refused (`protected_objects_unavailable`). Because the match is by id, a Graph write that names a user
+  by sign-in name or address — `/users/{upn}`, `users('{upn}')`, an `@odata.id` / `…@odata.bind` reference or a
+  `$id` query naming one — is refused outright (`user_not_by_id`); `adminforge validate` requires `$guid()` there in
+  Graph writes. Exceptions: AdminForge's own notification mail (its sender is configured as an address) and the
+  notify step's one-on-one Teams chat, whose members are a conversation, not a change to an account. A delegated
+  permission grant's id isn't an object id, so a write to one (any path spelling, `$batch` included) reads the grant
+  first (`clientId`, the same readers) and is refused when the client is a protected app; a grant key that isn't a
+  plain id, or a grant that can't be read, is refused (`protected_objects_unavailable`). Other names an object can be
+  addressed by (an application's `uniqueName`, say) and ids inside an encoded body (a base64 `$batch` sub-request)
+  aren't matched. PowerShell inputs are matched by object id only (names and UPNs aren't). Playbooks keep friendly
+  early checks.
 - Playbooks that act on a target whose id can be reused or change hands (Azure Virtual Desktop session numbers, a list
   that may be minutes old) carry what the person saw and assert it still holds before writing — so a stale screen
   can't sign out or message the wrong person — and high-risk ones ask for a typed confirmation (in bulk, the number of
@@ -286,25 +325,68 @@ the reason.
   manual-step fields declared `redact: true` are masked in stored steps, run outputs and errors, run events and the
   audit log. After a pause, pure steps are recomputed from the real inputs, and a masked value is never sent anywhere
   (`redacted_value`). Credentials, cookies, auth codes and database query parameters are kept out of logs.
+- **Who sees a run:** a delegated run collected its data with one person's Entra rights. Its inputs, outputs, step
+  requests and outputs, plan, logs, error messages and hints, approval messages, manual-step instructions, and
+  decision comments and values are shown only to its initiator (of that run or one above it), its approvers — while a
+  gate they may decide is pending and not expired (with the default `approvers: [Playbook.Approver]`, every Approver
+  who may open the run and isn't excluded from the gate), or permanently once they approved or rejected — the person a
+  manual step waits for, and Portal.Admin. Anyone else who may open it sees metadata: playbook, who, when, status,
+  step names and states, and references (correlation id, Microsoft request-id, error code and HTTP status, child run
+  ids). The run stream sends the same, without logs, and re-decides after each read of new events. The approvals inbox
+  shows gates decided by others, and gates on runs the approver can't open, as metadata — unless the approver is asked
+  to decide the gate or did (then the gate's message and comments, not the run). Scheduled runs (automation identity)
+  are no one person's data: whoever may open them sees them whole.
 - **Injection:** OData/KQL values go through `$odata()` / `$kql()`; advanced filters are compiled server-side from
   structured data; request paths may not contain `?`, `#` or control characters (the policy also judges the path
-  exactly as it will be sent), and validation flags user data in a `path` or `url` without `$encode()` and user data
-  placed in an OData `$filter`, `$search` or `$orderby` (query or body) without `$odata()` / `$odataSearch()` /
-  `$guid()` — `$orderby` takes a literal allow-list. `adminforge publish` runs the same checks and refuses on errors.
-  Exports and Query Studio's Copy neutralise spreadsheet formulas. Values inserted into Markdown are escaped and links
-  are limited to http(s), mailto, same-origin paths and anchors; a key-value link without `href` uses its data value
-  literally (never evaluated) and only when it's an external URL. Expressions have size and time caps, and `$eval` is
-  unavailable.
+  exactly as it will be sent), and validation runs a taint analysis over every expression that reaches a request path,
+  url, query, OData option, KQL query or body (`portal/packages/expressions/src/taint.ts`). It follows user data
+  (params except enum params, inputs, rows, items, a datasource's result per field, a step's output) through
+  functions, function values, lambdas, `~>`, variables and constructors, and flags it where it reaches a request
+  `path`/`url` without `$encode()`; OData `$filter` / `$search` / `$orderby` / `$expand` text (in the query or the
+  body) without `$odata()` / `$odataSearch()` / `$guid()`; a `$batch` url's query string without `$guid()`, a number
+  or a literal allow-list; a KQL query without `$kql()`. Encoders count only in their own text and position, and not
+  once the value is taken apart. `$orderby` takes a literal allow-list. A `$replace` character allow-list counts
+  inside a quoted literal, and in a path or anywhere else only when it leaves nothing but letters, digits, `-` and `_`
+  (in a path) or digits. A whole path may be a guid or entity param as it is; a whole KQL query from a param needs
+  `/* adminforge: user-query */`. Known limits: `user.*` claims are trusted; quote placement is judged from the
+  literal text. `adminforge publish` and the content health check run the same checks, and `publish` refuses on
+  errors. Content `pattern:`s are refused at validate time when they can backtrack without bound, always match the
+  whole value (`u` flag) and never see values over 4,096 characters. Regular expressions written into an expression
+  get the same shape check at validate time (case-folded under `i`), but run unanchored on values of any length, so a
+  pattern such as `\s+$` can still take seconds on a long value; the check is static, not a proof. Exports and Query
+  Studio's Copy neutralise spreadsheet formulas. Values inserted into Markdown are escaped and links are limited to
+  http(s), mailto, same-origin paths and anchors; every link from data is rendered through `safeUrl` (`AppLink`, the
+  list, KPI, status-grid, key-value, table, action and Markdown widgets, run and runbook text) and every navigation
+  from data follows `followSafeUrl` (`portal/packages/ui/src/lib/links.ts`), which apply the same rule — anything else
+  stays text. A key-value link without `href` uses its data value literally (never evaluated) and only when it's an
+  external URL. Tenant HTML becomes text by linear passes, numeric character references that name no character stay as
+  written, and Markdown links are read in linear time. A block that still fails while it renders is caught by its own
+  error boundary: it shows a reference generated in the browser (logged only to that browser's console), and the rest
+  of the page keeps working. Expressions have size and time caps (built text — `&` and the encoders included — at 10 M
+  characters), and `$eval` is unavailable.
+- **Settings in content:** content expressions read only the `AF_*` keys `config/example.env` declares, minus
+  secret-looking names — the same keys `adminforge validate` accepts. Nothing else in the environment (in the pod,
+  the Secret and the ConfigMap) reaches content. The API refuses to start without the example file.
 - **Delivery:** email recipients and Teams webhooks are only ever `${ env.X }` configuration — recipients must be keys
-  named `AF_…RECIPIENTS`, `AF_…EMAIL` or `AF_…ALERTS`, and delivery reads only those keys, the sender and the webhook
-  keys; webhooks must be https on Microsoft hosts and never follow redirects; `*WEBHOOK*` keys are hidden from content
-  expressions. Email goes through Graph as the automation identity, which should be allowed to send only as `AF_MAIL_SENDER` (Exchange RBAC for Applications); Entra `Mail.Send` would let it send as any mailbox and needs the write-permission opt-in.
+  named `AF_…RECIPIENTS`, `AF_…EMAIL` or `AF_…ALERTS`, and delivery (run approvals' notifications included) reads only
+  those keys, the sender and the webhook keys; webhooks must be https on Microsoft hosts and never follow redirects;
+  `*WEBHOOK*` keys are hidden from content expressions. Email goes through Graph as the automation identity, which
+  should be allowed to send only as `AF_MAIL_SENDER` (Exchange RBAC for Applications); Entra `Mail.Send` would let it
+  send as any mailbox and needs the write-permission opt-in.
 - **Outbound:** connection audiences are an allow-list — `api://…`, an application id, or an https host listed in
   `AF_CONNECTION_AUDIENCE_HOSTS` — and Microsoft first-party audiences are always refused; scopes are plain names on
   that audience, so a token can't be steered to another resource. Connections refuse redirects. Generic `http` steps
-  are disabled. KQL queries ask the service for a bounded number of rows and run one statement at a time; every
-  response body is size-capped (`OUTBOUND_MAX_BYTES`). HTTP probes don't follow redirects, can't reach private,
-  loopback or link-local addresses other than the portal itself, and POST only with `allowPost: true`.
+  are disabled. KQL queries ask the service for a bounded number of rows, and Log Analytics queries run one statement
+  at a time; every response body is size-capped (`OUTBOUND_MAX_BYTES`). HTTP probes don't follow redirects, can't
+  reach private, loopback or link-local addresses other than the portal itself — re-checked at connect time on a
+  pinned connection, as for news feeds, so a DNS change between the check and the connect is refused — and POST only
+  with `allowPost: true`. Content can't set the headers AdminForge owns (`Authorization`, `Cookie`,
+  `Proxy-Authorization`, `Host`, `client-request-id`, `x-ms-client-request-id`, and the method-override headers
+  `X-HTTP-Method-Override`, `X-HTTP-Method` and `X-Method-Override`; any case): validate refuses them, the executor
+  refuses them (also on `$batch` sub-requests), and the HTTP client drops them before adding the bearer token and the
+  correlation id. A connection's `mode: read` operation that POSTs runs unarmed only with `readPost: true` (validate
+  refuses it otherwise; the policy refuses it at run time; the value comes from the published connection, never the
+  caller), and a read operation never uses PUT, PATCH or DELETE. Review every `readPost: true` as a loosening.
 - **News and changes feeds** (`docs/news.md`): public feeds are fetched only over https from the hosts in
   `NEWS_FEED_HOSTS` (`portal/packages/schemas/src/news.ts` — adding one is a reviewed code change, never
   configuration or content), only when the name resolves to public addresses — re-checked at connect time, and the
@@ -341,22 +423,30 @@ Read-mode jobs use Read-app tokens, some of which can write (Exchange `Exchange.
 the parsed script allows `Get-*` commands, the AdminForge helpers, a fixed set of PowerShell utilities and the
 script's own functions, and refuses everything else: module-qualified calls, dynamic invocation, scripts and programs
 by path, `Get-*` commands that return tokens or connections, .NET types outside a small allow-list, reflection and
-invocation members, engine and provider variables, classes and `using`. While it runs, every non-`Get` command of every
-loaded service module (Exchange Online, Teams, PnP, Microsoft Graph, Az) is replaced by a guard, REST cmdlets accept
-only GET, and module auto-loading is off.
+invocation members, engine and provider variables, classes, `using`, and file redirection (`>`, `>>`, `2>`, `*>`, also
+`> $null`; merging a stream into the output, `2>&1`, writes no file and stays allowed). While it runs, every non-`Get`
+command of every loaded service module (Exchange Online, Teams, PnP, Microsoft Graph, Az) is replaced by a guard,
+REST cmdlets accept only GET, and module auto-loading is off.
 
 ## Audit
 
 Every sign-in, arm/disarm, run, approval, schedule change, content publish, sensitive read, download, notification,
 emergency stop and retention purge is appended to an append-only (database-enforced), hash-chained log. Refused
-security-relevant requests are recorded too (`request.denied`: forbidden, CSRF, policy denials, self-approval, wrong
-confirmation, stale preview, protected objects, paused writes, session mismatch) with the route, code and status only —
-at most one event per minute per session and code, then a `suppressed` count. Failed sign-ins (`session.signin`
+security-relevant requests are recorded too (`request.denied`: forbidden, CSRF, request-policy denials of page data,
+self-approval, approving a change that grants you access, completing a step that waits for someone else, wrong
+confirmation, missing or stale preview, session mismatch) with the route, code and status only — at most one event
+per minute per session and code, then a `suppressed` count. Refusals inside a run or a schedule (request policy,
+protected objects, `user_not_by_id`, paused writes) end the step and appear in the audit log only as the run's or
+schedule run's error code. Failed sign-ins (`session.signin`
 failures — anyone can send a browser to `/auth/callback` with an error) are recorded at most 10 a minute per client
 address (IPv6: per /64), then a `suppressed` count. `content.published` records the git
-commit and whether the content was reviewed (committed and on `origin/main`); `--allow-unreviewed` is recorded with
-its reasons. The Audit page,
-`adminforge audit verify` and the hourly `probes.audit-chain` check verify the chain. A bulk run's `run.created` records
+commit, whether the content was reviewed (committed and on origin's `main`), the `main` commit it was checked against
+(`mainCommit`, from `git ls-remote` or the image's fetch) and origin's URL without credentials; `--allow-unreviewed`
+is recorded with its reasons. Every `adminforge db backup` is recorded too (`database.backup`, below). The Audit page
+and `adminforge audit verify` walk the whole chain; `probes.audit-chain` checks hourly the events since the last
+verified checkpoint (and that checkpoint event), and the whole chain after a restart, once a day and after any break.
+An older event changed without re-hashing through the checkpoint is found by the next full walk, the Audit page or
+`adminforge audit verify`. A bulk run's `run.created` records
 the inputs every item shares (`inputsTemplate` — the reason, a message), redacted like a single run's, since the
 per-item runs don't record inputs. History (runs, schedule runs,
 probe results, report files) is purged after its retention period; the audit log is never purged.
@@ -366,9 +456,12 @@ probe results, report files) is purged after its retention period; the audit log
 AdminForge runs as one pod on Kubernetes (ADR-017; `portal/deploy/kubernetes`) and keeps all state in one SQLite file
 on a PersistentVolume (ADR-016).
 
-- **TLS** is the Ingress's. The API listens on the pod's interface on port 3300 behind the Service and trusts
-  `X-Forwarded-*` only from `TRUST_PROXY` (the ingress controller's pod network; `true`, which would let anyone forge
-  the address, is refused in production). Security headers: CSP (`script-src 'self'`, `frame-ancestors 'none'`;
+- **TLS** is the Ingress's. With Entra sign-in, the API starts outside `NODE_ENV=production` only on this machine (a
+  loopback `API_HOST`, and a `PUBLIC_BASE_URL` on localhost or a loopback address), so a portal others reach can't run
+  without HSTS, the `__Host-` cookie and the production checks; the app image and the base ConfigMap set production
+  (`tests/guards/image-node-env.test.ts`). The API listens on the pod's interface on port 3300 behind the Service and
+  trusts `X-Forwarded-*` only from `TRUST_PROXY` (the ingress controller's pod network; `true`, which would let anyone
+  forge the address, is refused in production). Security headers: CSP (`script-src 'self'`, `frame-ancestors 'none'`;
   nothing in the web bundle may need `eval` — Zod's eval probe is switched off before anything validates, and
   `tests/e2e/prod/csp-no-eval.spec.ts` fails the production build on any violation), HSTS, `nosniff`, `no-referrer`, a
   `Permissions-Policy` that turns off camera, microphone, geolocation, payment and USB, `no-store` on API and auth
@@ -381,8 +474,23 @@ on a PersistentVolume (ADR-016).
   read-only root file system, no capabilities, no privilege escalation, RuntimeDefault seccomp — the restricted Pod
   Security Standard; no service-account token (the pod never talks to the Kubernetes API). The runner is a sidecar on
   the pod's loopback: nothing outside the pod can reach it, and it gets only `RUNNER_SHARED_KEY`. A NetworkPolicy
-  allows ingress to the HTTP port (from the ingress controller, in the overlay) and egress to DNS and 443 — never the
-  cloud instance metadata service, so the pod can't borrow the node's identity.
+  allows ingress to the HTTP port (from the ingress controller, in the overlay) and egress to the cluster's DNS and to
+  public addresses on 443 only. Where the cluster enforces NetworkPolicies (`preflight.sh` checks for an engine), the
+  private ranges and the reserved ranges clusters use are refused (10/8, 172.16/12, 192.168/16, 100.64/10,
+  link-local with the cloud instance metadata service, WireServer, 0/8, 192.0.0/24, 198.18/15, 224/3), so the pod
+  can't borrow the node's identity or reach other workloads. Exceptions an installation needs go in a policy of the
+  overlay's own, which opens only what it lists; the base's refusals hold for everything else
+  (`tests/guards/networkpolicy-private-egress.test.ts`). The loader pod
+  gets no network at all.
+- **Images** start from bases pinned by digest (`name:tag@sha256:…`, and the `# syntax=` frontend;
+  `tests/guards/image-digests.test.ts`). A pin moves only by a reviewed commit.
+- **Dependencies** wait seven days: pnpm resolves only versions published at least seven days ago
+  (`minimumReleaseAge: 10080`, strict, versions without a publish time refused), and every install — CI and both image
+  builds — runs from the frozen lockfile under that setting. Dependabot waits the same seven days (`cooldown`) on npm,
+  GitHub Actions and both images' base images. Its security updates skip the cooldown but not pnpm's floor, so an
+  urgent fix adds one exact `name@x.y.z` to `minimumReleaseAgeExclude`, with a comment saying why and when it goes, in
+  the same pull request. `.gitignore` keeps env files, key material and SQLite files out of git (images are built from
+  `git archive HEAD`; `tests/guards/gitignore-secrets.test.ts`).
 - **The database file.** SQLite has no roles: whoever can write the file can do anything to it, including dropping the
   append-only triggers. So the file itself is guarded: no other user may write its folder, the file and its `-wal`/`-shm`
   are 0600 (tightened at every start; a volume's `fsGroup` may add the pod's own group) and owned by the API's user,
@@ -396,56 +504,68 @@ on a PersistentVolume (ADR-016).
 - **Configuration** comes from the environment: the `adminforge-env` Secret (made from the env file, without the
   admin-only keys — provisioner and test-account credentials never reach the cluster) and the ConfigMap, which wins
   for the pod's layout (a copied env file can't move the database off the volume). Protect the Secret with the
-  cluster's RBAC and encryption at rest: it holds `TOKEN_CACHE_KEY` and the apps' credentials. On a workstation the
-  env files stay mode 600 in a 700 directory: `<env>.env` (runtime) and `<env>.admin.env` (CLI and live tests only).
-  A developer's `pnpm dev` uses a database file of its own (`~/.local/share/adminforge/dev.db`).
+  cluster's RBAC and encryption at rest: it holds `TOKEN_CACHE_KEY` and the apps' credentials. On a
+  workstation the env files stay mode 600 in a 700 directory: `<env>.env` (runtime) and `<env>.admin.env` (CLI and
+  live tests only). The API, the scheduler's one-shots, the live tests and every CLI command but `env check` refuse an
+  env file with any group or world permission, naming the file and the `chmod 600` fix (`env check` doesn't check
+  modes yet). A developer's `pnpm dev` uses a database file of its own (`~/.local/share/adminforge/dev.db`).
 - **Backups:** volume snapshots, and `adminforge db backup` — a consistent copy without sessions, pending sign-ins or
   the token cache (a restore signs everyone out), checked before it is written, mode 600, not encrypted: stream it out
   of the pod and encrypt it there with a key whose private half is not in the cluster (`portal/deploy/kubernetes/
-README.md` → Backups).
+README.md` → Backups). Every `db backup` is itself in the audit log: a `database.backup` event is written before the
+  copy leaves, and without it nothing leaves. A record, not a control: whoever can read the volume can copy it without
+  the CLI.
 - `/readyz` reports the run worker and scheduler from their heartbeats (cached 5 s, rate-limited), and every Microsoft
   call is logged as one structured line (path template, status, duration, throttling, request id) for tracing by
-  Reference. The Reference (correlation id) is always generated by the API, never taken from the browser.
+  Reference. The Reference (correlation id) of an API error is always generated by the API, never taken from the
+  browser; a crash while the browser renders gets a local reference.
 - Show-once secrets never leave the API process: the run worker is part of it, so they are never written anywhere, not
   even sealed.
-- Mock sign-in (`AUTH_MODE=mock`) only starts with fixture data, a loopback address and no credentials configured.
+- Mock sign-in (`AUTH_MODE=mock`) only starts outside production, with fixture data, a loopback `API_HOST`, a
+  `PUBLIC_BASE_URL` on localhost and no credentials configured; a session left without any AdminForge role ends, as
+  with Entra sign-in. Only then does the fixture fetch accept a write no fixture describes (204: there is no tenant).
+  A POST the request policy lists as a read is never accepted that way, and with Entra sign-in on fixtures an
+  unfixtured write stays a 404.
 
 ## Threats and mitigations
 
-| Threat                                                           | Mitigation                                                                                                                                                                            |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stolen session cookie                                            | `__Host-`/HttpOnly/Secure cookie; idle and absolute expiry; writes need step-up as the same user; roles re-checked                                                                    |
-| Phishing via the portal's own URL                                | Same-origin `returnTo` only; browser-bound sign-in round trips                                                                                                                        |
-| Silent SSO used to arm without re-authentication                 | `prompt=login`, `max_age=0` and `auth_time` freshness always checked server-side (plus the auth context when set)                                                                     |
-| Removed or disabled admin keeps acting                           | Roles re-read every 5 minutes, by the API and the run worker; session ends on `invalid_grant`, guest status, or 15 minutes without confirmation                                       |
-| An approver approves their own elevation                         | Approval gates exclude the people a change grants access to (`own_access`); self-approval refused                                                                                     |
-| A parked run continues on an older, weaker version               | Resume and the worker re-check roles and (before anything was changed) the current version; parked runs expire after 24 hours                                                         |
-| Abuse in progress                                                | Emergency stop: pause all changes or all automation from the portal, audited                                                                                                          |
-| Changed playbook runs unattended under an old approval           | Approval fingerprint covers the playbook and its children; outdated approvals refuse and switch the schedule off                                                                      |
-| Content grants the automation identity tenant-wide write         | Provisioning ceiling: write application permissions need an explicit opt-in                                                                                                           |
-| Token sent to a third-party host                                 | Connection audiences allow-listed, scopes are names only, Microsoft audiences refused; redirects refused; `http` steps disabled                                                       |
-| Content or a pinned script writes with a Reader's read tokens    | Runner read mode: static allow-list before the script runs; guards on every service write command; no module auto-loading                                                             |
-| Another process answers on the runner's port                     | Tokens sealed per job; answers signed over a per-request nonce; redirects refused                                                                                                     |
-| An old or retired content version is used to bypass a later rule | Interactive calls and child playbooks use only the current version (409 otherwise)                                                                                                    |
-| Someone else's input drives my write steps                       | Only the person a manual step waits for can supply its values; approvers need the playbook's roles                                                                                    |
-| Report data emailed to an outside address                        | Recipients only from `AF_…RECIPIENTS/EMAIL/ALERTS` configuration keys                                                                                                                 |
-| An Operator schedules a report to collect app-permission data    | Accepted risk (Operators already get content schedules' files); reports Operators mustn't schedule or download set `requires.portalRoles` (e.g. `Portal.Admin`)                       |
-| A portal schedule outlives its creator's access                  | Creator's account and roles confirmed before every run; loss turns it off (`creator_access_removed`); unreadable skips the run (`creator_unverified`)                                 |
-| A name typed in the portal phishes email or Teams recipients     | Single-line plain-text names without links or markup; Markdown escaped in Teams; "Scheduled in AdminForge by …"; approval channels excluded                                           |
-| Readers seeing app-permission data                               | Report files and probe rows need Operator by default (service announcements on News and changes are the documented exception)                                                         |
-| A news feed used to reach internal hosts or to inject markup     | Feed hosts are a code allow-list (https, public addresses pinned at connect, redirects only within it); no DTDs/entities; linear plain-text reduction; links on the source's own host |
-| Another workload in the cluster reads secrets or the database    | Admin credentials never reach the cluster; runner gets only its key; non-root pod, RWOP volume, NetworkPolicy, no service-account token (see Deployment, storage and network)         |
-| Developer server consumes production jobs                        | A developer's API uses its own database file; the production file is only on the pod's volume                                                                                         |
-| Content gives the Write app tier-0 scopes                        | Provisioning ceiling: role management, app credentials, consent grants, `Directory.AccessAsUser.All` and tenant policies need `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`                 |
-| Content gives the automation identity sensitive reads            | Mail, files, sites, chats, calendars, BitLocker keys and similar need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`                                                                      |
-| Someone adds an owner, secret or assignment to an AdminForge app | `provision status` fails on unexpected privilege                                                                                                                                      |
-| An engineer grants themselves portal roles through AdminForge    | The executor refuses writes naming AdminForge's apps, the principals holding its app roles, `AF_PROTECTED_APP_IDS` and `AF_PROTECTED_USER_IDS`, by id                                 |
-| Unreviewed content is published                                  | `publish` runs `validate` and the playbook tests, and refuses uncommitted content or a commit not on `origin/main` unless `--allow-unreviewed` (audited)                              |
-| Validation user misused                                          | Disabled between live runs, least roles (Exchange / SharePoint admin roles only with `AF_TEST_SERVICE_ADMIN_ROLES=true`), test labels only; `provision status` flags any other role   |
-| Provisioning pointed at someone's real account                   | Only an `af-…` account with the "AdminForge validation" marker (or "AF Tester" name) is managed; any other is refused before a password, role or exclusion changes                    |
-| One person approves their own request with the approver fixture  | Accepted in test labels only (see Known gaps); refused where automation writes are allowed; enabled only on request (`--enable --approver`); Portal.Reader + Approver only            |
-| An `optional` datasource hides a denial                          | Never for a missing role, the request policy, a licence, sign-in or arming anywhere in the chain; suppressed errors are recorded, and a scheduled report fails `report_incomplete`    |
-| A compromised service rewrites the audit log                     | Not prevented (SQLite has no roles); detected by the hash chain against its checkpoints in the container log shipped off the cluster (`adminforge audit verify`)                      |
+| Threat                                                            | Mitigation                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stolen session cookie                                             | `__Host-`/HttpOnly/Secure cookie; idle and absolute expiry; writes need step-up as the same user; roles re-checked; a new session id and CSRF token at every arm, so a cookie copied while read-only can't arm or start writes and runs it started ask before writing — but it can confirm and fill in the person's manual steps (Known gaps) |
+| Phishing via the portal's own URL                                 | Same-origin `returnTo` only; browser-bound sign-in round trips                                                                                                                                                                                                                                                                                |
+| Silent SSO used to arm without re-authentication                  | `prompt=login`, `max_age=0` and `auth_time` freshness always checked server-side (plus the auth context when set)                                                                                                                                                                                                                             |
+| Removed or disabled admin keeps acting                            | Roles re-read every 5 minutes, by the API and the run worker; session ends on `invalid_grant`, guest status, or 15 minutes without confirmation                                                                                                                                                                                               |
+| An approver approves their own elevation                          | Approval gates exclude the people a change grants access to (`own_access`); self-approval refused                                                                                                                                                                                                                                             |
+| A parked run continues on an older, weaker version                | Resume and the worker re-check roles and (before anything was changed) the current version; parked runs expire after 24 hours                                                                                                                                                                                                                 |
+| Abuse in progress                                                 | Emergency stop: pause all changes or all automation from the portal, audited                                                                                                                                                                                                                                                                  |
+| Changed playbook runs unattended under an old approval            | Approval fingerprint covers the playbook and its children; outdated approvals refuse and switch the schedule off                                                                                                                                                                                                                              |
+| Content grants the automation identity tenant-wide write          | Provisioning ceiling: write application permissions need an explicit opt-in                                                                                                                                                                                                                                                                   |
+| Token sent to a third-party host                                  | Connection audiences allow-listed, scopes are names only, Microsoft audiences refused; redirects refused; `http` steps disabled                                                                                                                                                                                                               |
+| Content or a pinned script writes with a Reader's read tokens     | Runner read mode: static allow-list before the script runs; guards on every service write command; no module auto-loading                                                                                                                                                                                                                     |
+| Another process answers on the runner's port                      | Tokens sealed per job; answers signed over a per-request nonce; redirects refused                                                                                                                                                                                                                                                             |
+| An old or retired content version is used to bypass a later rule  | Interactive calls and child playbooks use only the current version (409 otherwise)                                                                                                                                                                                                                                                            |
+| Someone else's input drives my write steps                        | Only the person a manual step waits for can supply its values; approvers need the playbook's roles                                                                                                                                                                                                                                            |
+| Report data emailed to an outside address                         | Recipients only from `AF_…RECIPIENTS/EMAIL/ALERTS` configuration keys                                                                                                                                                                                                                                                                         |
+| An Operator schedules a report to collect app-permission data     | Accepted risk (Operators already get content schedules' files); reports Operators mustn't schedule or download set `requires.portalRoles` (e.g. `Portal.Admin`)                                                                                                                                                                               |
+| A portal schedule outlives its creator's access                   | Creator's account and roles confirmed before every run; loss turns it off (`creator_access_removed`); unreadable skips the run (`creator_unverified`)                                                                                                                                                                                         |
+| A name typed in the portal phishes email or Teams recipients      | Single-line plain-text names without links or markup; Markdown escaped in Teams; "Scheduled in AdminForge by …"; approval channels excluded                                                                                                                                                                                                   |
+| Readers seeing app-permission data                                | Report files and probe rows need Operator by default (service announcements on News and changes are the documented exception)                                                                                                                                                                                                                 |
+| A news feed used to reach internal hosts or to inject markup      | Feed hosts are a code allow-list (https, public addresses pinned at connect, redirects only within it); no DTDs/entities; linear plain-text reduction; links on the source's own host                                                                                                                                                         |
+| Another workload in the cluster reads secrets or the database     | Admin credentials never reach the cluster; runner gets only its key; non-root pod, RWOP volume, NetworkPolicy, no service-account token (see Deployment, storage and network)                                                                                                                                                                 |
+| Developer server consumes production jobs                         | A developer's API uses its own database file; the production file is only on the pod's volume                                                                                                                                                                                                                                                 |
+| Content gives the Write app tier-0 scopes                         | Provisioning ceiling: role management, app credentials, consent grants, `Directory.AccessAsUser.All` and tenant policies need `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`                                                                                                                                                                         |
+| Content gives the automation identity sensitive reads             | Mail, files, sites, chats, calendars, BitLocker keys and similar need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`                                                                                                                                                                                                                              |
+| Someone adds an owner, secret or assignment to an AdminForge app  | `provision status` fails on unexpected privilege                                                                                                                                                                                                                                                                                              |
+| An engineer grants themselves portal roles through AdminForge     | The executor refuses writes naming AdminForge's apps, the principals holding its app roles, `AF_PROTECTED_APP_IDS` and `AF_PROTECTED_USER_IDS`, by id                                                                                                                                                                                         |
+| Unreviewed content is published                                   | `publish` runs `validate` and the playbook tests, and refuses uncommitted content or a commit not on origin's `main` as origin has it now (unreachable = unreviewed) unless `--allow-unreviewed` (audited)                                                                                                                                    |
+| Validation user misused                                           | Disabled between live runs, least roles (Exchange / SharePoint admin roles only with `AF_TEST_SERVICE_ADMIN_ROLES=true`), test labels only; `provision status` flags any other role                                                                                                                                                           |
+| Provisioning pointed at someone's real account                    | Only an `af-…` account with the "AdminForge validation" marker (or "AF Tester" name) is managed; any other is refused before a password, role or exclusion changes                                                                                                                                                                            |
+| One person approves their own request with the approver fixture   | Accepted in test labels only (see Known gaps); refused where automation writes are allowed; enabled only on request (`--enable --approver`); Portal.Reader + Approver only                                                                                                                                                                    |
+| An `optional` datasource hides a denial                           | Never for a missing role, the request policy, a licence, sign-in or arming anywhere in the chain; suppressed errors are recorded, and a scheduled report fails `report_incomplete`                                                                                                                                                            |
+| A compromised service rewrites the audit log                      | Not prevented (SQLite has no roles); detected by the hash chain against its checkpoints in the container log shipped off the cluster (`adminforge audit verify`)                                                                                                                                                                              |
+| Hostile tenant text takes a page down or a link leaves the portal | Linear text and Markdown reduction, range-checked character references, a per-block error boundary; one link rule (`safeUrl`) for every link and navigation from data                                                                                                                                                                         |
+| An Operator reads what someone else's run found                   | Someone else's delegated run is metadata only (run page, stream, approvals inbox) unless you are its approver, the person a manual step waits for or a Portal Admin                                                                                                                                                                           |
+| A compromised dependency release reaches the cluster              | Seven-day floor in pnpm and Dependabot; frozen lockfile on every install; `pnpm audit` in CI                                                                                                                                                                                                                                                  |
 
 ## Known gaps and accepted risks
 
@@ -476,13 +596,27 @@ Tracked in `docs/backlog.md`:
   when the Exchange and SharePoint write playbooks aren't being validated.
 - The validation user is excluded from Entra's authentication-methods registration campaign, so Entra never nudges it
   to register a passkey or Authenticator; its MFA (TOTP under Security Defaults) or Conditional Access still applies.
+- **Write-mode scripts can read the runner's shared key (accepted risk).** The supervisor and its `pwsh` workers run
+  as one uid (10002), so a write-mode (FullLanguage) script can read `RUNNER_SHARED_KEY` from the supervisor's
+  `/proc/<pid>/environ`. A uid split needs `CAP_SETUID`/`CAP_SETGID`, which the restricted Pod Security Standard and
+  `capabilities: drop: [ALL]` forbid. Write scripts are SHA-256-pinned published content and run only for an armed
+  engineer; read-mode scripts can't reach `/proc` (no `Get-Content`, file .NET types, `$env:` or provider variables).
 - Read-mode PowerShell still runs in FullLanguage: the static policy is the boundary, not a sandbox. A
   ConstrainedLanguage runspace needs six read scripts rewritten. Runner answers are authenticated, not encrypted
   (loopback); `/healthz` and cancel answers aren't signed.
-- A child playbook's own typed confirmation isn't asked when a parent starts it; the parent must have a confirmation of
-  its own. Five existing definitions need aligning before the stricter rule can be enforced.
-- HTTP probes check the resolved address before connecting, but not across a DNS change in between (rebinding). News
-  feeds pin the connection to the checked addresses; the same dispatcher can be adopted for probes (docs/backlog.md).
+- A child playbook's own confirmation isn't asked when a parent starts it; `adminforge validate` refuses a parent (or
+  a compensation) that starts a child asking for one unless the parent has a confirmation of its own. The parent's
+  risk and kind of confirmation aren't yet required to match the child's: `identity.create-user`,
+  `azure.new-subscription-onboarding`, `identity.compromised-account` and `identity.leaver` confirm with a click and
+  start high-risk children that ask for a typed one.
+- Certificate and DNS probes have no address guard: a certificate check connects to whatever host and port its
+  (reviewed) content names, and a DNS check asks whatever resolver it names. Only the cluster's NetworkPolicy limits
+  them (docs/backlog.md).
+- **Query Studio runs whatever KQL the service accepts.** There is no operator blocklist (`externaldata`, `evaluate`,
+  `workspace()`, `cluster()`): a query runs with the engineer's own delegated read access, on the sources the
+  installation offers (`AF_QUERY_SOURCES`), with a 5,000-row cap, and is audited (`query.executed`, with the query's
+  hash and first 200 characters). It can do nothing the engineer couldn't do in the Azure portal with the same
+  account.
 - **The "created by AdminForge" mark on Exchange recipients is a guard rail, not a boundary.** The create playbooks
   set `CustomAttribute15` ("AdminForge-created by … on …") so a re-run can finish its own recipient and
   `m365.remove-created-recipient` refuses anything unmarked. Anyone who can edit custom attributes can set it — an
@@ -493,16 +627,25 @@ Tracked in `docs/backlog.md`:
   what they may change; every change is audited. Checking the recipient against the object id recorded by
   AdminForge's own successful create run is the follow-up (`docs/backlog.md`).
 
-- The session id is not rotated when write access is turned on (a cookie stolen while read-only could ride a later
-  arm by the real user). Mitigated by the cookie flags and expiry; rotation needs runs and pending secrets re-keyed.
+- Around arming: a token refresh in flight during the id rotation can write the old partition back (unreachable;
+  purged with orphaned partitions after a day, as at sign-out); a request authenticated just before can finish with
+  the old record; a sign-out sent with the old cookie while the arm completes leaves the new session to idle expiry;
+  a post-run token refresh is skipped if the session rotated mid-run (docs/backlog.md).
+- **Confirming a manual step is checked against the person, not the session,** and needs no write access, unlike
+  approving. Anyone holding a copy of another of the person's sessions — read-only is enough — can confirm or fill in
+  a step waiting for them. On a run the person started from an armed session, the writes after it then run at once
+  with those values, without a resume, and the run log names the person (docs/backlog.md).
 - **The database file is the boundary (ADR-016).** With Postgres the services' role could not drop the audit log's
   append-only triggers; with SQLite, anything that can write the file — the API process itself, or someone with the
   volume — can rewrite rows and drop triggers. The chain is unkeyed, so a rewritten tail can be re-hashed. Each
   verification writes the verified tail (`seq`, `hash`) to the API's log as an external checkpoint: ship the container
   logs off the cluster so the anchor doesn't share the database's fate, and compare with `adminforge audit verify`.
-- Definitions loaded from the database are trusted as published (not re-validated on load), and the API process can
-  insert and update them; `publish`'s review check is a process control on a local ref, not a
-  security boundary. Two-person review needs branch protection and a second code owner on the repository.
+- Definitions loaded from the database are re-validated against their kind's schema and their row (kind, id,
+  version, status); this catches rows that bypass `publish` (an import, a restored file), not a valid but weaker
+  definition written by someone with the volume. `publish`'s review check is a process control, not a security
+  boundary: in the pod `pods/exec` is the publish boundary and the Kubernetes audit log names the person, and
+  BUILD.json is self-asserted by whoever builds the image (a hand-run `docker build` can claim `reviewed`) until CI
+  builds the images. Two-person review needs branch protection and a second code owner on the repository.
 - Approval gates exclude a group's members and a principal, not a service principal's owners.
 - CSP allows inline **styles** (`style-src 'unsafe-inline'`) because Radix and Monaco inject them; scripts stay
   `'self'` only, so CSS injection can't execute code.
@@ -511,5 +654,11 @@ Tracked in `docs/backlog.md`:
   (key id), so it can be rotated with `TOKEN_CACHE_PREVIOUS_KEYS` without signing everyone out.
 - A compromised service can still record a forged approval decision (the database keeps decisions append-only and the
   audit log records each one, but neither knows who clicked); approval integrity rests on the API process.
-- Not yet verified on a real cluster: Pod Security admission of the manifests, the storage class's behaviour (zonal
-  disks), the Ingress's handling of Server-Sent Events (docs/backlog.md).
+- Not yet verified on a real cluster: that its CNI enforces the NetworkPolicies, Pod Security admission of the
+  manifests, the storage class's behaviour (zonal disks), the Ingress's handling of Server-Sent Events, and
+  `preflight.sh` itself (docs/backlog.md).
+- **The runner's base image is stale.** `mcr.microsoft.com/powershell:7.5-ubuntu-24.04` was last rebuilt on
+  2025-01-30 and will offer no newer digest, and the runner holds engineers' forwarded Exchange and SharePoint tokens:
+  move it to a maintained base before go-live (`portal/deploy/kubernetes/README.md`).
+- Egress is filtered by address, not by name: the pod may reach any public address on 443. Filtering by host name
+  needs a firewall in front of the cluster.

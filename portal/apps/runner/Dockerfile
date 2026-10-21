@@ -13,8 +13,9 @@
 # each FROM so Dependabot's docker ecosystem bumps tag and digest together. Looked up 2026-10-21:
 #   node:24.13.1-bookworm-slim — the multi-platform index (linux/amd64, linux/arm64/v8, linux/ppc64le, linux/s390x).
 #   mcr.microsoft.com/powershell:7.5-ubuntu-24.04 — a single linux/amd64 image, not an index: this image is amd64
-#   only (MCR's arm64 PowerShell 7.5 is the separate tag 7.5-azurelinux-3.0-arm64). The tag was last rebuilt on
-#   2025-01-30 (PowerShell 7.5.0); portal/deploy/kubernetes/README.md → Requirements › CPU architecture.
+#   only (MCR's arm64 PowerShell 7.5 images are separate tags on other distributions: 7.5-azurelinux-3.0-arm64,
+#   7.5-mariner-2.0-arm64). The tag was last rebuilt on 2025-01-30 (PowerShell 7.5.0);
+#   portal/deploy/kubernetes/README.md → Requirements › CPU architecture.
 #   docker/dockerfile:1.7 (the `# syntax=` frontend) — pinned the same way.
 
 # ── Build the supervisor bundle (one self-contained file, no node_modules at runtime) ──────────────

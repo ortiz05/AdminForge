@@ -128,7 +128,9 @@ tenant-specific values; `guards/design-tokens.test.ts` rejects raw colours and a
 `guards/sqlite-only.test.ts` keeps runtime code SQLite-only (no `pg` or `pg-boss`, no Postgres-only SQL, no `async`
 transaction functions — the one-time importer excepted); `guards/kubernetes-manifests.test.ts` keeps the deployment's
 shape (one replica, `Recreate`, a ReadWriteOncePod volume, non-root, read-only root file systems, the runner on the
-pod's loopback, nothing installation-specific in the base). They run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` sets `core.hooksPath`, or run
+pod's loopback, nothing installation-specific in the base); `guards/no-deep-imports.test.ts` keeps runtime code in
+`portal/` on other workspace packages' declared entry points (their `exports`: `@adminforge/api/tooling`, never
+`@adminforge/<pkg>/src/…` or a relative path into another package — tests may import internals). They run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` sets `core.hooksPath`, or run
 `git config core.hooksPath .githooks`). Never bypass them with `--no-verify`.
 
 ## Fixtures

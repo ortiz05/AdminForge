@@ -224,7 +224,8 @@ export class RepositoryRunStore implements RunStore {
       definitionVersion: row?.definitionVersion ?? def?.version ?? '',
       requestedByUpn: requestedBy.upn,
       initiatorOid: row?.initiatorOid ?? null,
-      ...(task.kind === 'approval' ? { writesAfter: def ? writesAfter(def, task.path) : true } : {}),
+      // Whether write steps follow: approving or confirming the task then needs write access (the UI says so first).
+      writesAfter: def ? writesAfter(def, task.path) : true,
     });
     if (isNew && this.onApprovalRequested)
       await this.onApprovalRequested({

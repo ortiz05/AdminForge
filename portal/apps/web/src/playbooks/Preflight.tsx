@@ -40,7 +40,7 @@ export function RiskBanner({ def, bulkCount }: { def: Playbook | Runbook; bulkCo
     // A runbook starts read-only: its checklists go on, and each step that changes the tenant waits for write access.
     lines.push(
       def.kind === 'runbook'
-        ? 'Steps that change the tenant pause until you arm write access; checklists and read steps don’t need it.'
+        ? 'Steps that change the tenant wait until write access is armed; checklists and read steps don’t need it.'
         : 'Runs only while write access is armed.',
     );
     lines.push(

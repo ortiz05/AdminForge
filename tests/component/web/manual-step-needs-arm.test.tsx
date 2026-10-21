@@ -59,4 +59,27 @@ describe('runbook: marking a step done that has writes after it', () => {
     expect(screen.queryByText('That wasn’t recorded')).not.toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
   });
+
+  it('when writes follow the step, it says so up front, locks Mark done until armed, then moves focus to it', async () => {
+    const detail = runbookRunDetail();
+    const withWrites = {
+      ...detail,
+      tasks: detail.tasks.map((t) => ({ ...t, policy: { ...t.policy, writesAfter: true } })),
+    };
+    const { state } = renderApp({
+      path: `/runbooks/identity.offboard-leaver?run=${IDS.runbookRun}`,
+      handlers: [serve(IDS.runbookRun, withWrites)],
+    });
+    const prompt = await callout('Marking this done needs write access');
+    expect(prompt.closest('[role="alert"]')).toBeNull(); // said up front, not as an error
+    const done = screen.getByRole('button', { name: 'Mark done' });
+    for (const label of ['Mailbox converted to shared', 'Manager has Full Access'])
+      await userEvent.click(
+        screen.getAllByRole('checkbox', { name: label }).find((c) => !c.hasAttribute('disabled'))!,
+      );
+    expect(done).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(done);
+    expect(state.manual).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+  });
 });

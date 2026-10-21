@@ -119,7 +119,7 @@ function ParkedBanner({
         }
       >
         {prearm
-          ? 'It started before they last turned on write access, so it changes nothing until they confirm it’s theirs and resume it.'
+          ? 'It started before they last armed write access, so nothing changes until they check it’s theirs and resume it.'
           : 'The next step runs with their access, so nothing else runs until they do.'}
       </Callout>
     );
@@ -143,6 +143,7 @@ function ParkedBanner({
           ) : undefined
         }
       >
+        {!arm.armed && (me.canArm ? 'Arm write access, then resume it. ' : '')}
         It started{' '}
         {started ? (
           <time dateTime={started} title={formatTimestamp(started)}>
@@ -151,9 +152,12 @@ function ParkedBanner({
         ) : (
           'earlier'
         )}
-        , before you last turned on write access, so it changes nothing until you resume it. Check it’s one
-        you started — the playbook, its inputs and when — then resume it. If you don’t recognise it, cancel it
-        and tell your security team.
+        , before you last armed write access, so nothing changes until you resume it. Check the {run.kind},
+        its inputs and the start time are yours. If you don’t recognise it, cancel it and tell your security
+        team.
+        {!arm.armed &&
+          !me.canArm &&
+          ' Resuming it needs the Portal Operator role: ask a portal administrator for it.'}
       </Callout>
     );
   switch (status) {
@@ -271,6 +275,7 @@ function HumanTaskPanels({
             checklist={
               t.checklist.length ? t.checklist : spec && spec.type === 'manual' ? (spec.checklist ?? []) : []
             }
+            requiresArm={t.writesAfter === true}
           />
         );
       })}
@@ -397,7 +402,10 @@ export function RunPage({ id }: { id: string }) {
         title={run.title}
         meta={
           <>
-            <RunStatusPill status={run.status} />
+            <RunStatusPill
+              status={run.status}
+              label={run.waiting?.reason === 'prearm' ? 'Waiting to be resumed' : undefined}
+            />
             {run.dryRun && <Badge tone="accent">Dry run · nothing changed</Badge>}
             {live && (
               <span className="inline-flex items-center gap-1.5 text-xs text-fg-3">

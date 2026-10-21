@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
@@ -232,19 +232,25 @@ export function ApprovalCard({
   );
 }
 
-/** A manual checklist step (runbooks): instructions, every box ticked, notes, then Mark done. */
+/**
+ * A manual checklist step (runbooks): instructions, every box ticked, notes, then Mark done. When write steps follow
+ * (`requiresArm`), the steps after it run as the person who marks it done, so Mark done needs write access — said up
+ * front and locked until armed, like approving such a gate; a refusal (`not_armed`) says the same.
+ */
 export function ManualStepCard({
   runId,
   stepId,
   title,
   instructions,
   checklist,
+  requiresArm = false,
 }: {
   runId: string;
   stepId: string;
   title: string;
   instructions: string;
   checklist: string[];
+  requiresArm?: boolean;
 }) {
   const me = useMe();
   const { arm, openArmDialog } = useShell();
@@ -269,8 +275,20 @@ export function ManualStepCard({
     },
   });
   /** The API refused Mark done without write access (the steps after it write). */
-  const needsArm =
+  const refused =
     mutation.isError && mutation.error instanceof ApiRequestError && mutation.error.code === 'not_armed';
+  const needsArm = (requiresArm || refused) && !arm.armed;
+  // Arming from the prompt removes it (and its button): focus moves on to Mark done.
+  const done = useRef<HTMLButtonElement>(null);
+  const prompted = useRef(false);
+  useEffect(() => {
+    if (needsArm) prompted.current = true;
+    else if (prompted.current && arm.armed) {
+      prompted.current = false;
+      done.current?.focus();
+    }
+  }, [needsArm, arm.armed]);
+  const Done = requiresArm ? WriteAction : Button;
   return (
     <div className="flex flex-col gap-3 rounded-(--af-panel-radius) border border-accent bg-panel p-4 shadow-1">
       <p className="af-eyebrow text-accent">Your turn</p>
@@ -301,10 +319,10 @@ export function ManualStepCard({
         }
       />
       {/* The steps after this one change the tenant and run as you: marking it done needs write access. */}
-      {needsArm && !arm.armed && (
+      {needsArm && (
         <Callout
           tone="info"
-          role="alert"
+          {...(refused ? { role: 'alert' as const } : {})}
           title="Marking this done needs write access"
           icon={<LockKeyOpenIcon size={18} />}
           action={
@@ -316,11 +334,12 @@ export function ManualStepCard({
             ) : undefined
           }
         >
-          The steps after this one change the tenant and run as you. Arm write access, then mark it done.
-          Saying you can’t do it doesn’t need it.
+          {me.canArm
+            ? 'The steps after this one change the tenant and run as you. Arm write access, then mark it done. “I can’t do this” doesn’t need it.'
+            : 'The steps after this one change the tenant and run as you, which needs the Portal Operator role. Ask a portal administrator for it, or select “I can’t do this”.'}
         </Callout>
       )}
-      {mutation.isError && !needsArm && (
+      {mutation.isError && !refused && (
         <Callout tone="crit" role="alert" title="That wasn’t recorded">
           {(mutation.error as Error).message}
           {mutation.error instanceof ApiRequestError && mutation.error.hint && (
@@ -339,14 +358,15 @@ export function ManualStepCard({
         >
           {blocked && !notes.trim() ? 'Add a note to continue' : 'I can’t do this'}
         </Button>
-        <Button
+        <Done
+          ref={done}
           intent="primary"
           pending={mutation.isPending && mutation.variables === true}
           aria-disabled={!allChecked || undefined}
           onClick={() => allChecked && mutation.mutate(true)}
         >
           Mark done
-        </Button>
+        </Done>
       </div>
       {!allChecked && <p className="text-right text-xs text-fg-3">Tick every item to mark the step done.</p>}
     </div>

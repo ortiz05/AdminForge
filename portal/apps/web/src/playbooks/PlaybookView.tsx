@@ -300,7 +300,7 @@ function PreviewSection({ flow }: { flow: PlaybookFlow }) {
                   ? (flow.preview.rejection.hint ?? 'Nothing ran. Preview again, then confirm.')
                   : !flow.preview.fresh
                     ? 'The plan below is for the earlier inputs. Nothing runs until you preview the current ones.'
-                    : 'Previews are good for 15 minutes. Run previews again first, then asks you to confirm.'}
+                    : `Previews are good for 15 minutes. ${flow.def.kind === 'runbook' ? 'Start runbook' : 'Run'} previews again first, then asks you to confirm.`}
               </Callout>
             )}
           {detail.run.status === 'succeeded' && <PlanView plan={detail.plan} />}
@@ -320,7 +320,7 @@ export function PlaybookSections({ flow, problems }: { flow: PlaybookFlow; probl
     ...problems,
     ...(flow.unknownInputs.length
       ? [
-          `The link included inputs this playbook doesn’t take (${flow.unknownInputs.join(', ')}); they were left out.`,
+          `The link included inputs this ${def.kind} doesn’t take (${flow.unknownInputs.join(', ')}); they were left out.`,
         ]
       : []),
   ];
@@ -349,6 +349,7 @@ export function PlaybookSections({ flow, problems }: { flow: PlaybookFlow; probl
             errors={flow.errors}
             onChange={flow.setValue}
             omit={flow.perItemKeys}
+            kind={def.kind}
           />
         </section>
       )}
@@ -505,9 +506,9 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
           <Button intent="ghost" onClick={flow.closeConfirm} aria-disabled={pending || undefined}>
             Cancel
           </Button>
-          {/* Ember only in write mode: a runbook started read-only waits for write access before it changes anything. */}
+          {/* Ember only in write mode: starting a runbook changes nothing itself (its write steps wait for write access). */}
           <Button
-            intent={flow.writes && flow.armed ? 'armed' : 'primary'}
+            intent={flow.writes && flow.armToRun && flow.armed ? 'armed' : 'primary'}
             pending={pending}
             aria-disabled={!matches || undefined}
             onClick={() => void submit()}
@@ -536,7 +537,7 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
           <Callout tone="crit" role="alert" title="This change can’t be confirmed">
             <p>
               The preview didn’t produce the text to type. Cancel, then select Preview again. If it keeps
-              happening, tell the playbook’s owner ({def.owner}).
+              happening, tell the {def.kind}’s owner ({def.owner}).
             </p>
             {flow.preview.id && (
               <p className="mt-2">
@@ -577,50 +578,44 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
   );
 }
 
-/** "expires in 12 min" — the server refuses a preview after 15 minutes. */
-function expiryText(ms: number | null): string | null {
+/** "expires in 12 min" — the server refuses a preview after 15 minutes. `start`: what the run button is called. */
+function expiryText(ms: number | null, start: 'Run' | 'Start runbook'): string | null {
   if (ms === null) return null;
-  if (ms <= 0) return 'Preview expired: Run previews again first.';
+  if (ms <= 0) return `Preview expired: ${start} previews again first.`;
   const min = Math.ceil(ms / 60_000);
   return `Preview expires in ${min} min.`;
 }
 
-/**
- * Preview, Run (locked until armed for write playbooks; runbooks start without it), and the confirmation. `label`
- * names the run button (default: the playbook's title, or Run).
- */
-export function PlaybookActions({
-  flow,
-  align = 'end',
-  label,
-}: {
-  flow: PlaybookFlow;
-  align?: 'end' | 'between';
-  label?: string;
-}) {
+/** Preview, Run (locked until armed for write playbooks; runbooks start without it), and the confirmation. */
+export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; align?: 'end' | 'between' }) {
   const me = useMe();
   const { openArmDialog } = useShell();
   const { def } = flow;
   const statusId = useId();
-  const runLabel =
-    label ??
-    (flow.bulk ? `${def.title} · ${flow.items?.length ?? 0} items` : flow.writes ? def.title : 'Run');
+  const runLabel = flow.runLabel;
   const needsArm = flow.writes && flow.armToRun && !flow.armed;
+  // A runbook starts read-only, but one that writes still needs the role that runs changes (the API checks it too).
+  const needsRole = flow.writes && !flow.armToRun && !me.roles.includes('Portal.Operator');
   const ready = flow.preview.ok && flow.preview.fresh && !flow.preview.rejection;
-  const expiry = flow.writes && ready ? expiryText(flow.preview.expiresInMs) : null;
+  const expiry =
+    flow.writes && ready
+      ? expiryText(flow.preview.expiresInMs, def.kind === 'runbook' ? 'Start runbook' : 'Run')
+      : null;
   const status = flow.preview.refreshingForRun
     ? 'The preview expired: previewing again before you confirm…'
-    : needsArm
-      ? me.canArm
-        ? ready
-          ? `Preview ready.${expiry ? ` ${expiry.replace(/^Preview /, '').replace(/^e/, 'E')}` : ''}`
-          : 'Needs write access.'
-        : 'Running this needs the Portal Operator role.'
-      : (flow.run.blocked ?? expiry);
+    : needsRole
+      ? 'Starting this needs the Portal Operator role.'
+      : needsArm
+        ? me.canArm
+          ? ready
+            ? `Preview ready.${expiry ? ` ${expiry.replace(/^Preview /, '').replace(/^e/, 'E')}` : ''}`
+            : 'Needs write access.'
+          : 'Running this needs the Portal Operator role.'
+        : (flow.run.blocked ?? expiry);
 
   const RunButton = flow.writes && flow.armToRun ? WriteAction : Button;
   // Invalid inputs keep the button pressable: pressing it shows what's missing. Other blockers lock it with a reason.
-  const blockedNow = Boolean(flow.run.blocked) && flow.valid && !needsArm;
+  const blockedNow = needsRole || (Boolean(flow.run.blocked) && flow.valid && !needsArm);
 
   return (
     <div

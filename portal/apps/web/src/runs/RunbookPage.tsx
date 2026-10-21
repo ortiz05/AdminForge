@@ -107,6 +107,7 @@ function StepRow({
   scope,
   full = true,
   waitingFor = null,
+  requiresArm = false,
 }: {
   step: Step;
   record?: RunStep;
@@ -116,6 +117,8 @@ function StepRow({
   full?: boolean;
   /** Who the run's manual steps wait for, named to someone else (S-25). */
   waitingFor?: string | null;
+  /** Write steps follow this waiting manual step: marking it done needs write access. */
+  requiresArm?: boolean;
 }) {
   const status: StepStatus = record?.status ?? 'pending';
   const view = STEP_STATUS_VIEW[status];
@@ -130,6 +133,7 @@ function StepRow({
           title={label}
           instructions={step.instructions}
           checklist={step.checklist ?? []}
+          requiresArm={requiresArm}
         />
       );
     const done = status === 'succeeded';
@@ -325,6 +329,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
     launch: launch.launch,
     setSearch,
     armToRun: false,
+    runLabel: 'Start runbook',
     startedHint: 'Work through the sections in order; progress is saved as you go.',
     onStarted: (id) => void navigate({ to: '/runbooks/$key', params: { key: def.id }, search: { run: id } }),
   });
@@ -336,6 +341,12 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
     ['succeeded', 'skipped', 'planned'].includes(byId.get(s.id)?.status ?? ''),
   ).length;
   const scope = { inputs: detail?.run.inputs ?? flow.values, user: { upn: me.user.upn, name: me.user.name } };
+  // Manual steps waiting with write steps after them: marking them done needs write access.
+  const armFor = new Set(
+    (detail?.tasks ?? [])
+      .filter((t) => t.kind === 'manual' && t.status === 'pending' && t.writesAfter === true)
+      .map((t) => t.stepId),
+  );
 
   return (
     <>
@@ -372,7 +383,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
             <Panel
               eyebrow="Before you start"
               title="Start this runbook"
-              footer={<PlaybookActions flow={flow} label="Start runbook" />}
+              footer={<PlaybookActions flow={flow} />}
             >
               <PlaybookSections flow={flow} problems={launch.problems} />
             </Panel>
@@ -426,6 +437,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
                   scope={scope}
                   full={detail?.run.access !== 'metadata'}
                   waitingFor={detail?.run.initiator.upn ?? null}
+                  requiresArm={armFor.has(step.id)}
                 />
               ))}
             </section>

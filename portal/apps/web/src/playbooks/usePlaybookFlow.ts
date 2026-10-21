@@ -35,6 +35,8 @@ export interface PlaybookFlowOptions {
   armToRun?: boolean;
   /** The toast's line once a run has started (default: where to follow it). */
   startedHint?: string;
+  /** The run button's label (default: the title, or Run for a read-only definition). */
+  runLabel?: string;
 }
 
 export interface ConfirmState {
@@ -75,6 +77,7 @@ export function usePlaybookFlow({
   onStarted,
   armToRun = true,
   startedHint = 'Follow it on the run page or in the run dock.',
+  runLabel: runLabelOption,
 }: PlaybookFlowOptions) {
   const me = useMe();
   const { arm } = useShell();
@@ -276,7 +279,7 @@ export function usePlaybookFlow({
       ? bulk
         ? `This changes ${changes} in ${me.tenant.name} as ${me.user.upn}, one child run per item.`
         : !armToRun && !arm.armed
-          ? `This starts the ${def.kind} as ${me.user.upn}. It makes ${changes} in ${me.tenant.name} as its steps come up, each once you’ve armed write access. ${audited}`
+          ? `This starts the ${def.kind} as ${me.user.upn}. Its ${changes} in ${me.tenant.name} are made as their steps come up, while you have write access armed. ${audited}`
           : `This makes ${changes} in ${me.tenant.name} as ${me.user.upn}. ${audited}`
       : `This runs the ${def.kind}’s read steps as ${me.user.upn}.`;
     if (!writes || confirmType === 'none') return void go().catch(() => undefined);
@@ -362,6 +365,8 @@ export function usePlaybookFlow({
     failure,
     armed: arm.armed,
     armToRun,
+    runLabel:
+      runLabelOption ?? (bulk ? `${def.title} · ${items?.length ?? 0} items` : writes ? def.title : 'Run'),
   };
 }
 

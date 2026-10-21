@@ -84,17 +84,20 @@ export function RunStatusPill({
   status,
   size = 'md',
   className,
+  label,
 }: {
   status: RunStatus;
   size?: 'sm' | 'md';
   className?: string;
+  /** Says more precisely what the run waits for than the status's own label. */
+  label?: string;
 }) {
   const view = RUN_STATUS_VIEW[status];
   const s = statusPill({ status: view.tone, size });
   return (
     <span className={s.root({ className })} data-status={status}>
       <StatusGlyph status={status} tone={view.tone} size={size === 'sm' ? 12 : 14} className={s.icon()} />
-      <span className={s.label()}>{view.label}</span>
+      <span className={s.label()}>{label ?? view.label}</span>
     </span>
   );
 }

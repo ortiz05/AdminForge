@@ -160,7 +160,7 @@ export interface RunTask {
   expiresAt: string | null;
   createdAt: string | null;
   requestedBy: string | null;
-  /** Approval: write steps follow, so the approver must be armed (ADR-010). */
+  /** Write steps follow, so approving (the approver) or marking it done must be armed (ADR-010). */
   writesAfter: boolean | null;
   /** Server's verdict on whether the caller may decide (role, not the initiator, not decided yet). */
   canDecide: boolean | null;

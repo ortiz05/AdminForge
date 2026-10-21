@@ -66,7 +66,12 @@ describe('confirming a manual step with writes after it needs write access', () 
       await avery.post('/api/runs', { playbook: 'test.call-then-disable', inputs: { userId: USER } })
     ).json();
     await t.drain();
-    expect((await avery.get(`/api/runs/${runId}`)).json().run.status).toBe('awaiting_input');
+    const parked = (await avery.get(`/api/runs/${runId}`)).json();
+    expect(parked.run.status).toBe('awaiting_input');
+    // The task says writes follow, so the page asks for write access before Mark done.
+    expect(parked.tasks).toEqual([
+      expect.objectContaining({ kind: 'manual', policy: expect.objectContaining({ writesAfter: true }) }),
+    ]);
 
     await avery.arm(false); // write access ran out while they were on the phone
     const refused = await avery.post(`/api/runs/${runId}/manual/check`, { confirmed: true });

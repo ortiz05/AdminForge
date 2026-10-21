@@ -62,7 +62,11 @@ describe('run page: a run started before write access was turned on', () => {
       handlers: [serve(IDS.liveRun, prearmed())],
     });
     const banner = await callout('Paused: check this run is yours, then resume it');
-    expect(banner).toHaveTextContent(/before you last turned on write access/);
+    expect(banner).toHaveTextContent(
+      /before you last armed write access, so nothing changes until you resume it/,
+    );
+    expect(banner).toHaveTextContent(/Check the playbook, its inputs and the start time are yours/);
+    expect(screen.getByText('Waiting to be resumed')).toBeInTheDocument();
     expect(banner).toHaveTextContent(/If you don’t recognise it, cancel it/);
     const when = within(banner).getByText('20 min ago');
     expect(when.closest('time')).toHaveAttribute('dateTime', STARTED);
@@ -79,6 +83,7 @@ describe('run page: a run started before write access was turned on', () => {
   it('read-only again, it offers to arm first', async () => {
     renderApp({ path: `/runs/${IDS.liveRun}`, handlers: [serve(IDS.liveRun, prearmed())] });
     const banner = await callout('Paused: check this run is yours, then resume it');
+    expect(banner).toHaveTextContent(/Arm write access, then resume it\. It started/);
     expect(within(banner).getByRole('button', { name: 'Arm write access' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Resume run' })).not.toBeInTheDocument();
   });

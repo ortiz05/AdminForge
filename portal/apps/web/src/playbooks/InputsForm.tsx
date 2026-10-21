@@ -223,6 +223,7 @@ export function InputsForm({
   onChange,
   omit = [],
   disabled,
+  kind = 'playbook',
 }: {
   params: Params;
   values: FormValues;
@@ -230,9 +231,10 @@ export function InputsForm({
   onChange: (name: string, value: unknown) => void;
   omit?: readonly string[];
   disabled?: boolean;
+  kind?: 'playbook' | 'runbook';
 }) {
   const fields = visibleInputs(params, omit);
-  if (fields.length === 0) return <p className="text-sm text-fg-3">This playbook takes no inputs.</p>;
+  if (fields.length === 0) return <p className="text-sm text-fg-3">This {kind} takes no inputs.</p>;
   return (
     <fieldset className="flex flex-col gap-4" disabled={disabled}>
       {fields.map(([name, p]) => (

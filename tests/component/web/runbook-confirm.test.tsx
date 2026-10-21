@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { IDS } from '../../support/web/fixtures/automation';
-import { FIXED_NOW } from '../../support/web/fixtures/session';
+import { FIXED_NOW, me } from '../../support/web/fixtures/session';
 import { axeViolations } from '../axe';
 import { renderApp } from './automation/render';
 
@@ -75,7 +75,7 @@ describe('runbook: preview, then confirm, then start', () => {
     const start = screen.getByRole('button', { name: 'Start runbook' });
     expect(start).not.toHaveAttribute('aria-disabled', 'true');
     expect(
-      screen.getByText(/Steps that change the tenant pause until you arm write access/),
+      screen.getByText(/Steps that change the tenant wait until write access is armed/),
     ).toBeInTheDocument();
     await userEvent.click(start);
     const dialog = await screen.findByRole('dialog', { name: 'Offboard a leaver?' });
@@ -92,5 +92,17 @@ describe('runbook: preview, then confirm, then start', () => {
     // Inputs edited after the preview: Start is held until the preview matches them again.
     await userEvent.type(screen.getByLabelText('HR ticket'), '9');
     expect(await screen.findByText('Inputs changed — preview again.')).toBeInTheDocument();
+  });
+
+  it('someone without the Portal Operator role can preview a write runbook but not start it', async () => {
+    const { state } = renderApp({ path: START, session: me({ roles: ['Portal.Reader'], canArm: false }) });
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview (dry run)' }));
+    await within(await screen.findByRole('region', { name: 'Preview' })).findByText('Remove all licences');
+    expect(screen.getByText('Starting this needs the Portal Operator role.')).toBeInTheDocument();
+    const start = screen.getByRole('button', { name: 'Start runbook' });
+    expect(start).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(start);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(state.runPosts).toHaveLength(1); // the preview only
   });
 });

@@ -14,16 +14,18 @@ requires:
     arm: [user_impersonation]
   azureRoles: [Role Based Access Control Administrator]
 # Typed (high risk, and a bulk action): the role's name; in bulk, how many assignments. An assignment whose role can't
-# be read asks for the assignment id instead.
+# be read asks for its GUID (the end of the assignment id) instead.
 confirm:
   type: typed
   value: >-
     ${ steps.role.output.properties.roleName ? steps.role.output.properties.roleName : steps.lookup.output.name }
   message: >-
     ${ 'Remove ' & (steps.role.output.properties.roleName ? steps.role.output.properties.roleName : 'this role') & ' from '
-       & steps.lookup.output.properties.principalType & ' ' & steps.lookup.output.properties.principalId & ' at '
-       & steps.lookup.output.properties.scope & '? The principal loses the access it grants within a few minutes. Type '
-       & (steps.role.output.properties.roleName ? 'the role name' : 'the assignment id') & ' to confirm.' }
+       & ($who := $lookup({ 'User': 'the user', 'Group': 'the group', 'ForeignGroup': 'the group', 'ServicePrincipal': 'the app' }, steps.lookup.output.properties.principalType); $who ? $who : 'the principal') & ' '
+       & steps.lookup.output.properties.principalId & ' at ' & steps.lookup.output.properties.scope
+       & '? They lose the access it grants within a few minutes. Type '
+       & (steps.role.output.properties.roleName ? 'the role name' : "the assignment's GUID (the end of its id)")
+       & ' to confirm.' }
 approval:
   required: true
   approvers: [Playbook.Approver]
@@ -56,7 +58,8 @@ steps:
     that: ${ $lowercase(steps.lookup.output.properties.principalId) != $lowercase(user.oid) }
     message: This assignment is your own. Ask another administrator to remove it.
 
-  # The role's name, for the confirmation and the plan.
+  # The role's name, for the confirmation, the plan and the summary. Read at the assignment's own scope, so it needs no
+  # read access above it; if it still can't be read, the confirmation asks for the assignment's GUID.
   - id: role
     type: arm
     mode: read
@@ -64,13 +67,19 @@ steps:
     onError: continue
     request:
       method: GET
-      path: ${ $join($split(steps.lookup.output.properties.roleDefinitionId, '/')[$ != ''].('/' & $encode($)), '') }
+      path: >-
+        ${ $join($split(steps.lookup.output.properties.scope, '/')[$ != ''].('/' & $encode($)), '')
+           & '/providers/Microsoft.Authorization/roleDefinitions/'
+           & $encode($split(steps.lookup.output.properties.roleDefinitionId, '/')[-1]) }
       apiVersion: "2022-04-01"
 
   - id: delete
     type: arm
     mode: write
-    describe: ${ 'Remove role assignment for principal ' & steps.lookup.output.properties.principalId & ' (' & steps.lookup.output.properties.principalType & ') at ' & steps.lookup.output.properties.scope }
+    describe: >-
+      ${ 'Remove ' & (steps.role.output.properties.roleName ? steps.role.output.properties.roleName : 'the role') & ' from '
+         & ($who := $lookup({ 'User': 'the user', 'Group': 'the group', 'ForeignGroup': 'the group', 'ServicePrincipal': 'the app' }, steps.lookup.output.properties.principalType); $who ? $who : 'the principal') & ' '
+         & steps.lookup.output.properties.principalId & ' at ' & steps.lookup.output.properties.scope }
     request:
       method: DELETE
       path: ${ steps.path.output }
@@ -93,7 +102,10 @@ steps:
           } } }
 
 outputs:
-  summary: ${ 'Role assignment removed for principal ' & steps.lookup.output.properties.principalId & ' at ' & steps.lookup.output.properties.scope & '.' }
+  summary: >-
+    ${ (steps.role.output.properties.roleName ? steps.role.output.properties.roleName : 'The role') & ' was removed from '
+       & ($who := $lookup({ 'User': 'the user', 'Group': 'the group', 'ForeignGroup': 'the group', 'ServicePrincipal': 'the app' }, steps.lookup.output.properties.principalType); $who ? $who : 'the principal') & ' '
+       & steps.lookup.output.properties.principalId & ' at ' & steps.lookup.output.properties.scope & '.' }
 
 tests:
   - name: refuses to remove the engineer's own assignment
@@ -117,7 +129,7 @@ tests:
     expect:
       status: succeeded
       plan: [delete]
-      outputs: { summary: Role assignment removed for principal 30000000-0000-4000-8000-000000000102 at /subscriptions/00000000-0000-4000-8000-0000000000a1. }
+      outputs: { summary: Owner was removed from the user 30000000-0000-4000-8000-000000000102 at /subscriptions/00000000-0000-4000-8000-0000000000a1. }
   - name: still plans the removal when the role can't be read
     inputs: { assignmentId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000203, reason: quarterly access review }
     user: { oid: 00000000-0000-4000-8000-000000000a01, upn: alex.admin@example.com }
@@ -135,3 +147,4 @@ tests:
       status: succeeded
       plan: [delete]
       steps: { role: failed }
+      outputs: { summary: The role was removed from the group 30000000-0000-4000-8000-000000000103 at /subscriptions/00000000-0000-4000-8000-0000000000a1. }

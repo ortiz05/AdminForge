@@ -22,7 +22,7 @@ describe('high and critical playbooks confirm by typing', () => {
     expect(risky.filter((p) => p.confirm?.type !== 'typed' || !p.confirm.value).map((p) => p.id)).toEqual([]);
   });
 
-  it("azure.remove-role-assignment asks for the role's name (the assignment id when the role can't be read)", async () => {
+  it("azure.remove-role-assignment asks for the role's name (the assignment's GUID when the role can't be read)", async () => {
     const { confirm } = byId('azure.remove-role-assignment');
     const lookup = {
       name: '30000000-0000-4000-8000-000000000202',
@@ -37,13 +37,14 @@ describe('high and critical playbooks confirm by typing', () => {
     };
     expect(await renderString(confirm!.value!, readable)).toBe('Owner');
     expect(await renderString(confirm!.message!, readable)).toBe(
-      'Remove Owner from User 30000000-0000-4000-8000-000000000102 at /subscriptions/00000000-0000-4000-8000-0000000000a1? ' +
-        'The principal loses the access it grants within a few minutes. Type the role name to confirm.',
+      'Remove Owner from the user 30000000-0000-4000-8000-000000000102 at ' +
+        '/subscriptions/00000000-0000-4000-8000-0000000000a1? They lose the access it grants within a few minutes. ' +
+        'Type the role name to confirm.',
     );
     const unreadable = { steps: { lookup: { output: lookup }, role: {} } };
     expect(await renderString(confirm!.value!, unreadable)).toBe('30000000-0000-4000-8000-000000000202');
     expect(await renderString(confirm!.message!, unreadable)).toMatch(
-      /^Remove this role from .* Type the assignment id/,
+      /^Remove this role from the user .* Type the assignment's GUID \(the end of its id\) to confirm\.$/,
     );
   });
 

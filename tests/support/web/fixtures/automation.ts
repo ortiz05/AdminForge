@@ -27,6 +27,7 @@ export const IDS = {
   approvalRun: 'e5b4a8d6-5555-4f0c-9a7e-9c1d3e5f7a9b',
   failedRun: 'f6c5b9e7-6666-4a1d-8b8f-0d2e4f6a8b0c',
   runbookRun: '0a7d6c5b-7777-4b2e-9c9a-1e3f5a7b9c1d',
+  runbookPreview: '0b8e7d6c-7878-4c3f-9d0a-2f4a6b8c0d2e',
   tapRun: '1b8e7d6c-8888-4c3f-8d0b-2f4a6b8c0d2e',
   onboardRun: '2c9f8e7d-9999-4d4a-9e1c-3a5b7c9d1e3f',
   onboardChild: '3d0a9f8e-aaaa-4e5b-8f2d-4b6c8d0e2f4a',
@@ -804,6 +805,70 @@ export function runsList() {
     ],
   };
 }
+
+/**
+ * GET /api/runs/:id for the leaver runbook's dry run (preview): its reads ran, its checklists were skipped, its writes
+ * (the child playbooks) are planned, and the API rendered the runbook's confirmation from it.
+ */
+export function runbookPreviewDetail(
+  inputs: Record<string, unknown> = { userId: IDS.jDoe, ticket: 'HR-2231' },
+) {
+  return {
+    run: {
+      ...summary({
+        id: IDS.runbookPreview,
+        kind: 'runbook',
+        definitionKey: 'identity.offboard-leaver',
+        definitionVersion: '2.1.0',
+        title: 'Offboard a leaver',
+        status: 'succeeded',
+        dryRun: true,
+        createdAt: at(-60_000),
+        startedAt: at(-60_000),
+        endedAt: at(-58_000),
+      }),
+      definitionSha256: offboardRunbook.sha256,
+      correlationId: IDS.correlation,
+      inputs,
+      outputs: null,
+      error: null,
+      waiting: null,
+      confirm: {
+        type: 'click',
+        value: null,
+        message: 'Start the leaver process for j.doe@example.com (HR-2231)?',
+      },
+    },
+    steps: [
+      step(1, 'checkTicket', { type: 'manual', status: 'skipped', output: { dryRun: true } }),
+      step(2, 'disable', { type: 'playbook', mode: 'write', status: 'planned', plan: [leaverPlan[0]] }),
+      step(3, 'mailbox', { type: 'manual', status: 'skipped', output: { dryRun: true } }),
+      step(4, 'removeLicences', { mode: 'write', status: 'planned', plan: [leaverPlan[1]] }),
+    ],
+    plan: leaverPlan,
+    tasks: [],
+    children: [],
+  };
+}
+
+const leaverPlan = [
+  {
+    stepId: 'disable',
+    stepPath: 'disable',
+    describe: 'Disable sign-in and revoke sessions',
+    service: 'playbook',
+    method: 'RUN',
+    path: 'identity.disable-user',
+  },
+  {
+    stepId: 'removeLicences',
+    stepPath: 'removeLicences',
+    describe: 'Remove all licences',
+    service: 'graph',
+    method: 'POST',
+    path: `/users/${IDS.jDoe}/assignLicense`,
+  },
+];
 
 /** The runbook run, parked on the mailbox checklist (two sections done). */
 export function runbookRunDetail() {

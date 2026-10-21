@@ -1,34 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import type { Runbook, RunbookSection, Step } from '@adminforge/schemas';
 import {
   ArrowSquareOutIcon,
   Badge,
-  Button,
   Checkbox,
   cn,
   EmptyState,
   escapeMarkdown,
   PageHeader,
   Panel,
-  PlayIcon,
   Skeleton,
   SkeletonText,
-  useToast,
 } from '@adminforge/ui';
-import { activeRunsQueryKey } from './keys';
 import { RouterLink } from '../app/RouterLink';
-import { api, ApiRequestError } from '../lib/api';
+import { ApiRequestError } from '../lib/api';
 import { useMe } from '../lib/session';
 import { Callout, QueryError, useDocumentTitle } from '../ops/ui';
 import { definitionQuery, inputsOf } from '../playbooks/contracts';
-import { humanize, initialValues, prefillFromSearch, validateForm } from '../playbooks/form';
-import { decodeParam } from '../playbooks/url';
-import { InputsForm } from '../playbooks/InputsForm';
-import { RiskBanner } from '../playbooks/Preflight';
-import { playbookSearch } from '../playbooks/url';
-import { latestSteps, StartRunResponse, type RunDetail, type RunStep, type StepStatus } from './contracts';
+import { humanize, prefillFromSearch } from '../playbooks/form';
+import { PlaybookActions, PlaybookSections } from '../playbooks/PlaybookView';
+import { decodeParam, playbookSearch } from '../playbooks/url';
+import { usePlaybookFlow, type SearchPatch } from '../playbooks/usePlaybookFlow';
+import { latestSteps, type RunDetail, type RunStep, type StepStatus } from './contracts';
 import { ManualStepCard } from './HumanTasks';
 import { ErrorCode, RunDataHidden } from './RunDataHidden';
 import { Markdown } from './Markdown';
@@ -298,15 +293,41 @@ function ProgressRail({
 function RunbookBody({ def, version, runId }: { def: Runbook; version: string; runId?: string }) {
   const me = useMe();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const params = inputsOf(def);
   const rawSearch = useRouterState({ select: (s) => s.location.search as Record<string, unknown> });
-  // Links prefill the start form (`?inputs=<base64url JSON>` or `?userId=…`), checked against the inputs schema.
-  const [prefill] = useState(() => prefillFromSearch(params, rawSearch, decodeParam));
-  const [values, setValues] = useState(() => initialValues(params, prefill.values).values);
-  const [showErrors, setShowErrors] = useState(false);
-  const validation = validateForm(params, values);
+  // Links prefill the start form (`?inputs=<base64url JSON>` or `?userId=…`), checked against the inputs schema; a
+  // `preview` the page wrote (an arm round trip) comes back with them.
+  const [launch] = useState(() => {
+    const prefill = prefillFromSearch(params, rawSearch, decodeParam);
+    const preview =
+      typeof rawSearch.preview === 'string' && /^[\w-]{1,64}$/.test(rawSearch.preview)
+        ? rawSearch.preview
+        : null;
+    return {
+      launch: { key: def.id, keyValid: true, inputs: prefill.values, items: null, preview, problems: [] },
+      problems: prefill.problems,
+    };
+  });
+  const setSearch = useCallback(
+    (patch: SearchPatch) =>
+      void navigate({
+        to: '.',
+        search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }),
+        replace: true,
+      }),
+    [navigate],
+  );
+  // The same preview → confirm → run as a playbook ("preview then confirm" for a `confirm` block); a runbook starts
+  // without write access, its write steps waiting for it.
+  const flow = usePlaybookFlow({
+    def,
+    version,
+    launch: launch.launch,
+    setSearch,
+    armToRun: false,
+    startedHint: 'Work through the sections in order; progress is saved as you go.',
+    onStarted: (id) => void navigate({ to: '/runbooks/$key', params: { key: def.id }, search: { run: id } }),
+  });
   const live = useRunLive(runId ?? '', { enabled: Boolean(runId) });
   const detail: RunDetail | undefined = runId ? live.detail : undefined;
   const byId = useMemo(() => new Map(latestSteps(detail?.steps ?? []).map((s) => [s.stepId, s])), [detail]);
@@ -314,25 +335,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
   const doneCount = allSteps.filter((s) =>
     ['succeeded', 'skipped', 'planned'].includes(byId.get(s.id)?.status ?? ''),
   ).length;
-  const scope = { inputs: detail?.run.inputs ?? values, user: { upn: me.user.upn, name: me.user.name } };
-
-  const start = useMutation({
-    mutationFn: (inputs: Record<string, unknown>) =>
-      api('/api/runs', {
-        method: 'POST',
-        body: { playbook: def.id, version, inputs, dryRun: false },
-        schema: StartRunResponse,
-      }),
-    onSuccess: ({ runId: id }) => {
-      toast({
-        tone: 'info',
-        title: `${def.title} started`,
-        description: 'Work through the sections in order; progress is saved as you go.',
-      });
-      void queryClient.invalidateQueries({ queryKey: activeRunsQueryKey });
-      void navigate({ to: '/runbooks/$key', params: { key: def.id }, search: { run: id } });
-    },
-  });
+  const scope = { inputs: detail?.run.inputs ?? flow.values, user: { upn: me.user.upn, name: me.user.name } };
 
   return (
     <>
@@ -366,53 +369,19 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
       <div className="flex items-start gap-10">
         <article className="flex min-w-0 max-w-3xl flex-1 flex-col gap-8" aria-label={def.title}>
           {!runId && (
-            <Panel eyebrow="Before you start" title="Start this runbook">
+            <Panel
+              eyebrow="Before you start"
+              title="Start this runbook"
+              footer={<PlaybookActions flow={flow} label="Start runbook" />}
+            >
               <div className="flex flex-col gap-5">
-                {prefill.problems.length > 0 && (
-                  <Callout tone="warn" title="Check the prefilled values">
-                    <ul className="flex list-disc flex-col gap-0.5 pl-4">
-                      {prefill.problems.map((p) => (
-                        <li key={p}>{p}</li>
-                      ))}
-                    </ul>
-                  </Callout>
-                )}
-                <RiskBanner def={def} />
-                {Object.keys(params).length > 0 && (
-                  <InputsForm
-                    params={params}
-                    values={values}
-                    errors={showErrors ? validation.errors : {}}
-                    onChange={(k, v) => setValues((x) => ({ ...x, [k]: v }))}
-                  />
-                )}
+                <PlaybookSections flow={flow} problems={launch.problems} />
                 {def.mode === 'write' && (
                   <p className="text-sm text-fg-3">
                     Steps that change the tenant pause until you arm write access; checklists and read steps
                     don’t need it.
                   </p>
                 )}
-                {start.isError && (
-                  <Callout tone="crit" role="alert" title="The runbook didn’t start">
-                    {(start.error as Error).message}
-                    {start.error instanceof ApiRequestError && start.error.hint && (
-                      <span className="mt-1 block">{start.error.hint}</span>
-                    )}
-                  </Callout>
-                )}
-                <div className="flex justify-end">
-                  <Button
-                    intent="primary"
-                    pending={start.isPending}
-                    onClick={() => {
-                      setShowErrors(true);
-                      if (validation.ok) start.mutate(validation.values);
-                    }}
-                  >
-                    <PlayIcon size={14} weight="fill" aria-hidden />
-                    Start runbook
-                  </Button>
-                </div>
               </div>
             </Panel>
           )}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import type { Playbook } from '@adminforge/schemas';
+import type { Playbook, Runbook } from '@adminforge/schemas';
 import { useNow, useToast } from '@adminforge/ui';
 import { useShell } from '../app/shell-context';
 import { activeRunsQueryKey } from '../runs/keys';
@@ -20,13 +20,21 @@ export type SearchPatch = Partial<Record<'inputs' | 'preview', string | undefine
 export const PREVIEW_TTL_MS = 15 * 60_000;
 
 export interface PlaybookFlowOptions {
-  def: Playbook;
+  /** A playbook, or a runbook started from its page (same preview → confirm → run). */
+  def: Playbook | Runbook;
   version: string;
   launch: ParsedLaunch;
   /** Writes drawer state back to the URL (replace), so arming and reloads return to the same place. */
   setSearch: (patch: SearchPatch) => void;
   /** Called once a real run has started (the drawer closes; the page navigates). */
   onStarted?: (runId: string) => void;
+  /**
+   * Whether running a write definition needs write access first (default true). Runbooks start without it: their write
+   * steps wait for it (`awaiting_arm`) while the checklists go on.
+   */
+  armToRun?: boolean;
+  /** The toast's line once a run has started (default: where to follow it). */
+  startedHint?: string;
 }
 
 export interface ConfirmState {
@@ -59,7 +67,15 @@ const previewTime = (d: RunDetail | undefined) => {
  * (`confirmation`; bulk: the number of items). Any input edit invalidates the preview; a stale preview is refreshed
  * automatically when Run is pressed, and the confirmation is asked again.
  */
-export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: PlaybookFlowOptions) {
+export function usePlaybookFlow({
+  def,
+  version,
+  launch,
+  setSearch,
+  onStarted,
+  armToRun = true,
+  startedHint = 'Follow it on the run page or in the run dock.',
+}: PlaybookFlowOptions) {
   const me = useMe();
   const { arm } = useShell();
   const { toast } = useToast();
@@ -174,11 +190,7 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
   // ── Run ─────────────────────────────────────────────────────────────────────────────────────────
   const started = (runId: string, label: string) => {
     void queryClient.invalidateQueries({ queryKey: activeRunsQueryKey });
-    toast({
-      tone: 'info',
-      title: `${label} started`,
-      description: 'Follow it on the run page or in the run dock.',
-    });
+    toast({ tone: 'info', title: `${label} started`, description: startedHint });
     if (onStarted) onStarted(runId);
     else void navigate({ to: '/runs/$id', params: { id: runId } });
   };
@@ -259,11 +271,14 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
     const changes = bulk
       ? `${count} object${count === 1 ? '' : 's'}`
       : `${basis?.plan.length ?? 0} change${basis?.plan.length === 1 ? '' : 's'}`;
+    const audited = `It’s audited${def.inputs && 'reason' in def.inputs ? ' with your reason' : ''}.`;
     const description = writes
       ? bulk
         ? `This changes ${changes} in ${me.tenant.name} as ${me.user.upn}, one child run per item.`
-        : `This makes ${changes} in ${me.tenant.name} as ${me.user.upn}. It’s audited${def.inputs && 'reason' in def.inputs ? ' with your reason' : ''}.`
-      : `This runs the playbook’s read steps as ${me.user.upn}.`;
+        : !armToRun && !arm.armed
+          ? `This starts the ${def.kind} as ${me.user.upn}. It makes ${changes} in ${me.tenant.name} as its steps come up, each once you’ve armed write access. ${audited}`
+          : `This makes ${changes} in ${me.tenant.name} as ${me.user.upn}. ${audited}`
+      : `This runs the ${def.kind}’s read steps as ${me.user.upn}.`;
     if (!writes || confirmType === 'none') return void go().catch(() => undefined);
     const message = bulk ? null : confirmationMessage(basis);
     if (confirmType === 'click') return setConfirm({ kind: 'click', text: null, message, description });
@@ -286,7 +301,7 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
   const requestRun = async () => {
     setShowErrors(true);
     if (blocked) return;
-    if (writes && !arm.armed) return;
+    if (writes && armToRun && !arm.armed) return;
     if (needsPreview && previewStale) {
       setRefreshing(true);
       try {
@@ -346,6 +361,7 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
     closeConfirm: () => setConfirm(null),
     failure,
     armed: arm.armed,
+    armToRun,
   };
 }
 

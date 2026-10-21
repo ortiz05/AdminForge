@@ -406,13 +406,20 @@ test('runbook link prefill: plain params named like inputs are validated and fil
   await page.goto(`/runbooks/identity.offboard-leaver?userId=${IDS.jDoe}&ticket=HR-2231`);
   await expect(page.getByText('Jordan Doe')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'HR ticket' })).toHaveValue('HR-2231');
+  // A confirm block: preview, then confirm; the run starts from that preview.
+  await page.getByRole('button', { name: 'Preview (dry run)' }).click();
+  await expect(page.getByRole('region', { name: 'Preview' }).getByText('Remove all licences')).toBeVisible();
   await page.getByRole('button', { name: 'Start runbook' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Offboard a leaver?' });
+  await expect(dialog.getByText('Start the leaver process for j.doe@example.com (HR-2231)?')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Start runbook' }).click();
   await expect(page).toHaveURL(new RegExp(`run=${IDS.runbookRun}`));
-  expect(auto.state.runPosts[0]).toEqual({
+  expect(auto.state.runPosts.at(-1)).toEqual({
     playbook: 'identity.offboard-leaver',
     version: '2.1.0',
     inputs: { userId: IDS.jDoe, ticket: 'HR-2231' },
     dryRun: false,
+    previewRunId: IDS.runbookPreview,
   });
 });
 

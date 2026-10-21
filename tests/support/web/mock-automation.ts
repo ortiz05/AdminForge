@@ -28,6 +28,7 @@ import {
   previewDetail,
   probes,
   readPreviewDetail,
+  runbookPreviewDetail,
   runbookRunDetail,
   runsList,
   scheduleRuns,
@@ -137,6 +138,8 @@ export function automationApi(opts: AutomationOptions = {}) {
         return { body: failedDetail() };
       case IDS.runbookRun:
         return { body: runbookRunDetail() };
+      case IDS.runbookPreview:
+        return { body: runbookPreviewDetail() };
       case IDS.tapRun:
         return { body: tapDetail() };
       case IDS.onboardRun:
@@ -169,8 +172,13 @@ export function automationApi(opts: AutomationOptions = {}) {
       const b = body as { playbook: string; dryRun?: boolean; previewRunId?: string; confirmation?: string };
       if (b.playbook === 'diagnostics.user-sign-in-check')
         return { status: 202, body: { runId: IDS.readRun, status: 'queued' } };
-      if (b.playbook === 'identity.offboard-leaver')
+      // The leaver runbook has a confirm block: like the API, it starts only from a preview.
+      if (b.playbook === 'identity.offboard-leaver') {
+        if (b.dryRun) return { status: 202, body: { runId: IDS.runbookPreview, status: 'queued' } };
+        if (b.previewRunId !== IDS.runbookPreview)
+          return previewRefusal('preview_required', 'Preview this change first.');
         return { status: 202, body: { runId: IDS.runbookRun, status: 'queued' } };
+      }
       if (b.dryRun)
         return {
           status: 202,

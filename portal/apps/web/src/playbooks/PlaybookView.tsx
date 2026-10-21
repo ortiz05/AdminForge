@@ -500,8 +500,9 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
           <Button intent="ghost" onClick={flow.closeConfirm} aria-disabled={pending || undefined}>
             Cancel
           </Button>
+          {/* Ember only in write mode: a runbook started read-only waits for write access before it changes anything. */}
           <Button
-            intent="armed"
+            intent={flow.writes && flow.armed ? 'armed' : 'primary'}
             pending={pending}
             aria-disabled={!matches || undefined}
             onClick={() => void submit()}
@@ -579,18 +580,27 @@ function expiryText(ms: number | null): string | null {
   return `Preview expires in ${min} min.`;
 }
 
-/** Preview, Run (locked until armed for write playbooks), and the confirmation. */
-export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; align?: 'end' | 'between' }) {
+/**
+ * Preview, Run (locked until armed for write playbooks; runbooks start without it), and the confirmation. `label`
+ * names the run button (default: the playbook's title, or Run).
+ */
+export function PlaybookActions({
+  flow,
+  align = 'end',
+  label,
+}: {
+  flow: PlaybookFlow;
+  align?: 'end' | 'between';
+  label?: string;
+}) {
   const me = useMe();
   const { openArmDialog } = useShell();
   const { def } = flow;
   const statusId = useId();
-  const runLabel = flow.bulk
-    ? `${def.title} · ${flow.items?.length ?? 0} items`
-    : flow.writes
-      ? def.title
-      : 'Run';
-  const needsArm = flow.writes && !flow.armed;
+  const runLabel =
+    label ??
+    (flow.bulk ? `${def.title} · ${flow.items?.length ?? 0} items` : flow.writes ? def.title : 'Run');
+  const needsArm = flow.writes && flow.armToRun && !flow.armed;
   const ready = flow.preview.ok && flow.preview.fresh && !flow.preview.rejection;
   const expiry = flow.writes && ready ? expiryText(flow.preview.expiresInMs) : null;
   const status = flow.preview.refreshingForRun
@@ -603,9 +613,9 @@ export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; a
         : 'Running this needs the Portal Operator role.'
       : (flow.run.blocked ?? expiry);
 
-  const RunButton = flow.writes ? WriteAction : Button;
+  const RunButton = flow.writes && flow.armToRun ? WriteAction : Button;
   // Invalid inputs keep the button pressable: pressing it shows what's missing. Other blockers lock it with a reason.
-  const blockedNow = Boolean(flow.run.blocked) && flow.valid && (!flow.writes || flow.armed);
+  const blockedNow = Boolean(flow.run.blocked) && flow.valid && !needsArm;
 
   return (
     <div

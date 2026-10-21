@@ -130,13 +130,19 @@ describe('Runs, run page, approvals, runbooks, run dock', () => {
     await userEvent.type(screen.getByRole('combobox', { name: 'Leaver' }), IDS.jDoe);
     await userEvent.click(await screen.findByRole('option', { name: /Jordan Doe/ }));
     await userEvent.type(screen.getByLabelText('HR ticket'), 'HR-2231');
+    // It has a confirm block: preview, then confirm, then it starts from the preview (runbook-confirm.test.tsx).
+    await userEvent.click(screen.getByRole('button', { name: 'Preview (dry run)' }));
+    await within(await screen.findByRole('region', { name: 'Preview' })).findByText('Remove all licences');
     await userEvent.click(screen.getByRole('button', { name: 'Start runbook' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Offboard a leaver?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Start runbook' }));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ run: IDS.runbookRun }));
-    expect(state.runPosts[0]).toEqual({
+    expect(state.runPosts.at(-1)).toEqual({
       playbook: 'identity.offboard-leaver',
       version: '2.1.0',
       inputs: { userId: IDS.jDoe, ticket: 'HR-2231' },
       dryRun: false,
+      previewRunId: IDS.runbookPreview,
     });
   });
 

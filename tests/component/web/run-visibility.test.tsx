@@ -122,7 +122,7 @@ describe('run page: someone else’s delegated run (S-25)', () => {
         status: 'awaiting_arm',
         waiting: { kind: 'arm', path: 'disable', stepId: 'disable', since: null },
       },
-    } as Detail);
+    } as unknown as Detail);
     renderApp({ path: `/runs/${IDS.liveRun}`, handlers: [serve(IDS.liveRun, parked)] });
     expect(await screen.findByText('Paused until r.patel@example.com arms write access')).toBeInTheDocument();
     expect(screen.queryByText(/Paused: the next step changes your tenant/)).not.toBeInTheDocument();

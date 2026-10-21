@@ -46,6 +46,33 @@ export interface FilterRegionProps {
   advanced?: { spec: AdvancedSpec; filter: WireGroup | undefined; issues: string[] };
   /** Right-aligned extras (row counts, refresh). */
   children?: React.ReactNode;
+  /** List pages: the filter bar stays below the session rail while the list scrolls under it. */
+  sticky?: boolean;
+}
+
+/** Whether a sticky element is stuck (scrolled to its `top`), checked once per frame while the window scrolls. */
+function useStuck(ref: React.RefObject<HTMLElement | null>, enabled: boolean): boolean {
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el) return;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const top = Number.parseFloat(getComputedStyle(el).top) || 0;
+      setStuck(window.scrollY > 0 && el.getBoundingClientRect().top <= top + 0.5);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [ref, enabled]);
+  return enabled && stuck;
 }
 
 /** Which params a list/dashboard page shows in its filter bar: `filters.facets`, `facet: true`, column-bound params, date ranges. */
@@ -367,7 +394,10 @@ export function FilterRegion({
   onChange,
   advanced,
   children,
+  sticky = false,
 }: FilterRegionProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const stuck = useStuck(rootRef, sticky);
   const advParam = advanced ? advancedParamOf(advanced.spec) : undefined;
   const advCount = countConditions(advanced?.filter);
   // The URL carries the structured filter as base64url JSON; the server validates and compiles it.
@@ -418,7 +448,21 @@ export function FilterRegion({
   };
 
   return (
-    <div className={s.root()} role="search" aria-label="Filters">
+    <div
+      ref={rootRef}
+      // Sticky from lg (on a phone the wrapped filters would take the screen): full-bleed over the shell's px-8 so
+      // rows don't show beside it, a hairline once it is stuck; the negative margin keeps the page's rhythm.
+      className={cn(
+        s.root(),
+        sticky &&
+          'lg:sticky lg:top-(--af-layout-rail-h) lg:z-(--af-z-sticky) lg:-mx-8 lg:-my-2 lg:border-b lg:border-transparent lg:bg-canvas lg:px-8 lg:py-2',
+        stuck && 'lg:border-line',
+      )}
+      role="search"
+      aria-label="Filters"
+      data-sticky={sticky || undefined}
+      data-stuck={stuck || undefined}
+    >
       <div className={s.row()}>
         {searchParam && declared[searchParam] && (
           <TextField

@@ -48,7 +48,13 @@ export async function buildMe(ctx: AppContext, session: SessionRecord): Promise<
 export function meRoutes(api: FastifyInstance, ctx: AppContext) {
   api.get('/me', async (request) => buildMe(ctx, requireSession(request)));
 
-  const NAVIGATION_STATE = new Set(['recents', 'navOpenSections', 'navSections', 'newsSeenAt']);
+  const NAVIGATION_STATE = new Set([
+    'recents',
+    'navOpenSections',
+    'navSections',
+    'newsSeenAt',
+    'kpiCollapsed',
+  ]);
   /** Merges the given keys into the stored prefs; unknown keys are rejected (400). */
   api.put('/me/prefs', async (request) => {
     const session = requireSession(request);

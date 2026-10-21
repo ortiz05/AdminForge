@@ -1,6 +1,15 @@
 import { useId, useMemo } from 'react';
 import type { WidgetBlock } from '@adminforge/schemas';
-import { ErrorState, KpiStrip, Panel, ProvenanceFooter, cn, type Provenance } from '@adminforge/ui';
+import {
+  Button,
+  CaretDownIcon,
+  ErrorState,
+  KpiStrip,
+  Panel,
+  ProvenanceFooter,
+  cn,
+  type Provenance,
+} from '@adminforge/ui';
 import {
   getWidget,
   parseWidgetConfig,
@@ -171,18 +180,27 @@ function PartialNote({ children }: { children: string }) {
   );
 }
 
+/** List pages: the KPI strip folds away to one line (remembered per page by the caller). */
+export interface KpiCollapse {
+  collapsed: boolean;
+  onToggle: (collapsed: boolean) => void;
+}
+
 /** Consecutive KPIs share one strip; its foot names each distinct source once. */
 function KpiGroup({
   items,
   runtime,
   data,
   compact,
+  collapse,
 }: {
   items: Array<{ block: Block; index: number }>;
   runtime: WidgetRuntime;
   data: PageData;
   compact: boolean;
+  collapse?: KpiCollapse;
 }) {
+  const stripId = useId();
   const provenances = useMemo(() => {
     const seen = new Map<string, Provenance>();
     for (const { block } of items) {
@@ -200,8 +218,37 @@ function KpiGroup({
   // inspector has two layouts (two columns, `wide` from @4xl), each with its own fillers shown only in that layout.
   const fillers = compact ? fillersFor(items.length, 2) : fillersFor(items.length, wide);
   const wideFillers = compact ? fillersFor(items.length, wide) : 0;
+  if (collapse?.collapsed)
+    return (
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          intent="ghost"
+          aria-expanded={false}
+          className="-ml-2"
+          onClick={() => collapse.onToggle(false)}
+        >
+          <CaretDownIcon size={12} weight="bold" aria-hidden className="text-fg-3" />
+          Show key figures
+        </Button>
+        <span className="text-xs text-fg-3">{items.length} hidden</span>
+      </div>
+    );
+  const toggle = collapse && (
+    <Button
+      size="sm"
+      intent="ghost"
+      aria-expanded
+      aria-controls={stripId}
+      className="-ml-2 self-start"
+      onClick={() => collapse.onToggle(true)}
+    >
+      <CaretDownIcon size={12} weight="bold" aria-hidden className="rotate-180 text-fg-3" />
+      Hide key figures
+    </Button>
+  );
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5" id={stripId}>
       <KpiStrip
         label="Key figures"
         className={cn('grid-cols-2', compact ? INSPECTOR_STRIP_COLS[wide] : STRIP_COLS[wide])}
@@ -232,8 +279,9 @@ function KpiGroup({
           Some figures count only the first items Microsoft returned, so the real numbers may be higher.
         </PartialNote>
       )}
-      {provenances.length > 0 && (
-        <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 px-1">
+      {(provenances.length > 0 || toggle) && (
+        <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 px-1">
+          {toggle && <div className="mr-auto flex">{toggle}</div>}
           {provenances.length <= 2 ? (
             provenances.map((p) => <ProvenanceFooter key={`${p.service}${p.path}`} {...p} />)
           ) : (
@@ -284,6 +332,7 @@ export function WidgetGrid({
   inspector,
   idPrefix,
   className,
+  kpis,
 }: {
   blocks: readonly Block[];
   runtime: WidgetRuntime;
@@ -291,6 +340,8 @@ export function WidgetGrid({
   inspector?: boolean;
   idPrefix?: string;
   className?: string;
+  /** List pages: KPI strips can be folded to one line. */
+  kpis?: KpiCollapse;
 }) {
   const groups = useMemo(() => group(blocks), [blocks]);
   return (
@@ -307,7 +358,13 @@ export function WidgetGrid({
             key={`kpis-${g.items[0]!.index}`}
             className={inspector ? '@4xl:col-span-12' : 'lg:col-span-12'}
           >
-            <KpiGroup items={g.items} runtime={runtime} data={data} compact={Boolean(inspector)} />
+            <KpiGroup
+              items={g.items}
+              runtime={runtime}
+              data={data}
+              compact={Boolean(inspector)}
+              collapse={inspector ? undefined : kpis}
+            />
           </div>
         ) : (
           <WidgetBlockView

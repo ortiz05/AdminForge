@@ -1,6 +1,7 @@
-import type { ComponentType, ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { CaretRightIcon } from '@phosphor-icons/react';
 import { pageHeader } from '../recipes/page-header';
+import { cn } from '../recipes/tv';
 
 export interface Crumb {
   label: string;
@@ -59,7 +60,50 @@ export interface PageHeaderProps {
   actions?: ReactNode;
   breadcrumbs?: Crumb[];
   linkAs?: LinkComponent;
+  /**
+   * `list`: for list pages, whose first rows should be above the fold — the actions on the title row and the
+   * description as one line with "More" when it doesn't fit.
+   */
+  layout?: 'default' | 'list';
   className?: string;
+}
+
+/** The description on one line; "More" shows the rest when it doesn't fit (and "Less" folds it again). */
+function OneLineSummary({ children }: { children: ReactNode }) {
+  const s = pageHeader({ layout: 'list' });
+  const id = useId();
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [open, setOpen] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    const measure = () => setClipped(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open, children]);
+  return (
+    <div className={s.summary()}>
+      <p id={id} ref={ref} className={cn(s.summaryText(), !open && 'truncate')}>
+        {children}
+      </p>
+      {(clipped || open) && (
+        <button
+          type="button"
+          className={s.more()}
+          aria-expanded={open}
+          aria-controls={id}
+          aria-label={open ? 'Show less of the description' : 'Show more of the description'}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? 'Less' : 'More'}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** Every page starts here: where you are, what this is, what you can do. */
@@ -71,9 +115,29 @@ export function PageHeader({
   actions,
   breadcrumbs,
   linkAs,
+  layout = 'default',
   className,
 }: PageHeaderProps) {
-  const s = pageHeader();
+  const s = pageHeader({ layout });
+  if (layout === 'list')
+    return (
+      <header className={s.root({ className })}>
+        {breadcrumbs && breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} linkAs={linkAs} />}
+        {eyebrow && <p className={s.eyebrow()}>{eyebrow}</p>}
+        <div className={s.titleBar()}>
+          <div className={s.titleRow()}>
+            <h1 className={s.title()}>{title}</h1>
+            {meta && <div className={s.meta()}>{meta}</div>}
+          </div>
+          {actions && (
+            <div className={s.actions()} data-header-actions="">
+              {actions}
+            </div>
+          )}
+        </div>
+        {description && <OneLineSummary>{description}</OneLineSummary>}
+      </header>
+    );
   return (
     <header className={s.root({ className })}>
       {breadcrumbs && breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} linkAs={linkAs} />}
@@ -86,7 +150,11 @@ export function PageHeader({
           </div>
           {description && <p className={s.description()}>{description}</p>}
         </div>
-        {actions && <div className={s.actions()}>{actions}</div>}
+        {actions && (
+          <div className={s.actions()} data-header-actions="">
+            {actions}
+          </div>
+        )}
       </div>
     </header>
   );

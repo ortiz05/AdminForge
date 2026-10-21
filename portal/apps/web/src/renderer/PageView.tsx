@@ -17,6 +17,7 @@ import {
 import { loginUrl } from '../lib/api';
 import { browser } from '../lib/browser';
 import { AppLink, useNavigateHref } from '../lib/links';
+import { setKpiCollapsed, usePrefs } from '../lib/prefs';
 import { useMe, useNav } from '../lib/session';
 import { playbookSearch } from '../playbooks/url';
 import {
@@ -28,7 +29,7 @@ import {
   type PageDefinition,
 } from './api';
 import { ActionGroup, usePlaybookWrite } from './ActionGroup';
-import { WidgetGrid, type Block } from './blocks';
+import { WidgetGrid, type Block, type KpiCollapse } from './blocks';
 import { ExportMenu } from './ExportMenu';
 import { FilterRegion, filterParamsOf } from './FilterRegion';
 import {
@@ -430,8 +431,21 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
     b.filter(
       (x) => !(x.widget === 'licenceGate' && gatedKeys.has(String((x as { feature?: unknown }).feature))),
     );
+  // List pages: the KPI strip folds to one line, remembered per page (D-11).
+  const listPage = template === 'list-detail' && !inspector;
+  const kpiCollapsedPages = usePrefs().kpiCollapsed;
+  const kpis: KpiCollapse | undefined = useMemo(
+    () =>
+      listPage
+        ? {
+            collapsed: Boolean(kpiCollapsedPages?.includes(def.id)),
+            onToggle: (collapsed: boolean) => setKpiCollapsed(def.id, collapsed),
+          }
+        : undefined,
+    [listPage, kpiCollapsedPages, def.id],
+  );
   const grid = (b: readonly Block[]) => (
-    <WidgetGrid blocks={notGated(b)} runtime={runtime} data={data} inspector={inspector} />
+    <WidgetGrid blocks={notGated(b)} runtime={runtime} data={data} inspector={inspector} kpis={kpis} />
   );
 
   // Entity: identity header, page actions, optional blocks above tabs, then tabs.
@@ -475,6 +489,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
   const header = !inspector && (
     <PageHeader
       linkAs={AppLink}
+      layout={template === 'list-detail' ? 'list' : 'default'}
       eyebrow={section}
       title={def.title}
       meta={hasDefinitionBadges(def) && <DefinitionBadges def={def} />}
@@ -592,6 +607,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
           issues={filterIssues}
           onChange={setParams}
           advanced={advanced}
+          sticky={listPage}
         />
       )}
       {!blocked && grid(blocks)}

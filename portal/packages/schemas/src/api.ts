@@ -24,6 +24,16 @@ export const UserPrefs = z.object({
   recents: z.array(z.string()).max(50).optional(),
   /** When the person last marked News and changes as read (ISO date-time). */
   newsSeenAt: z.iso.datetime({ offset: true }).optional(),
+  /** Keys of the list pages whose key figures (KPI strip) the person collapsed, most recent first. */
+  kpiCollapsed: z
+    .array(
+      z
+        .string()
+        .max(120)
+        .regex(/^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/),
+    )
+    .max(100)
+    .optional(),
 });
 export type UserPrefs = z.infer<typeof UserPrefs>;
 

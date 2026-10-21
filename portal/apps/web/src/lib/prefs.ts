@@ -12,6 +12,9 @@ export type DensityPref = NonNullable<UserPrefs['density']>;
 const THEMES: readonly ThemePref[] = ['steel', 'daylight', 'contrast', 'system'];
 const DENSITIES: readonly DensityPref[] = ['comfortable', 'compact'];
 
+/** List pages whose KPI strip is collapsed: the most recent first, at most this many (the API allows 100). */
+export const KPI_COLLAPSED_MAX = 50;
+
 function sanitize(input: unknown): UserPrefs {
   const p = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
   return {
@@ -29,6 +32,9 @@ function sanitize(input: unknown): UserPrefs {
       : undefined,
     newsSeenAt:
       typeof p.newsSeenAt === 'string' && !Number.isNaN(Date.parse(p.newsSeenAt)) ? p.newsSeenAt : undefined,
+    kpiCollapsed: Array.isArray(p.kpiCollapsed)
+      ? p.kpiCollapsed.filter((x): x is string => typeof x === 'string').slice(0, KPI_COLLAPSED_MAX)
+      : undefined,
   };
 }
 
@@ -121,6 +127,12 @@ export function hydratePrefs(server: UserPrefs | undefined): void {
     return;
   }
   updatePrefs(server, { save: false });
+}
+
+/** Collapses or expands a list page's key figures (KPI strip), remembered per page. */
+export function setKpiCollapsed(page: string, collapsed: boolean): void {
+  const rest = (current.kpiCollapsed ?? []).filter((k) => k !== page);
+  updatePrefs({ kpiCollapsed: (collapsed ? [page, ...rest] : rest).slice(0, KPI_COLLAPSED_MAX) });
 }
 
 /** Remembers a visited page for the command palette. */

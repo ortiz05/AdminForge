@@ -4,12 +4,13 @@ id: probes.m365-workload-incidents
 # Retired 2026-10-17: one incident check per workload (exchange-, sharepoint-, onedrive-, teams-, entra-,
 # intune-service-incidents) and probes.m365-suite-incidents say which service and which incident.
 status: retired
-version: 1.2.0
+version: 1.2.1
 title: Microsoft 365 core workloads without an open incident
 summary: >-
-  Critical while Microsoft has an open service incident (not an advisory) for Exchange Online, Microsoft Teams,
-  SharePoint Online, OneDrive for Business or the Microsoft 365 suite, so the service desk hears it from monitoring
-  before the first call. Open the Service health page to see which incident and its latest update.
+  Retired — replaced by an incident check per workload (probes.exchange-service-incidents and the same for
+  SharePoint, OneDrive, Teams, Entra and Intune) and probes.m365-suite-incidents, which say which service and which
+  incident. It was critical while Microsoft had an open service incident for Exchange Online, Microsoft Teams,
+  SharePoint Online, OneDrive for Business or the Microsoft 365 suite.
 owner: m365-team
 tags: [synthetic, m365, service-health, sweep-15m]
 group: m365

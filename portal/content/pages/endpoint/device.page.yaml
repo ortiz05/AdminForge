@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: endpoint.device
-version: 1.0.0
+version: 1.1.0
 title: Managed device
 summary: >-
   One Intune-managed device — hardware and enrolment, compliance and configuration policy states, detected apps and
@@ -136,7 +136,7 @@ tabs:
         data: device
         fields:
           - { field: userPrincipalName, label: Primary user }
-          - { field: managedDeviceOwnerType, label: Ownership, kind: status, map: { company: [info, Corporate], personal: [neutral, Personal] } }
+          - { field: managedDeviceOwnerType, label: Ownership, kind: enum, map: { company: Corporate, personal: Personal } }
           - { field: managementAgent, label: Managed by }
           - { field: managementState, label: Management state }
           - { field: deviceEnrollmentType, label: Enrolment type }

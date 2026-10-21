@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.group
-version: 1.4.0
+version: 1.5.0
 title: Group
 summary: One group — properties, members (add/remove in bulk), owners, nesting, app assignments and group-based licensing.
 owner: identity-team
@@ -223,7 +223,7 @@ tabs:
         span: 6
         data: group
         fields:
-          - { field: membership, label: Membership, kind: status, map: { Assigned: [neutral, Assigned], Dynamic: [info, Dynamic] } }
+          - { field: membership, label: Membership, kind: enum, map: { Assigned: Assigned, Dynamic: Dynamic } }
           - { field: membershipRule, label: Dynamic rule, kind: code }
           - field: membershipRuleProcessingState
             label: Rule processing

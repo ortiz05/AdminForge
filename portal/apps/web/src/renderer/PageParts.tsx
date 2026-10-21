@@ -147,7 +147,15 @@ export function EntityHeader({
   const meta = (
     <>
       <DefinitionBadges def={def} />
-      {tone && <StatusPill status={tone}>{asText(statusLabel.value) || TONE_LABEL[tone]}</StatusPill>}
+      {/* `neutral` names a category (a group's kind), not a state that is fine or not: a quiet outline badge like the
+          header's other facts, not a pill with a "no data" dot (design review M4). */}
+      {tone === 'neutral'
+        ? asText(statusLabel.value) && (
+            <Badge tone="outline" data-header-category="">
+              {asText(statusLabel.value)}
+            </Badge>
+          )
+        : tone && <StatusPill status={tone}>{asText(statusLabel.value) || TONE_LABEL[tone]}</StatusPill>}
       {idEntries.map(([label, v]) => (
         <IdChip key={label} value={asText(v)} label={label} />
       ))}

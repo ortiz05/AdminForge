@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: avd.session-host
-version: 1.0.0
+version: 1.1.0
 title: Session host
 summary: >-
   One Azure Virtual Desktop session host, read live from Azure — status, drain mode, health checks with their failure
@@ -164,7 +164,7 @@ tabs:
             map: { Succeeded: [ok, Succeeded], Failed: [crit, Failed], Started: [info, In progress], Pending: [info, Pending], Initial: [neutral, Not started] }
           - { field: lastUpdateTime, label: Last update, kind: relativeTime }
           - { field: updateErrorMessage, label: Update error }
-          - { field: hosting, label: Runs on, kind: status, map: { azure: [neutral, Azure VM], arc: [info, Azure Arc (Azure Local)] } }
+          - { field: hosting, label: Runs on, kind: enum, map: { azure: Azure VM, arc: Azure Arc (Azure Local) } }
   - id: health
     label: Health checks
     layout:

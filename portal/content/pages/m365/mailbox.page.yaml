@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mailbox
-version: 1.2.0
+version: 1.3.0
 title: Mailbox
 summary: >-
   One Exchange Online mailbox: forwarding, address-list visibility, holds and automatic replies, and who can open it
@@ -151,7 +151,7 @@ tabs:
           - { field: primarySmtpAddress, label: Email address, kind: id }
           - { field: userPrincipalName, label: Sign-in name, kind: id }
           - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean }
-          - { field: litigationHoldEnabled, label: Litigation hold, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] } }
+          - { field: litigationHoldEnabled, label: Litigation hold, kind: enum, map: { "true": "On", "false": "Off" } }
           - { field: archiveStatus, label: Archive, kind: status, map: { Active: [ok, Active], None: [neutral, None] } }
           - { field: isDirSynced, label: Synced from on-premises, kind: boolean }
       - widget: keyValue
@@ -170,8 +170,8 @@ tabs:
         title: Automatic replies
         data: mailbox.autoReply
         fields:
-          - { field: state, label: State, kind: status, map: { Enabled: [info, "On"], Scheduled: [info, Scheduled], Disabled: [neutral, "Off"] } }
-          - { field: externalAudience, label: Outside senders, kind: status, map: { All: [neutral, Everyone], Known: [neutral, Contacts only], None: [neutral, Nobody] } }
+          - { field: state, label: State, kind: enum, map: { Enabled: "On", Scheduled: Scheduled, Disabled: "Off" } }
+          - { field: externalAudience, label: Outside senders, kind: enum, map: { All: Everyone, Known: Contacts only, None: Nobody } }
           - { field: startTime, label: From, kind: datetime }
           - { field: endTime, label: Until, kind: datetime }
   - id: access

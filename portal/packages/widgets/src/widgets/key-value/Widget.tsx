@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
+import { columnMapEntry, columnMapLabel } from '@adminforge/schemas';
 import {
   Badge,
   IdChip,
@@ -86,6 +87,12 @@ function FieldValue({
       ) : (
         <Dash />
       );
+    }
+    case 'enum': {
+      // A category in words, as a table's enum column shows it (same lookup; a missing value can map as "null").
+      const hit = field.map ? columnMapEntry(field.map, value) : undefined;
+      if (hit !== undefined) return <span className="break-words">{columnMapLabel(hit)}</span>;
+      return blank ? <Dash /> : <span className="break-words">{String(value)}</span>;
     }
     case 'boolean':
       return blank ? <Dash /> : <span>{value ? 'Yes' : 'No'}</span>;

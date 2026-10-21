@@ -175,8 +175,17 @@ and are whole on hover.
         kind: status,
         map: { 'true': [ok, Allowed], 'false': [crit, Blocked] },
       }
+    - { field: userType, label: Type, kind: enum, map: { Member: Member, Guest: Guest } }
     - { field: createdDateTime, label: Created, kind: datetime }
 ```
+
+Field kinds are the table's column kinds (`id` for a guid chip; no `identity`): `status` for a value that is fine or
+not (at least one value maps to `ok`, `warn` or `crit`), `enum` for a category shown as words — the same `map` shape
+and lookup as an `enum` column, so a list and its entity page say the same thing. `validate` refuses a tone in an
+`enum` map and a bare label in a `status` map.
+
+An entity page's `header.status` works the same way: `ok`, `warn`, `crit` and `info` show a status pill with
+`statusLabel`; `neutral` names a category (a group's kind) and shows `statusLabel` as a quiet outline badge.
 
 ## statusGrid
 

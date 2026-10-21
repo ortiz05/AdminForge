@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: avd.host-pool
-version: 1.1.0
+version: 1.2.0
 title: Host pool
 summary: >-
   One Azure Virtual Desktop host pool — configuration, capacity (hosts taking new sessions, slots in use), its session
@@ -164,7 +164,7 @@ tabs:
           - { field: personalAssignment, label: Personal desktop assignment }
           - { field: preferredAppGroupType, label: Preferred app group type }
           - { field: startVMOnConnect, label: Start VM on Connect, kind: status, map: { "true": [ok, "On"], "false": [neutral, "Off"] } }
-          - { field: validationEnvironment, label: Validation pool, kind: status, map: { "true": [info, "Yes — gets service updates first"], "false": [neutral, "No"] } }
+          - { field: validationEnvironment, label: Validation pool, kind: enum, map: { "true": "Yes — gets service updates first", "false": "No" } }
           - { field: agentUpdate, label: Agent updates }
           - { field: publicNetworkAccess, label: Public network access }
       - widget: keyValue

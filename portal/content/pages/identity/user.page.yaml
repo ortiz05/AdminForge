@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.user
-version: 1.3.3
+version: 1.4.0
 title: User
 summary: One user account — profile, groups, roles, devices, authentication methods, sign-ins, licences and audit history.
 owner: identity-team
@@ -310,7 +310,7 @@ tabs:
         fields:
           - { field: userPrincipalName, label: Sign-in name }
           - { field: mail, label: Email }
-          - { field: userType, label: Type, kind: status, map: { Member: [neutral, Member], Guest: [info, Guest] } }
+          - { field: userType, label: Type, kind: enum, map: { Member: Member, Guest: Guest } }
           - { field: creationType, label: Created via }
           - { field: externalUserState, label: Invitation, kind: status, map: { Accepted: [ok, Accepted], PendingAcceptance: [warn, Pending acceptance] } }
           - { field: createdDateTime, label: Created, kind: datetime }

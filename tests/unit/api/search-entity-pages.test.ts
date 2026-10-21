@@ -3,7 +3,7 @@ import type { SessionRecord } from '@adminforge/api/src/auth/session-store';
 import type { DefinitionRecord, DefinitionRegistry } from '@adminforge/api/src/definitions/types';
 import type { OutboundExecutor } from '@adminforge/api/src/execution/types';
 import { entityPages, search } from '@adminforge/api/src/search/search';
-import { Page, loadContentDir, type Definition } from '@adminforge/schemas';
+import { Page, loadContentDir, validateReferences, type Definition } from '@adminforge/schemas';
 import { repoRoot } from '../../lib/repo';
 
 // The command palette opens a user, group, device, app or Azure resource on the page that declares `entity:` for
@@ -65,6 +65,7 @@ describe('palette entity pages come from content', () => {
         page('azure.thing', { entity: 'resource' }),
         page('identity.group'), // the old hard-coded key, but it declares nothing
         page('draft.device', { entity: 'device', status: 'draft' }),
+        page('retired.app', { entity: 'app', status: 'retired' }),
         { ...page('reports.user', { entity: 'user' }), kind: 'report' } as DefinitionRecord,
       ]),
     );
@@ -118,7 +119,33 @@ describe('palette entity pages come from content', () => {
     ]);
     expect(Page.safeParse({ ...base, params: { id: { type: 'guid', required: true } } }).success).toBe(true);
     expect(Page.safeParse({ ...base, entity: 'printer' }).success).toBe(false);
+    // The palette doesn't search subscriptions, so no page can claim them.
+    expect(Page.safeParse({ ...base, entity: 'subscription' }).success).toBe(false);
   });
+
+  it('validate refuses a second page declaring a kind, so publishing never changes where results open', () => {
+    const entry = (key: string, extra: Record<string, unknown> = {}) => ({
+      file: `pages/${key}.page.yaml`,
+      def: page(key, extra).def,
+    });
+    const errors = validateReferences([
+      entry('identity.person', { entity: 'user' }),
+      entry('identity.a-lookup', { entity: 'user' }),
+      entry('old.person', { entity: 'user', status: 'retired' }),
+    ]);
+    expect(errors.filter((e) => e.path === 'entity')).toEqual([
+      expect.objectContaining({
+        file: 'pages/identity.a-lookup.page.yaml',
+        message: expect.stringMatching(/"identity.person" .* already declares entity: user/),
+      }),
+    ]);
+  });
+
+  /**
+   * identity.user is another review package's file in this wave: it declares `entity: user` when that merges (until
+   * then the palette links users to Entra). Remove `user` here once it does — the test then holds it.
+   */
+  const PENDING = new Set(['user']);
 
   it('portal/content declares one page per kind, each taking the object id', async () => {
     const loaded = await loadContentDir(path.join(repoRoot, 'portal/content'));
@@ -127,11 +154,15 @@ describe('palette entity pages come from content', () => {
       .map((d) => ({ kind: (d.def as { entity: string }).entity, key: d.def.id }));
     const kinds = declared.map((d) => d.kind);
     expect(new Set(kinds).size).toBe(kinds.length);
-    expect(Object.fromEntries(declared.map((d) => [d.kind, d.key]))).toMatchObject({
+    const expected: Record<string, string> = {
+      user: 'identity.user',
       group: 'identity.group',
       device: 'identity.device',
       app: 'identity.app-registration',
       resource: 'azure.resource',
-    });
+    };
+    const byKind = Object.fromEntries(declared.map((d) => [d.kind, d.key]));
+    for (const [kind, key] of Object.entries(expected))
+      expect([kind, byKind[kind]]).toEqual([kind, PENDING.has(kind) ? undefined : key]);
   });
 });

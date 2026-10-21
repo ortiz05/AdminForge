@@ -1,6 +1,6 @@
 import { RESOURCE_GRAPH_API_VERSION, RESOURCE_GRAPH_PATH } from '@adminforge/connectors';
 import { odataSearchEscape } from '@adminforge/expressions';
-import type { Definition, EntityKind, Page } from '@adminforge/schemas';
+import type { Definition, EntityPageKind, Page } from '@adminforge/schemas';
 import { hasRole } from '../auth/guards';
 import type { SessionRecord } from '../auth/session-store';
 import type { DefinitionRecord, DefinitionRegistry } from '../definitions/types';
@@ -45,10 +45,8 @@ const DEF_KINDS = new Set<SearchType>(['page', 'dashboard', 'report', 'playbook'
 const DIRECTORY = new Set<SearchType>(['user', 'group', 'device', 'app']);
 const PER_SOURCE = 6;
 
-/** The kinds of object the palette finds (directory and Azure); each opens on its entity page or in Microsoft's portal. */
-type EntityType = 'user' | 'group' | 'device' | 'app' | 'resource';
-
-const PORTAL_LINKS: Record<EntityType, (id: string) => string> = {
+/** Each kind of object the palette finds opens on its entity page, or else in Microsoft's portal. */
+const PORTAL_LINKS: Record<EntityPageKind, (id: string) => string> = {
   user: (id: string) =>
     `https://entra.microsoft.com/#view/Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/overview/userId/${encodeURIComponent(id)}`,
   group: (id: string) =>
@@ -63,15 +61,18 @@ const PORTAL_LINKS: Record<EntityType, (id: string) => string> = {
 
 /**
  * The page each kind of object opens on, from the pages that declare it (`entity: user`, design review D-08) — the
- * latest published version of each, drafts left out. If two pages declare one kind the first key wins, so results
+ * latest published version of each, drafts and retired pages left out. If two pages declare one kind the first key wins, so results
  * never flip between requests (content tests refuse it). A kind nobody declares deep-links to Microsoft's portal.
  */
 export async function entityPages(
   definitions: Pick<DefinitionRegistry, 'list'>,
-): Promise<Partial<Record<EntityKind, string>>> {
-  const out: Partial<Record<EntityKind, string>> = {};
+): Promise<Partial<Record<EntityPageKind, string>>> {
+  const out: Partial<Record<EntityPageKind, string>> = {};
   const declared = (await definitions.list('page'))
-    .filter((r) => r.kind === 'page' && r.def.status !== 'draft' && (r.def as Page).entity)
+    .filter(
+      (r) =>
+        r.kind === 'page' && r.def.status !== 'draft' && r.def.status !== 'retired' && (r.def as Page).entity,
+    )
     .sort((a, b) => a.key.localeCompare(b.key));
   for (const r of declared) out[(r.def as Page).entity!] ??= r.key;
   return out;
@@ -189,9 +190,9 @@ export async function search(
     azure: 'skipped',
   };
   // Read once per search, and only when a directory or Azure result needs it.
-  let declared: Promise<Partial<Record<EntityKind, string>>> | undefined;
+  let declared: Promise<Partial<Record<EntityPageKind, string>>> | undefined;
   const entityHref = async (
-    kind: EntityType,
+    kind: EntityPageKind,
     id: string,
     linkId = id,
   ): Promise<Pick<SearchResult, 'href' | 'external'>> => {

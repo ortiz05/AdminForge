@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Identifier, NavPlacement, Template, envelopeShape } from './common';
 import { Datasources } from './datasource';
-import { EntityKind, Params } from './params';
+import { Params } from './params';
 import { PageAction, WidgetBlock } from './widgets';
 
 /**
@@ -294,7 +294,12 @@ function checkPage(
  * review D-08; one page per kind — `tests/content` holds it). Without a declaration the palette deep-links to the
  * Microsoft admin centre.
  */
-function checkEntity(def: { entity?: EntityKind; params?: Params }, ctx: z.RefinementCtx) {
+/** The kinds of object the command palette finds, each of which a page can declare it shows. */
+export const ENTITY_PAGE_KINDS = ['user', 'group', 'device', 'app', 'resource'] as const;
+export const EntityPageKind = z.enum(ENTITY_PAGE_KINDS);
+export type EntityPageKind = z.infer<typeof EntityPageKind>;
+
+function checkEntity(def: { entity?: EntityPageKind; params?: Params }, ctx: z.RefinementCtx) {
   if (def.entity && !def.params?.id)
     ctx.addIssue({
       code: 'custom',
@@ -309,7 +314,7 @@ export const Page = z
     ...pageShape,
     template: z.enum(['list-detail', 'entity', 'dashboard', 'settings']),
     /** The kind of object this page shows; the command palette opens that kind's search results here (`?id=`). */
-    entity: EntityKind.optional(),
+    entity: EntityPageKind.optional(),
   })
   .superRefine(checkPage)
   .superRefine(checkEntity);

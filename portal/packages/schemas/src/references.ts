@@ -48,6 +48,21 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
       });
     else byId.set(e.def.id, e);
   }
+  // One page per kind of object: the command palette opens that kind there (page.ts › checkEntity, D-08).
+  const entityPages = new Map<string, DefinitionEntry>();
+  for (const e of entries) {
+    if (e.def.kind !== 'page' || !e.def.entity || e.def.status === 'retired' || e.def.status === 'draft')
+      continue;
+    const prev = entityPages.get(e.def.entity);
+    if (prev)
+      errors.push({
+        file: e.file,
+        path: 'entity',
+        line: e.locate?.(['entity']),
+        message: `Only one page can show each kind of object: "${prev.def.id}" (${prev.file}) already declares entity: ${e.def.entity}.`,
+      });
+    else entityPages.set(e.def.entity, e);
+  }
   const navSections = new Set(
     entries.flatMap((e) => (e.def.kind === 'navigation' ? e.def.sections.map((s) => s.key) : [])),
   );

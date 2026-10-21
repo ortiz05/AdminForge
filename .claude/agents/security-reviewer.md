@@ -34,9 +34,10 @@ Check, citing file:line:
 - **Data collected with application permissions** (probe and report rows, scheduled results) reaches only Operators
   unless the definition widens it deliberately: details stay behind `detailsHidden`, and nothing copies item names
   from those rows into a message, title or other field Readers see.
-- **Separation of duties**: nobody can approve their own request or a change that benefits them; AdminForge's own
-  apps, the groups that grant portal roles and protected accounts stay out of reach of writes; parked or resumed runs
-  are re-authorized against the current version; role loss reaches the worker, not only the browser.
+- **Separation of duties**: nobody can approve their own request or a change that benefits them; AdminForge's own apps,
+  the groups that grant portal roles and protected accounts stay out of reach of writes; parked or resumed runs are
+  re-authorized against the current version and read and check again before their next write; role loss reaches the
+  worker, not only the browser.
 - **Content pipeline**: anything that loosens a playbook (risk, confirmation, approval, scopes, connections, hosts) is
   called out; `publish` must not bypass the checks `validate` runs.
 - **Tenant data**: run `pnpm guard`.

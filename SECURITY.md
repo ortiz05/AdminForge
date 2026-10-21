@@ -179,13 +179,29 @@ the reason.
   `idempotent: false` (then the run ends `needs_review`), so write steps whose second send would hurt declare
   `idempotent: false` (`tests/content/non-idempotent-writes.test.ts`). A worker whose run lock lapsed stops at its
   next checkpoint once its lease renewal notices.
+- **A resumed run checks again before it writes** (`engine.ts` › `recheck`). After any pause — an approval, input,
+  write access, a sign-in, a `wait`, a restart — the reads, transforms and asserts the run ran since the last write
+  sent in their scope run again right before its next write, so a check such as "the session still belongs to this
+  person" holds when the write goes out, not only when the run paused. They run as who ran them (`user.*` keeps its
+  meaning); their reads go out with the access of the person the write runs as — after an approval the approver, who
+  then needs read access to them — except a Graph read of `/me`, which keeps its first answer. A check that fails now
+  stops the write (its `onError` applies; by default the run ends `failed` with the assert's message), and a write
+  that may already have gone out before the run stopped ends `needs_review` instead. The write's own `when` and the
+  `excludes` of the approvals decided on the way are worked out again (`approval_excludes_approver` when they now name
+  an approver). What the run decided stays decided — approvals and input, the `when` of reads and checks, a branch's
+  `if` and a forEach's `items` — so guards must be `assert` steps. Writes already sent, and what was read before them,
+  are never repeated; steps with show-once secrets, `idempotent: false` reads and child playbooks (which check for
+  themselves) aren't run again.
 - Run approvals need a second person with `Playbook.Approver`; self-approval is refused, and an approver must be armed
   when the steps after the approval write as them — and hold the playbook's portal roles. **Nobody can approve a change
   that grants them access**: approval gates name the beneficiaries (`approval.excludes` — e.g. the principal getting a
   directory or Azure role, the people being added to a role-assignable group, a new app owner), and those people get
-  `own_access`. Approval requests expire after 72 hours unless the playbook says otherwise. Child playbooks need their
-  own roles from whoever runs them. Only the person a manual step waits for can confirm it or supply its values (others
-  may only decline); the values are audited with `redact` fields masked.
+  `own_access`. Approval requests expire after 72 hours unless the playbook says otherwise. An approval can't be
+  stepped over: a rejected, expired or unworkable one always stops the run, and `validate` refuses `onError: continue`
+  on it. Child playbooks need their own roles from whoever runs them. Only the person a manual step waits for can
+  confirm it or supply its values (others may only decline); confirming one with write steps after it needs write
+  access, as approving does (`not_armed`), because those steps run as whoever confirms. The values are audited with
+  `redact` fields masked.
 - **Protected objects:** AdminForge can't be used to change its own access. The executor refuses every write — REST
   or PowerShell — that names by object id, in its path, query or body, AdminForge's own app registrations and service
   principals (the schedules' app identities, retired ones included), any app in `AF_PROTECTED_APP_IDS` (such as the
@@ -540,12 +556,13 @@ README.md` → Backups). Every `db backup` is itself in the audit log: a `databa
 
 | Threat                                                            | Mitigation                                                                                                                                                                                                                                                                                                                                    |
 | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stolen session cookie                                             | `__Host-`/HttpOnly/Secure cookie; idle and absolute expiry; writes need step-up as the same user; roles re-checked; a new session id and CSRF token at every arm, so a cookie copied while read-only can't arm or start writes and runs it started ask before writing — but it can confirm and fill in the person's manual steps (Known gaps) |
+| Stolen session cookie                                             | `__Host-`/HttpOnly/Secure cookie; idle and absolute expiry; writes need step-up as the same user; roles re-checked; a new session id and CSRF token at every arm, so a cookie copied while read-only can't arm, start writes or confirm a manual step that writes follow, and the runs it started wait for a resume ahead of their next write |
 | Phishing via the portal's own URL                                 | Same-origin `returnTo` only; browser-bound sign-in round trips                                                                                                                                                                                                                                                                                |
 | Silent SSO used to arm without re-authentication                  | `prompt=login`, `max_age=0` and `auth_time` freshness always checked server-side (plus the auth context when set)                                                                                                                                                                                                                             |
 | Removed or disabled admin keeps acting                            | Roles re-read every 5 minutes, by the API and the run worker; session ends on `invalid_grant`, guest status, or 15 minutes without confirmation                                                                                                                                                                                               |
 | An approver approves their own elevation                          | Approval gates exclude the people a change grants access to (`own_access`); self-approval refused                                                                                                                                                                                                                                             |
 | A parked run continues on an older, weaker version                | Resume and the worker re-check roles and (before anything was changed) the current version; parked runs expire after 24 hours                                                                                                                                                                                                                 |
+| A write acts on what changed while its run was paused             | A resumed run reads and runs its asserts again right before its next write; a write that may already have gone out ends `needs_review`                                                                                                                                                                                                        |
 | Abuse in progress                                                 | Emergency stop: pause all changes or all automation from the portal, audited                                                                                                                                                                                                                                                                  |
 | Changed playbook runs unattended under an old approval            | Approval fingerprint covers the playbook and its children; outdated approvals refuse and switch the schedule off                                                                                                                                                                                                                              |
 | Content grants the automation identity tenant-wide write          | Provisioning ceiling: write application permissions need an explicit opt-in                                                                                                                                                                                                                                                                   |
@@ -641,10 +658,6 @@ Tracked in `docs/backlog.md`:
   purged with orphaned partitions after a day, as at sign-out); a request authenticated just before can finish with
   the old record; a sign-out sent with the old cookie while the arm completes leaves the new session to idle expiry;
   a post-run token refresh is skipped if the session rotated mid-run (docs/backlog.md).
-- **Confirming a manual step is checked against the person, not the session,** and needs no write access, unlike
-  approving. Anyone holding a copy of another of the person's sessions — read-only is enough — can confirm or fill in
-  a step waiting for them. On a run the person started from an armed session, the writes after it then run at once
-  with those values, without a resume, and the run log names the person (docs/backlog.md).
 - **The database file is the boundary (ADR-016).** With Postgres the services' role could not drop the audit log's
   append-only triggers; with SQLite, anything that can write the file — the API process itself, or someone with the
   volume — can rewrite rows and drop triggers. Each verification writes the verified tail (`seq`, `hash`) to the API's

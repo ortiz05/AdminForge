@@ -61,8 +61,11 @@ curl -s https://adminforge.example.com/readyz
 A stop lets every run finish the step it is on and stop at its next checkpoint: steps get 10 s, then a step still in
 flight is interrupted. The runs stay `running` and their jobs are queued again; after the restart they continue where
 they stopped — an interrupted step is retried, or, if it is `idempotent: false`, the run ends `needs_review` (check the
-target before running it again). Running schedule jobs get 30 s (then they are recorded as interrupted). The API gives
-the whole stop `SHUTDOWN_TIMEOUT_SECONDS` (50 s), then logs what is still open and exits 1; the pod has 60 s in all.
+target before running it again). As after any pause, a resumed run reads and checks again what it read and checked
+before its next write: if a check no longer holds, the write isn't sent and the run ends `failed` — or `needs_review`
+when that write was in flight at the stop and may have gone out. Running schedule jobs get 30 s (then they are recorded
+as interrupted). The API gives the whole stop `SHUTDOWN_TIMEOUT_SECONDS` (50 s), then logs what is still open and exits
+1; the pod has 60 s in all.
 
 `/healthz` answers when the process is up (the startup and liveness probes; three failures in a row restart the
 container). `/readyz` also reads the database and the heartbeats of the run worker and the scheduler: `ok`; `degraded`

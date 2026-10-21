@@ -81,13 +81,13 @@ and `adminforge validate` lists them; remove it once it works live. The full pro
   block statement; a write's `/users/` segment (path, `$id`, `@odata.id` / `…@odata.bind`) needs `$guid()`; request
   headers AdminForge owns (`Authorization`, `Cookie`, `Host`, the client-request-id headers) are refused; email
   recipients are `${ env.AF_…RECIPIENTS }`-style keys only; a playbook that starts a confirmed or high-risk child needs
-  its own `confirm`; `$eval` is unavailable; a news feed's URL must be on the feed-host allow-list and its links on
-  Microsoft domains; schedule ids starting with `portal.` are reserved for report schedules created in the portal;
-  inside a datasource's `when`, request or runner parameters another datasource is `ds.<name>` (a bare name is
-  undefined there); Resource Graph queries must stay within the join limits Azure enforces (`CLAUDE.md`, non-negotiable
-  14); a probe's `link` is an in-app path whose `/p/<key>` exists, or an https URL (no `//host`); `pattern:`s that can
-  backtrack without bound are refused. It also lists the definitions flagged `preview: true`. The details:
-  `docs/content-recipes.md` › Quoting user data.
+  its own `confirm`; an approval can't have `onError: continue`; `$eval` is unavailable; a news feed's URL must be on
+  the feed-host allow-list and its links on Microsoft domains; schedule ids starting with `portal.` are reserved for
+  report schedules created in the portal; inside a datasource's `when`, request or runner parameters another datasource
+  is `ds.<name>` (a bare name is undefined there); Resource Graph queries must stay within the join limits Azure
+  enforces (`CLAUDE.md`, non-negotiable 14); a probe's `link` is an in-app path whose `/p/<key>` exists, or an https URL
+  (no `//host`); `pattern:`s that can backtrack without bound are refused. It also lists the definitions flagged
+  `preview: true`. The details: `docs/content-recipes.md` › Quoting user data.
 - **In the content tests:** every active probe has a `remedy` (`tests/content/probe-remedies.test.ts`); nothing
   active points at retired content (`tests/content/retired-content.test.ts`); probe groups name a navigation section;
   every active page, dashboard and report renders from the fixtures and every KQL probe has its `af:` fixture variant
@@ -104,7 +104,10 @@ and `adminforge validate` lists them; remove it once it works live. The full pro
   privilege it didn't grant.
 - **At run time:** a restart (every deploy) lets each run finish the step it is on; a step still in flight 10 s after
   a stop is retried after the restart unless it says `idempotent: false` (then the run ends `needs_review`) — declare
-  it on every write whose repeat would hurt.
+  it on every write whose repeat would hurt: a write in flight at a stop may have taken effect. A run that continues
+  after any pause (an approval, input, write access, a sign-in, a `wait`, a restart) runs its asserts and the reads
+  they use again before its next write, while a branch `if` or a forEach's `items` stays as decided — put guards in
+  `assert` steps.
 - **Not caught by `validate` yet:** widget, header and action expressions (`when`, `href`, `text`) run in the
   browser, which has no `env` — `env.X` there is always empty. Read configuration in a `source: static` datasource
   and use its answer (`docs/content-recipes.md` › Configuration in browser expressions).

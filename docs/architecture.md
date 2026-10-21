@@ -76,9 +76,10 @@ published playbooks: the engineer previews (a dry run), confirms, and the API qu
 it with the initiator's delegated tokens (Write tokens only while armed; a run whose write window ended, or that was
 started before the session was armed, pauses until the person arms and resumes it). Steps after an approval run as the
 approver. A restart doesn't end a run: it stops at a checkpoint, its job is queued again and the next process resumes
-it (a step in flight is retried, or the run ends `needs_review` if it is `idempotent: false`). Someone else's delegated
-run is shown as metadata — what ran, who, when, status — unless the viewer approves it or is a Portal Admin (S-25).
-The worker is part of the API process, so run events reach the browser's SSE stream directly.
+it (a step in flight is retried, or the run ends `needs_review` if it is `idempotent: false`). A run that paused —
+for any of these reasons — reads and checks again before its next write (`engine.ts` › `recheck`). Someone else's
+delegated run is shown as metadata — what ran, who, when, status — unless the viewer approves it or is a Portal Admin
+(S-25). The worker is part of the API process, so run events reach the browser's SSE stream directly.
 
 **PowerShell.** Exchange, Teams and SharePoint work goes to the runner on the pod's loopback. The API mints delegated
 tokens for the services the script declares, seals them (AES-256-GCM, bound to the job id and request timestamp) and

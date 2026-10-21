@@ -53,10 +53,13 @@ organization). There was no critical or high security finding; the fixes are bel
   its next checkpoint; a step still in flight after 10 s is interrupted. The runs stay `running`, their jobs are
   queued again, and the next process resumes them where they stopped — an interrupted step is retried, or, if it is
   `idempotent: false`, the run ends `needs_review`. A resumed run passes the same version and role re-checks as a
-  parked one. A worker whose run lock lapsed stops at its next checkpoint once its lease renewal notices. A person's
-  cancel still cancels. Writes whose second send would hurt say `idempotent: false`: `avd.log-off-user-session` and
-  `avd.send-user-message` (the session number may belong to someone else by then), `endpoint.restart-device` and
-  `endpoint.wipe-device` (all 1.0.1; `tests/content/non-idempotent-writes.test.ts`).
+  parked one, and reads and checks again before its next write (Security, below). A worker whose run lock lapsed stops
+  at its next checkpoint once its lease renewal notices. A person's cancel still cancels. Writes whose second send
+  would hurt say `idempotent: false`: `avd.log-off-user-session` and `avd.send-user-message` (the session number may
+  belong to someone else by then), `endpoint.restart-device` and `endpoint.wipe-device`
+  (`tests/content/non-idempotent-writes.test.ts`). `endpoint.restart-device` is 1.0.1; the other three are 1.0.2, their
+  comments saying why they still aren't retried now that checks run again: whether the first send took effect is
+  unknown.
 - **At most 5 open runs per person** (F-08, `RUN_MAX_OPEN_PER_USER`): starting a run, preview or bulk run over the
   cap — or resuming a parked run of yours over it — answers 429 `too_many_runs`. Runs parked on an approval, input,
   write access or a sign-in, finished runs and scheduled runs don't count; a bulk run counts once.
@@ -171,6 +174,14 @@ organization). There was no critical or high security finding; the fixes are bel
 - `identity.create-user` 1.1.1 passes the new user's id through `$guid()` in its manager step and compensation.
 - Wording: `billing.month-close` 1.0.1 says in words what to configure instead of naming configuration keys;
   `probes.m365-workload-incidents` 1.2.1 says it is retired and what replaced it.
+- **Runbooks with a `confirm` block** (`identity.leaver`, `identity.compromised-account`,
+  `azure.new-subscription-onboarding`) start from the runbook page: preview (the reads run, checklists are skipped,
+  writes are planned), then confirm, like playbooks. The page used to start them without a preview, which the API
+  refused (409 `preview_required`). A runbook still starts without write access — its write steps wait for it — but
+  needs the Portal Operator role, and the start button says so.
+- A run started before its session last armed write access says so on its page ("Paused: check this run is yours,
+  then resume it", with when it started; the status reads "Waiting to be resumed") and asks its person to check it is
+  theirs, then resume it — or cancel it if they don't recognise it.
 
 #### Removed
 
@@ -197,6 +208,20 @@ organization). There was no critical or high security finding; the fixes are bel
   straight to the new id. The old id stops working at once; its open streams end and the browser reconnects with the
   new cookie. Runs bound to the session while it was read-only keep reading but wait for a resume before they write.
   Extending and disarming keep the id.
+- **A run that paused reads and checks again before its next write:** after an approval, input, write access, a
+  sign-in, a `wait` or a restart, the reads, transforms and asserts it ran since its last write run again right before
+  that write — as who ran them, their reads going out with the access of the person the write runs as. The write's own
+  `when` and the approvals' `excludes` are worked out again (every approver of a gate is checked; one they now name
+  stops the run, `approval_excludes_approver`). A check that fails now stops the write (by default `failed`, with the
+  assert's message and a hint that the run had paused); a write that may already have gone out ends `needs_review`
+  instead. Before, `avd.log-off-user-session` checked that the session belonged to the expected person, waited for
+  write access, and up to 24 hours later signed out whoever held that session number by then.
+- **Confirming a manual step with write steps after it needs write access**, as approving such a gate does (403
+  `not_armed`, "Arm write access, then confirm."): the steps after it run as the person who confirms. The step card
+  says so up front and keeps **Mark done** locked until write access is armed. Declining needs nothing, and a step
+  with no writes after it confirms read-only.
+- **An approval can't be stepped over:** `validate` refuses `onError: continue` on an approval, and a rejected,
+  expired or unworkable approval always stops the run.
 - **Someone else's run shows what ran, not what it found** (S-25): a delegated run's inputs, outputs, step requests
   and outputs, plan, logs, error messages, task messages and comments are shown only to its initiator (of that run or
   one above it), its approvers (while a gate they may decide is pending and not expired, or once they decided), the

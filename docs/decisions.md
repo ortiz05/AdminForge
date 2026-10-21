@@ -150,7 +150,18 @@ The ones that change how AdminForge behaves for people and operators:
   the file only — no email, Teams post or notification — and says so.
 - **A new session id at every arm** (S-08). Arming moves the session, its unfinished runs, round trips, token
   partitions and held secrets to a new id and CSRF token in one transaction; extending and disarming keep the id. Runs
-  bound while the session was read-only ask to be resumed before they write.
+  bound while the session was read-only ask to be resumed before they write, and their page says why; they aren't
+  asked for a typed confirmation again (a confirmed run that hasn't written is refused `preview_stale` 15 minutes
+  after its preview anyway, and resuming needs the person's own armed session). Confirming a manual step with writes
+  after it needs write access, as approving does.
+- **A run that paused reads and checks again before its next write** (`engine.ts` › `recheck`). After an approval,
+  input, arming, a sign-in, a `wait` or a restart, the reads, transforms and asserts since the last write sent in
+  their scope run again right before the next write — as who ran them, their reads with the access of the person the
+  write runs as — and the write's own `when` and the approvals' `excludes` are worked out again. What the run decided
+  stays decided (input, approvals, the `when` of reads and checks, branch arms, forEach items), so guards are `assert`
+  steps; writes already sent and what was read before them are never repeated. A check that fails stops the write;
+  one that fails before a write that may already have gone out ends `needs_review`, since the first send may be why it
+  fails. Approvals can't be stepped over (`onError: continue` is refused on them).
 - **Keyed audit chain, optional until the owner sets it** (S-10). `AUDIT_CHAIN_KEY` (in the Secret, never on the
   volume) makes the chain HMAC-SHA256 from a cut-over event; `AUDIT_CHAIN_KEYED_SINCE` pins the cut-over; the shipped
   container log's checkpoints stay the anchor for the newest events, so log shipping is required. Once set, the key can

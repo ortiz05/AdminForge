@@ -145,6 +145,9 @@ The schema refuses most mistakes; know the rules so you design for them (`adding
 - **Act on what the person saw.** When the target's id can be reused or change hands (AVD session ids are Windows
   session numbers; a list can be minutes old), pass what the row showed (`expectedUser`) and `assert` the looked-up
   target still matches before writing (`avd.log-off-user-session`).
+- **Guards are `assert` steps.** A run that paused (an approval, input, write access, a sign-in, a restart) runs its
+  asserts and their reads again before its next write; a branch `if` or a forEach's `items` stays as decided before
+  the pause. An approval can't have `onError: continue`.
 - Bulk actions are a page's `bulkActions` with `forEach.inputs`, `concurrency` and `maxItems` (the browser's limit;
   the API takes at most 1,000 items). For `high` risk prefer `confirm: { type: typed, … }` — in bulk it asks for the
   number of items. The bulk run's audit event records the inputs every item shares (a reason), redacted like a

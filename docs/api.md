@@ -555,6 +555,17 @@ be resumed before its next write); an ended session parks it in `awaiting_reauth
 restart doesn't end a run: it stops at a checkpoint and continues after the restart (a step that was in flight is
 retried, or the run ends `needs_review` if it is `idempotent: false`).
 
+A run that continues after any pause — a decision, input, arming, a sign-in, a `wait` step, a restart — reads and checks
+again, right before its next write, what it read and checked since the last write it sent (reads, transforms and
+asserts, as who ran them; their reads with the access of the person the write runs as, except Graph `/me` reads, which
+keep their first answer). The run's log says so first. A check that no longer holds stops the run before that write:
+`failed` with the check's error (by default the assert's message, with a hint that the run had paused), or
+`needs_review` when the write may already have gone out before the run stopped (`error.details.check` is
+`{stepId, code, message}` of the check). The write's own `when` is worked out again (a `false` one skips the write, or
+ends the run `needs_review` when it may have gone out), and so are the `excludes` of the approvals decided on the way:
+when they now name an approver the run ends `failed` with `approval_excludes_approver`. A rejected, expired or
+unworkable approval always stops the run (`validate` refuses `onError: continue` on an approval).
+
 A write step that AdminForge's guards refuse fails with the code in the step's and the run's `error`: `protected_object`
 403 (one of AdminForge's own apps, a portal-role group, a protected account, or a delegated permission grant of a
 protected app), `protected_objects_unavailable` 503 (the protected set, or the grant, couldn't be read),

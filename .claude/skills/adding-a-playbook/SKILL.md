@@ -37,7 +37,13 @@ Markdown sections, manual steps and executable steps.
    where an undo exists. PUT/PATCH/DELETE must be `write`; POST must declare a mode.
    - **`idempotent: false`** on every write whose repeat would hurt (a message sent twice, a second object created).
      It matters on every restart, not only after a crash: a step still in flight 10 s after a stop is retried unless
-     it says `idempotent: false` — then the run ends `needs_review` instead.
+     it says `idempotent: false` — then the run ends `needs_review` instead. Checks run again before the retry, but
+     they can't tell whether the first send took effect.
+   - **Guards are `assert` steps** — not a branch `if`, a forEach's `items` filter or a read's `when`. A run that
+     paused (an approval, input, write access, a sign-in, a `wait`, a restart) runs its asserts and the reads they use
+     again right before its next write; what it decided before the pause (branch arms, forEach items, the `when` of
+     reads and checks) stays decided. A write's own `when` is worked out again too, but a false one only skips the
+     write, with no message.
    - **Ids that get reused or go stale** (AVD user session numbers are reused on a host): take what the list showed as
      an input from the row (`expectedUser: ${ row.properties.userPrincipalName }` in `rowActions` and
      `bulkActions[].forEach.inputs`) and `assert` it against the fresh read before the write, with a message that says
@@ -51,8 +57,11 @@ Markdown sections, manual steps and executable steps.
    remaining steps as themselves). A change that **grants access** (a directory or Azure role, membership of a
    role-assignable group, app ownership) names who it benefits in `approval.excludes` (an expression yielding object
    ids — the principal, and a group's members when the principal is a group) so they can't approve it, and refuses
-   adding yourself (`notSelf` assert). Approvals expire after 72 hours unless you set `expiresIn`. A playbook that
-   starts a child with its own confirmation, or a high/critical child, needs a `confirm` block itself.
+   adding yourself (`notSelf` assert). Approvals expire after 72 hours unless you set `expiresIn`. Don't put
+   `onError: continue` on an approval: `validate` refuses it, and a rejected, expired or unworkable approval always
+   stops the run. After an approval the reads before it run again with the approver's access before the next write,
+   so the approver needs read access to them (otherwise the run stops). A playbook that starts a child with its own
+   confirmation, or a high/critical child, needs a `confirm` block itself.
 6. **Secrets** (passwords, TAPs, client secrets): declare `secretOutputs: [path]` on the step; never copy them to
    `outputs`. Generate passwords with `$secureRandom(n)`. A playbook that changes the caller's own permissions (PIM
    activation) sets `refreshTokens: true` so the new roles apply as soon as it succeeds.
@@ -103,6 +112,7 @@ Operator` for drain mode, `Desktop Virtualization User Session Operator` for mes
       compensation
 - [ ] Every write step has `mode: write`, `describe`, a risk-appropriate `confirm` / `approval`, `idempotent: false`
       where a repeat hurts and `compensate` where an undo exists
+- [ ] Every precondition is an `assert` step before the write it guards (so it runs again after a pause)
 - [ ] Scopes exist on the Write app (`validate --scopes`); a tier-0 opt-in is named in the PR
 - [ ] It runs end to end in mock mode from the page that offers it
 - [ ] Dry run → run → compensate passed on `AF-Test-*` objects, or the live check is recorded as still to do
@@ -116,6 +126,8 @@ Operator` for drain mode, `Desktop Virtualization User Session Operator` for mes
 | No precondition read → acts on stale data                                            | `graph` read + `assert` before the write                                                        |
 | A write that names a user by UPN or address                                          | Look the user up in a read step; `/users/${ $encode($guid(…)) }`                                |
 | A POST or runner write that must not run twice, left idempotent                      | `idempotent: false` — a restart retries in-flight steps otherwise                               |
+| A guard written as a branch `if`, a forEach `items` filter or a read's `when`        | An `assert` step: asserts and the reads they use run again before a resumed run's next write    |
+| `onError: continue` on an approval                                                   | `validate` refuses it: a rejected, expired or unworkable approval always stops the run          |
 | Secret in `outputs` or logs                                                          | `secretOutputs`; it's delivered once to the initiator                                           |
 | New write scope not on the Write app                                                 | Add to provisioning desired state, `pnpm adminforge provision entra`, record in docs            |
 | Bulk flow as a custom loop                                                           | Page `bulkActions` with `forEach.inputs` — one child run per item                               |

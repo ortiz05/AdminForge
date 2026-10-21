@@ -19,7 +19,7 @@
 #   docker/dockerfile:1.7 (the `# syntax=` frontend) — pinned the same way.
 
 # ── Build the supervisor bundle (one self-contained file, no node_modules at runtime) ──────────────
-FROM node:24.13.1-bookworm-slim@sha256:a81a03dd965b4052269a57fac857004022b522a4bf06e7a739e25e18bce45af2 AS build
+FROM node:26.11.1-bookworm-slim@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567 AS build
 WORKDIR /src
 RUN corepack enable
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./

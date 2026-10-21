@@ -30,7 +30,7 @@ export function reportRoutes(api: FastifyInstance, ctx: AppContext) {
       const session = requireSession(request);
       const body = parseBody(ExportRequest, request.body);
       const runner = ctx.datasources;
-      const page = await currentPage(ctx, EXPORT_KINDS, request.params.key, body.version);
+      const page = await currentPage(ctx, EXPORT_KINDS, request.params.key, body.version, session.roles);
       runner.assertAccess(session.roles, page.def.requires, `Exporting ${page.key}`);
       const user = userScope(session);
       const params = await runner.prepareParams(page, body.params, user);

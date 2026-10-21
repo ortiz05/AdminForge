@@ -25,10 +25,13 @@ export async function currentPage(
   kinds: readonly LoadedPage['kind'][],
   key: string,
   version: string | undefined,
+  /** The person's roles: a retired page is named only to those who may open it. */
+  roles?: readonly string[],
 ): Promise<LoadedPage> {
   const r = await resolveCurrent(ctx.definitions, kinds, key, version, {
     hint: RELOAD_HINT.page,
     retired: 'is no longer available',
+    roles,
   });
   return { def: r.def as LoadedPage['def'], version: r.version, sha256: r.sha256, kind: r.kind, key };
 }
@@ -57,7 +60,7 @@ export function datasourceRoutes(api: FastifyInstance, ctx: AppContext) {
     const signal = clientSignal(reply);
     const body = parseBody(DatasourceExecuteRequest, request.body);
     try {
-      const page = await currentPage(ctx, PAGE_KINDS, body.page, body.version);
+      const page = await currentPage(ctx, PAGE_KINDS, body.page, body.version, session.roles);
       runner.assertAccess(session.roles, page.def.requires, `Page ${page.key}`);
       const user = userScope(session);
       const params = await runner.prepareParams(page, body.params, user);
@@ -80,7 +83,7 @@ export function datasourceRoutes(api: FastifyInstance, ctx: AppContext) {
     const session = requireSession(request);
     const signal = clientSignal(reply);
     const body = parseBody(DatasourceExecuteManyRequest, request.body);
-    const page = await currentPage(ctx, PAGE_KINDS, body.page, body.version);
+    const page = await currentPage(ctx, PAGE_KINDS, body.page, body.version, session.roles);
     runner.assertAccess(session.roles, page.def.requires, `Page ${page.key}`);
     const user = userScope(session);
     const params = await runner.prepareParams(page, body.params, user);

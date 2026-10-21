@@ -144,7 +144,7 @@ export class DbDefinitionStore {
    * Otherwise it is refused: logged once, listed in `problems()`, and a 500 `definition_unavailable` — never used.
    */
   private toRecord(row: Row): DefinitionRecord {
-    const ident = `${row.id}\u0000${row.kind}\u0000${row.key}\u0000${row.version}`;
+    const ident = `${row.id}\u0000${row.kind}\u0000${row.key}\u0000${row.version}\u0000${row.status}`;
     const body = JSON.stringify(row.body);
     let hit = this.checked.get(row.sha256);
     if (!hit || hit.ident !== ident || hit.body !== body) {

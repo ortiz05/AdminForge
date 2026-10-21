@@ -1,4 +1,4 @@
-import type { DefinitionOf, Kind } from '@adminforge/schemas';
+import type { Definition, DefinitionOf, Kind } from '@adminforge/schemas';
 import { AppError } from '../errors';
 import type { DefinitionRegistry, DefinitionSource, ResolvedDefinition } from './types';
 
@@ -55,6 +55,19 @@ export async function retiredLatest<K extends Kind>(
   return null;
 }
 
+/**
+ * 403 when `roles` lack a role `def` requires: a retired definition's title and note are shown only to people who could
+ * open it (no `roles`: the caller checks access itself).
+ */
+function assertMayKnow(def: Pick<Definition, 'title' | 'requires'>, roles: readonly string[] | undefined) {
+  if (!roles) return;
+  const missing = (def.requires?.portalRoles ?? []).filter((r) => !roles.includes(r));
+  if (missing.length)
+    throw new AppError(403, 'forbidden', `${def.title} needs the ${missing.join(' and ')} role.`, {
+      hint: 'Ask a portal administrator for access.',
+    });
+}
+
 /** What the person should do after `version_superseded`, per kind of call. */
 export const RELOAD_HINT = {
   run: 'Reload the page to use the current version, then preview and run it again.',
@@ -63,15 +76,16 @@ export const RELOAD_HINT = {
 
 /**
  * The current version of `key` (first match across `kinds`). With `version` (what the browser loaded), a different
- * current version is a 409 `version_superseded`; a key whose versions are all retired is a 409 `definition_retired`;
- * a key never published is the usual 404.
+ * current version is a 409 `version_superseded`; a key whose latest version is retired is a 409 `definition_retired`
+ * with its retirement note — only for someone whose `roles` may open it (else 403, as for a current version); a key
+ * never published is the usual 404.
  */
 export async function resolveCurrent<K extends Kind>(
   registry: Pick<DefinitionRegistry, 'resolveAny' | 'retired'>,
   kinds: readonly K[],
   key: string,
   version: string | undefined,
-  opts: { hint: string; retired: string },
+  opts: { hint: string; retired: string; roles?: readonly string[] },
 ): Promise<ResolvedDefinition<DefinitionOf<K>> & { kind: K }> {
   let current: ResolvedDefinition<DefinitionOf<K>> & { kind: K };
   try {
@@ -83,9 +97,13 @@ export async function resolveCurrent<K extends Kind>(
     const note = retirementNote(retired?.def.summary);
     if (version) {
       const old = await registry.resolveAny(kinds, key, version);
+      for (const def of [old.def, ...(retired ? [retired.def] : [])]) assertMayKnow(def, opts.roles);
       throw definitionRetired(old.def.title, opts.retired, note);
     }
-    if (retired) throw definitionRetired(retired.def.title, opts.retired, note);
+    if (retired) {
+      assertMayKnow(retired.def, opts.roles);
+      throw definitionRetired(retired.def.title, opts.retired, note);
+    }
     throw err;
   }
   if (version && version !== current.version)

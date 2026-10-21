@@ -134,9 +134,10 @@ outcome. Decisions taken in that review:
 
 - **A retired key says so.** `GET /api/definitions/:kind/:key` and a page's data answer 409 `definition_retired` for
   a key whose latest version is retired (on the files and in the database), with the retirement note — the first
-  sentence of a summary written `Retired — <why, or what replaced it (its id)>. …` — and where to go instead; exact
-  versions still load for run history. No `successor` field: the note names the replacement, which is enough for
-  the person. A key never published is 404 with a hint for the person (no CLI command).
+  sentence of a summary written `Retired — <why, or what replaced it (its id)>. …` — and where to go instead, only to
+  people whose roles may open it (others get the 403 a current version would give); exact versions still load for
+  run history. No `successor` field: the note names the replacement, which is enough for the person. A key never
+  published is 404 with a hint for the person (no CLI command).
 - **Browsers learn that content changed, not what.** `definitions.changed` carries `{all: true}`, never the keys:
   they named definitions the person's roles may not open. The web app refetches its content on any change anyway.
   Rejected: filtering keys per session by `requires.portalRoles` (an async lookup per change and per key for no gain
@@ -151,12 +152,13 @@ outcome. Decisions taken in that review:
   keep in step for no gain at this size) and refusing every row under an older version (the load-time check below
   already refuses exactly the rows that no longer pass).
 - **Published rows are re-validated when loaded.** The API parses each row with its kind's current schema the first
-  time it loads it (remembered by sha256 and body) and requires the body to name its own row's kind, id and version; a
-  row that fails is refused — one log line, a `problems()` entry the content health check reports, and 500
-  `definition_unavailable` for the person — and never runs. The sha256 is of the YAML source, so it can't be
-  recomputed from the body: the check is the schema, not the hash. It covers what bypasses `publish`
+  time it loads it (remembered by sha256 and body) and requires the body to name its own row's kind, id, version and
+  retired-or-not status; a row that fails is refused — one log line, a `problems()` entry the content health check
+  reports, and 500 `definition_unavailable` for the person — and never runs. The sha256 is of the YAML source, so it
+  can't be recomputed from the body: the check is the schema, not the hash. It covers what bypasses `publish`
   (`db import-postgres`, a restored file, anything with the volume), not an attacker who writes a valid weaker
-  definition there — the audit chain and volume access are the controls for that.
+  definition there — the audit chain and volume access are the controls for that. Schedule approvals fingerprint the
+  source sha256, so a schema-version bump alone doesn't ask for them again.
 - **Publish checks review against origin as it is now.** On a checkout `adminforge publish` asks origin
   (`git ls-remote origin refs/heads/main`) instead of trusting a local `origin/main`, which may be stale or set by
   hand; origin out of reach counts as unreviewed. `build-images.sh` runs `git fetch origin main` (read-only) before it

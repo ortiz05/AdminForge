@@ -97,6 +97,21 @@ describe('retired and unknown keys (files)', () => {
     await t.app.close();
   });
 
+  it('its data and export name it only to people who may open it (else 403, as for a current page)', async () => {
+    const { t, post } = await signedIn('Portal.Reader');
+    for (const [url, payload] of [
+      ['/api/datasources/execute-many', { page: 'identity.old-admins' }],
+      ['/api/datasources/execute-many', { page: 'identity.old-admins', version: '1.1.0' }],
+      ['/api/datasources/execute', { page: 'identity.old-admins', datasource: 'rows' }],
+      ['/api/reports/identity.old-admins/export', { format: 'csv', params: {} }],
+    ] as const) {
+      const res = await post(url, payload);
+      expect(res.statusCode, url).toBe(403);
+      expect(res.json().error.message).not.toMatch(/Replaced by|retired/);
+    }
+    await t.app.close();
+  });
+
   it('an unknown key is a 404 whose hint is for the person, not a CLI command', async () => {
     const { t, get } = await signedIn();
     for (const url of ['/api/definitions/page/nope.nothing', '/api/definitions/report/nope.nothing']) {

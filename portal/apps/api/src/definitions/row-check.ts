@@ -13,6 +13,8 @@ export interface RowIdentity {
   kind: string;
   key: string;
   version: string;
+  /** `published` or `retired` (derived from the body's `status` at publish). */
+  status?: string;
 }
 
 /** At most this many schema problems are kept per row (the log line and `publish --dry-run`). */
@@ -39,6 +41,9 @@ export function checkStoredBody(
   if (def.kind !== row.kind) problems.push(`kind is ${def.kind}, not ${row.kind}`);
   if (def.id !== row.key) problems.push(`id is ${def.id}, not ${row.key}`);
   if (def.version !== row.version) problems.push(`version is ${def.version}, not ${row.version}`);
+  // A retired body in a row marked published would be served as current (and the other way round hidden).
+  if (row.status !== undefined && (def.status === 'retired') !== (row.status === 'retired'))
+    problems.push(`status is ${def.status ?? 'active'}, but the row says ${row.status}`);
   return problems.length ? { ok: false, problems } : { ok: true, def };
 }
 

@@ -125,6 +125,13 @@ describe('published definitions are re-validated when loaded (SQLite)', () => {
     expect(store.problems()[0]!.message).toMatch(/id is .*\.good, not .*\.swapped/);
   });
 
+  it("a body whose status disagrees with its row is refused (a retired body can't pass as current)", async () => {
+    setBody('swapped', { ...bodyOf('good'), id: `${ns}.swapped`, title: 'Page swapped', status: 'retired' });
+    const store = new DbDefinitionStore(database.db);
+    await expect(store.get('page', `${ns}.swapped`)).rejects.toSatisfy(unavailable);
+    expect(store.problems()[0]!.message).toMatch(/status is retired, but the row says published/);
+  });
+
   it('a pinned older version is refused too: a run never executes it', async () => {
     setBody('pinned', { ...bodyOf('pinned'), title: 42 });
     const registry = registryFrom(new CachedDbSource(new DbDefinitionStore(database.db)), 'db');

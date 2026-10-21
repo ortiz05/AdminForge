@@ -1,17 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import {
-  Badge,
-  Button,
-  PageHeader,
-  Panel,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-  cn,
-} from '@adminforge/ui';
+import { Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '@adminforge/ui';
 import {
   LicenceGatePanel,
   contentHref,
@@ -50,7 +40,13 @@ import {
   withIds,
   type TableColumns,
 } from './page-model';
-import { EntityHeader, RefreshControl, SignInBanner } from './PageParts';
+import {
+  DefinitionBadges,
+  EntityHeader,
+  hasDefinitionBadges,
+  RefreshControl,
+  SignInBanner,
+} from './PageParts';
 import { ParamsForm } from './ParamsForm';
 import { advancedParamOf, decodeFilter, paramIssues } from './QueryBuilder';
 import { paramsToSearch, resolveParams } from './params';
@@ -421,12 +417,6 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
       onApply={(id, state) => applyView(id, state)}
     />
   );
-  const statusBadge =
-    def.status && def.status !== 'active' ? (
-      <Badge tone={def.status === 'deprecated' ? 'warn' : 'outline'}>
-        {def.status === 'preview' ? 'Preview' : def.status === 'deprecated' ? 'Deprecated' : def.status}
-      </Badge>
-    ) : undefined;
 
   const signInBanner = signInError && <SignInBanner error={signInError} />;
   const gate = licence.missing.length > 0 && (
@@ -486,7 +476,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
       linkAs={AppLink}
       eyebrow={section}
       title={def.title}
-      meta={statusBadge}
+      meta={hasDefinitionBadges(def) && <DefinitionBadges def={def} />}
       description={def.summary}
       actions={
         // A gated page has no data to refresh, save or export.

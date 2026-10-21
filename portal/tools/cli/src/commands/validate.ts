@@ -2,8 +2,8 @@
  * `adminforge validate [--scopes] [--env <name>]` — checks portal/content before it is committed or published.
  *
  * Without options: the offline check in content/check.ts (schema, references, expressions, injection lint, datasource
- * rules, runner script pins, env keys); prints `✗` errors and `⚠` warnings with file:line, then a summary. Reads
- * files only.
+ * rules, runner script pins, env keys); prints `✗` errors and `⚠` warnings with file:line, then a summary and the
+ * definitions flagged `preview: true` (not yet run against a live tenant, or on Graph beta). Reads files only.
  *
  * `--scopes`: also compares the permissions content declares (`requires.scopes`) with what is granted to the Read
  * and Write apps and the automation identity in Entra, using the same expectation as `provision entra` (baseline,
@@ -50,6 +50,16 @@ export async function validateContent(
       ? `✓ ${report.definitions} definitions valid (schema, references, expressions, lint, env keys).`
       : `✗ ${report.errors.length} problem(s) in ${relPath(ctx, ctx.contentDir)}.`,
   );
+  // `preview: true`: not yet run against a live tenant, or on Graph beta. Listed so the list stays visible and short.
+  const previews = report.loaded
+    .filter((d) => d.def.preview === true && d.def.status !== 'retired')
+    .sort((a, b) => a.def.id.localeCompare(b.def.id));
+  if (previews.length) {
+    ctx.out(
+      `Preview — not yet run against a live tenant, or on Microsoft Graph beta (${previews.length}; the page header says so):`,
+    );
+    for (const d of previews) ctx.out(`  · ${d.def.id}  ${d.file}`);
+  }
   if (!opts.scopes) return ok;
 
   const declared = declaredScopes(report.loaded);

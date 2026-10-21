@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.teams-user-policies
-version: 1.1.0
+version: 1.1.1
 title: Teams policies for a user
 summary: >-
   The Teams policies in effect for one person — messaging, meetings, calling, app setup and more — and where each comes
@@ -9,6 +9,9 @@ summary: >-
 owner: m365-team
 tags: [m365, teams, policies, users]
 template: list-detail
+# Not yet working live: Get-CsOnlineUser fails inside the Teams PowerShell module with real tokens (docs/backlog.md,
+# "Teams PowerShell in read mode"). It stays reachable and explains the error; the header shows "Preview".
+preview: true
 nav: { section: teams, label: User policies, icon: user-gear, order: 20 }
 requires:
   portalRoles: [Portal.Reader]

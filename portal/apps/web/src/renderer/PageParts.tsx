@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import type { PageDefinition } from './api';
 import {
   ArrowClockwiseIcon,
+  Badge,
   Button,
   ErrorState,
   IconButton,
@@ -10,6 +11,7 @@ import {
   Panel,
   Skeleton,
   StatusPill,
+  Tooltip,
   formatRelative,
   useNow,
 } from '@adminforge/ui';
@@ -47,6 +49,41 @@ export function RefreshControl({
         onClick={onRefresh}
       />
     </div>
+  );
+}
+
+/** Whether DefinitionBadges shows anything (so a header doesn't keep an empty slot for it). */
+export const hasDefinitionBadges = (def: Pick<PageDefinition, 'status' | 'preview'>) =>
+  def.preview === true || Boolean(def.status && def.status !== 'active');
+
+export const PREVIEW_HINT =
+  'Not yet checked against a live tenant, or built on a Microsoft beta API — what it shows may differ from what Microsoft returns.';
+
+/**
+ * Badges beside a page's title from its definition: a quiet "Preview" (`preview: true`, or `status: preview`) and the
+ * lifecycle statuses other than active ("Deprecated" in the warning tone, drafts as they are). Never a warning colour
+ * for a preview: it's information, not a problem.
+ */
+export function DefinitionBadges({ def }: { def: Pick<PageDefinition, 'status' | 'preview'> }) {
+  const preview = def.preview === true || def.status === 'preview';
+  const status = def.status && def.status !== 'active' && def.status !== 'preview' ? def.status : undefined;
+  if (!preview && !status) return null;
+  return (
+    <>
+      {preview && (
+        <Tooltip content={PREVIEW_HINT}>
+          <Badge tone="outline" data-badge="preview">
+            Preview
+            <span className="sr-only">: {PREVIEW_HINT}</span>
+          </Badge>
+        </Tooltip>
+      )}
+      {status && (
+        <Badge tone={status === 'deprecated' ? 'warn' : 'outline'}>
+          {status === 'deprecated' ? 'Deprecated' : status.charAt(0).toUpperCase() + status.slice(1)}
+        </Badge>
+      )}
+    </>
   );
 }
 
@@ -105,8 +142,10 @@ export function EntityHeader({
       ? (asText(status.value) as keyof typeof TONE_LABEL)
       : undefined;
   const idEntries = Object.entries(ids.value ?? {}).filter(([, v]) => asText(v));
+  const flagged = hasDefinitionBadges(def);
   const meta = (
     <>
+      <DefinitionBadges def={def} />
       {tone && <StatusPill status={tone}>{asText(statusLabel.value) || TONE_LABEL[tone]}</StatusPill>}
       {idEntries.map(([label, v]) => (
         <IdChip key={label} value={asText(v)} label={label} />
@@ -128,7 +167,9 @@ export function EntityHeader({
     return (
       <div className="flex flex-col gap-3 border-b border-line pb-4">
         {asText(subtitle.value) && <p className="truncate text-sm text-fg-2">{asText(subtitle.value)}</p>}
-        {(tone || idEntries.length > 0) && <div className="flex flex-wrap items-center gap-2">{meta}</div>}
+        {(flagged || tone || idEntries.length > 0) && (
+          <div className="flex flex-wrap items-center gap-2">{meta}</div>
+        )}
         {actions}
       </div>
     );
@@ -138,7 +179,7 @@ export function EntityHeader({
       eyebrow={section ? `${section} · ${def.title}` : def.title}
       title={shownTitle}
       description={asText(subtitle.value) || (loading ? undefined : def.summary)}
-      meta={(tone || idEntries.length > 0) && meta}
+      meta={(flagged || tone || idEntries.length > 0) && meta}
       actions={actions}
     />
   );

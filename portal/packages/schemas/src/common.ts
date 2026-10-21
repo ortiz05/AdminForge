@@ -158,6 +158,14 @@ export const envelopeShape = {
   tags: z.array(z.string().min(1)).optional(),
   requires: Requires.optional(),
   status: ContentStatus.optional(),
+  /**
+   * Not yet run against a live tenant (fixtures only), or reads Microsoft Graph beta endpoints: the page header shows
+   * a quiet "Preview" badge and `adminforge validate` lists it. Remove it once the definition has run live on v1.0.
+   */
+  preview: z.boolean().optional().meta({
+    description:
+      'Not yet run against a live tenant, or reads Microsoft Graph beta: pages show a "Preview" badge. Remove once it has run live.',
+  }),
 };
 
 /** Navigation placement for pages, dashboards, reports, playbooks and runbooks. */

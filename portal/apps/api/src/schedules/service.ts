@@ -124,9 +124,25 @@ export interface ScheduleRunItem {
   runId?: string;
   artifact?: { name: string; href: string; size: number | null };
   error?: { code: string; message: string; hint?: string };
-  /** Skipped runs: why. */
+  /** Why a run didn't happen (skipped runs), or sent nothing (Run now while the schedule was off). */
   reason?: string;
 }
+
+/** The history line of a file-only run (F-10), in the present while it is waiting or running. */
+function fileOnlyReason(r: Pick<ScheduleRunRow, 'status'>, report: boolean): string {
+  const now = r.status === 'queued' || r.status === 'running';
+  if (report)
+    return now
+      ? 'The schedule is off, so this run writes the file only: nothing is emailed, posted to Teams or notified.'
+      : 'The schedule was off, so this run wrote the file only: nothing was emailed, posted to Teams or notified.';
+  return now
+    ? 'The schedule is off, so this run sends no email, Teams message or notification.'
+    : 'The schedule was off, so this run sent no email, Teams message or notification.';
+}
+
+/** Run now on a switched-off schedule (F-10): what the answer says. */
+export const FILE_ONLY_MESSAGE =
+  'The schedule is switched off, so this run writes the file only: nothing is emailed, posted to Teams or notified.';
 
 /** Schedule approvals in the inbox shape the web UI reads (same as run TaskViews, subjectType 'schedule'). */
 export interface ScheduleApprovalView {
@@ -523,8 +539,14 @@ export class ScheduleService {
     return probes.some((r) => (TRANSACTION_KINDS as readonly string[]).includes((r.def as Probe).check.kind));
   }
 
-  /** POST /run: queues a manual run for the scheduler. */
-  async runNow(c: Caller, key: string): Promise<{ scheduleRunId: string }> {
+  /**
+   * POST /run: queues a manual run for the scheduler. On a switched-off schedule it is how an owner tries it before
+   * turning it on, so the run writes its file only (F-10): no email, Teams post or notification until it is on.
+   */
+  async runNow(
+    c: Caller,
+    key: string,
+  ): Promise<{ scheduleRunId: string; fileOnly?: true; message?: string }> {
     requireRole(c.session, 'Portal.Operator', 'Running schedules');
     const { row } = await this.row(key);
     if ((await this.deps.automationPaused?.()) === true)
@@ -554,13 +576,18 @@ export class ScheduleService {
         },
       );
     if (row.source === 'portal') await this.assertRunNowAllowed(row);
+    const fileOnly = !row.enabled;
     const run = await this.deps.store.insertRun({
       scheduleId: row.id,
       scheduleKey: key,
       trigger: 'manual',
       status: 'queued',
       startedAt: this.deps.now(),
-      result: { requestedBy: c.session.upn, requestedByOid: c.session.userOid },
+      result: {
+        requestedBy: c.session.upn,
+        requestedByOid: c.session.userOid,
+        ...(fileOnly ? { fileOnly: true } : {}),
+      },
     });
     await this.deps.audit.append({
       ...this.actor(c),
@@ -568,10 +595,18 @@ export class ScheduleService {
       targetType: 'schedule',
       targetId: key,
       result: 'success',
-      details: { scheduleRunId: run.id, job: def.job.kind, version: def.version },
+      details: {
+        scheduleRunId: run.id,
+        job: def.job.kind,
+        version: def.version,
+        ...(fileOnly ? { fileOnly: true } : {}),
+      },
     });
     this.deps.events.publish({ type: 'schedule.run_requested', data: { key, scheduleRunId: run.id } });
-    return { scheduleRunId: run.id };
+    return {
+      scheduleRunId: run.id,
+      ...(fileOnly ? { fileOnly: true as const, message: FILE_ONLY_MESSAGE } : {}),
+    };
   }
 
   /**
@@ -608,11 +643,12 @@ export class ScheduleService {
     const page = rows.slice(0, opts.limit);
     // A schedule that uses its creator's access: only they (or a Portal Admin) get links to its files.
     const files = !session || creatorFilesAccess(row, session) !== 'denied';
-    const items = await Promise.all(page.map((r) => this.runItem(r, files)));
+    const report = row.definition.job.kind === 'report';
+    const items = await Promise.all(page.map((r) => this.runItem(r, files, report)));
     return { items, ...(rows.length > opts.limit ? { cursor: encodeRunCursor(page.at(-1)!) } : {}) };
   }
 
-  private async runItem(r: ScheduleRunRow, files = true): Promise<ScheduleRunItem> {
+  private async runItem(r: ScheduleRunRow, files = true, report = false): Promise<ScheduleRunItem> {
     let artifact: ScheduleRunItem['artifact'];
     if (r.artifactPath && files) {
       const listed = (
@@ -635,6 +671,8 @@ export class ScheduleService {
       ...(r.error ? { error: r.error } : {}),
       // Why a run didn't happen (overlap, paused, deleted, needs sign-in): written by the scheduler, never tenant data.
       ...(r.status === 'skipped' && typeof r.result?.reason === 'string' ? { reason: r.result.reason } : {}),
+      // Run now while the schedule was off: the history says why nobody heard about it.
+      ...(r.status !== 'skipped' && r.result?.fileOnly === true ? { reason: fileOnlyReason(r, report) } : {}),
     };
   }
 

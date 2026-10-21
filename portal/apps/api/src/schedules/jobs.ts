@@ -69,7 +69,15 @@ export interface JobContext {
   scheduledBy: string | null;
   /** Run now: the requester's oid (they can't approve gates in the run they asked for). */
   requestedByOid?: string | null;
+  /** Run now on a switched-off schedule (F-10): write the file, send nothing — no email, no Teams post. */
+  fileOnly?: boolean;
 }
+
+/** The delivery note of an email or Teams target a file-only run didn't send. */
+export const FILE_ONLY_NOTE = 'Not sent: the schedule is switched off, so Run now writes the file only.';
+
+/** What happened to one email or Teams target of a report run (`skipped`: a file-only run). */
+type DeliveryNote = Omit<DeliveryStatus, 'status'> & { status: DeliveryStatus['status'] | 'skipped' };
 
 export interface JobResult {
   /** Default: succeeded. */
@@ -297,7 +305,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
         'export_not_supported',
         `Report ${job.ref} declares no export, so it cannot be scheduled.`,
       );
-    const notes: DeliveryStatus[] = [];
+    const notes: DeliveryNote[] = [];
     let files = job.delivery.filter((d): d is Extract<Delivery, { type: 'file' }> => d.type === 'file');
     if (!files.length) files = [{ type: 'file', format: job.delivery[0]?.format ?? 'xlsx' }];
     const formats = [...new Set(files.map((f) => f.format))];
@@ -380,6 +388,10 @@ export function createJobRunner(deps: JobDeps): JobRunner {
     // Email and Teams: the report goes out after the file is safely written (the file stays with the run either way).
     for (const d of job.delivery) {
       if (d.type === 'file') continue;
+      if (ctx.fileOnly) {
+        notes.push({ type: d.type, status: 'skipped', message: FILE_ONLY_NOTE });
+        continue;
+      }
       if (!deps.delivery) {
         notes.push({
           type: d.type,

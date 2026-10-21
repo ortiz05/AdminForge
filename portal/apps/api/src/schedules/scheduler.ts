@@ -588,6 +588,8 @@ export class Scheduler {
     // Run now (and its retries): who asked, by oid — a UPN can't be compared with an approver's oid.
     const requestedByOid = typeof run.result?.requestedByOid === 'string' ? run.result.requestedByOid : null;
     const attempt = typeof run.result?.attempt === 'number' ? run.result.attempt : 0;
+    // Run now while the schedule was off (F-10): the job writes its file, nobody is emailed, posted or notified.
+    const fileOnly = run.result?.fileOnly === true;
     // Portal schedules: the creator's UPN (the row keeps their oid; the definition's owner is their UPN).
     const scheduledBy =
       run.trigger === 'manual' && requestedBy
@@ -651,6 +653,7 @@ export class Scheduler {
         scheduledBy,
         requestedByOid,
         ...(runAs ? { identity: runAs.identity, user: runAs.user } : {}),
+        ...(fileOnly ? { fileOnly: true } : {}),
       });
       job.settled = running.then(
         () => undefined,
@@ -698,6 +701,7 @@ export class Scheduler {
       ...(requestedBy ? { requestedBy } : {}),
       ...(requestedByOid ? { requestedByOid } : {}),
       ...(attempt ? { attempt } : {}),
+      ...(fileOnly ? { fileOnly: true } : {}),
     };
     const finalResult = result || Object.keys(keep).length ? { ...result, ...keep } : null;
     const row = await this.o.store.updateRun(
@@ -718,8 +722,8 @@ export class Scheduler {
     );
     this.o.events.publish({ type: 'schedule.updated', data: { key: s.key, scheduleRunId: run.id, status } });
     if (status === 'failed' || status === 'timeout')
-      await this.failed(s, run, status, error!, attempt, correlationId);
-    else if (status === 'succeeded' && s.definition.notify?.onSuccess?.length)
+      await this.failed(s, run, status, error!, attempt, correlationId, fileOnly);
+    else if (status === 'succeeded' && !fileOnly && s.definition.notify?.onSuccess?.length)
       await this.notify(
         s,
         s.definition.notify.onSuccess,
@@ -934,6 +938,7 @@ export class Scheduler {
     error: RunErrorInfo,
     attempt: number,
     correlationId: string,
+    fileOnly = false,
   ) {
     const def = s.definition;
     const retry = def.retry;
@@ -956,7 +961,8 @@ export class Scheduler {
           error,
           attempt,
           ...(retryAt ? { retryAt: retryAt.toISOString() } : {}),
-          notify: def.notify?.onFailure?.map((n) => n.type) ?? [],
+          notify: fileOnly ? [] : (def.notify?.onFailure?.map((n) => n.type) ?? []),
+          ...(fileOnly ? { fileOnly: true } : {}),
         },
       })
       .catch(() => undefined);
@@ -971,8 +977,9 @@ export class Scheduler {
         ...(retryAt ? { retryAt: retryAt.toISOString() } : {}),
       },
     });
-    // Tell people only when it has really failed (no retry left), so a flaky minute doesn't page anyone.
-    if (!retryAt && def.notify?.onFailure?.length)
+    // Tell people only when it has really failed (no retry left), so a flaky minute doesn't page anyone — and not
+    // for a file-only run (the person who ran it sees it in the history).
+    if (!retryAt && !fileOnly && def.notify?.onFailure?.length)
       await this.notify(
         s,
         def.notify.onFailure,
@@ -996,6 +1003,7 @@ export class Scheduler {
           ...(typeof run.result?.requestedByOid === 'string'
             ? { requestedByOid: run.result.requestedByOid }
             : {}),
+          ...(fileOnly ? { fileOnly: true } : {}),
         },
       });
   }

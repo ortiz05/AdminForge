@@ -101,20 +101,34 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
 }
 
 /**
+ * What Run now does on a switched-off schedule (F-10): the job runs, but nothing is sent until the schedule is on — a
+ * report writes its file only. Null while the schedule is on.
+ */
+export function fileOnlyNote(schedule: Pick<ScheduleItem, 'enabled' | 'job'>): string | null {
+  if (schedule.enabled) return null;
+  return schedule.job.kind === 'report'
+    ? 'The schedule is off, so Run now writes the file only: nothing is emailed, posted to Teams or notified.'
+    : 'The schedule is off, so Run now sends no email, Teams message or notification.';
+}
+
+/**
  * Run the job now, as whoever the schedule runs as. Write-capable jobs confirm first; one that waits for its creator to
- * sign in is locked, saying so.
+ * sign in is locked, saying so. On a switched-off schedule it sends nothing, and says so before and after.
  */
 export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem; size?: 'sm' | 'md' }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const fileOnly = fileOnlyNote(schedule);
   const mutation = useMutation({
     mutationFn: () => runScheduleNow(schedule.key),
     onSuccess: () => {
       toast({
         tone: 'info',
         title: `${schedule.title} started`,
-        description: `It runs ${runsAsPhrase(schedule.runsAs)}; the result appears in its history.`,
+        description: fileOnly
+          ? `${fileOnly} The result appears in its history.`
+          : `It runs ${runsAsPhrase(schedule.runsAs)}; the result appears in its history.`,
       });
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['reports'] });
@@ -136,7 +150,7 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
         size={size}
         pending={mutation.isPending}
         locked={locked}
-        title={locked}
+        title={locked ?? fileOnly ?? undefined}
         aria-label={size === 'sm' ? `Run ${schedule.title} now` : undefined}
         onClick={() => (schedule.writeCapable ? setConfirming(true) : mutation.mutate())}
       >

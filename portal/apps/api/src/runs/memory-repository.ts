@@ -46,17 +46,26 @@ export class MemoryRunRepository implements RunRepository {
       if (limit.ifAbsent) return { ok: true, row: clone(existing) };
       throw new Error(`duplicate run ${run.id}`);
     }
+    const open = this.openRuns(run.initiatorOid);
+    if (open >= limit.max) return { ok: false, open };
+    return { ok: true, row: this.insertNow(run) };
+  }
+
+  async countOpenRuns(initiatorOid: string): Promise<number> {
+    return this.openRuns(initiatorOid);
+  }
+
+  private openRuns(initiatorOid: string | null): number {
     let open = 0;
     for (const r of this.runs.values())
       if (
-        r.initiatorOid === run.initiatorOid &&
+        r.initiatorOid === initiatorOid &&
         r.parentRunId === null &&
         r.identity === 'delegated' &&
         RUN_STATUS_OPEN.includes(r.status)
       )
         open++;
-    if (open >= limit.max) return { ok: false, open };
-    return { ok: true, row: this.insertNow(run) };
+    return open;
   }
 
   private insertNow(run: NewRun): RunRow {

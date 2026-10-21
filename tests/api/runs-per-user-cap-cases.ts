@@ -108,6 +108,21 @@ export function capCases(make: (env?: Record<string, string>) => Promise<CapApp>
     expect((await start(avery)).statusCode).toBe(429);
   });
 
+  it('resuming a parked run counts it again: refused while the person is at the cap', async () => {
+    t = await make();
+    const avery = await t.login(AVERY, OPERATOR, { armed: true });
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) ids.push((await start(avery)).json().runId);
+    await t.repository.updateRun(ids[0]!, { status: 'awaiting_arm' }); // parked: no longer counted
+    ids.push((await start(avery)).json().runId);
+    const refused = await avery.post(`/api/runs/${ids[0]}/resume`, {});
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json().error).toMatchObject({ code: 'too_many_runs' });
+    expect((await t.repository.getRun(ids[0]!))?.status).toBe('awaiting_arm');
+    expect((await avery.post(`/api/runs/${ids[1]}/cancel`, {})).statusCode).toBe(200);
+    expect((await avery.post(`/api/runs/${ids[0]}/resume`, {})).statusCode).toBe(202);
+  });
+
   it('a bulk run counts once, and its item runs not at all', async () => {
     t = await make();
     const avery = await t.login(AVERY, OPERATOR, { armed: true });

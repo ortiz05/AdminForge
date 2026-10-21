@@ -97,6 +97,15 @@ const toTask = (r: ApprovalsRow): TaskRow => ({
   decidedAt: r.decidedAt,
 });
 
+/** F-08: a person's open runs — root runs they started themselves that are queued or running. */
+const openRunsOf = (initiatorOid: string | null) =>
+  and(
+    initiatorOid === null ? isNull(runs.initiatorOid) : eq(runs.initiatorOid, initiatorOid),
+    isNull(runs.parentRunId),
+    eq(runs.identity, 'delegated'),
+    inArray(runs.status, [...RUN_STATUS_OPEN]),
+  );
+
 /** JSON columns can't store `undefined`; null them instead. */
 const j = (v: unknown) => (v === undefined ? null : v);
 
@@ -172,19 +181,20 @@ export class SqliteRunRepository implements RunRepository {
       const c = tx
         .select({ open: sql<number>`count(*)` })
         .from(runs)
-        .where(
-          and(
-            run.initiatorOid === null ? isNull(runs.initiatorOid) : eq(runs.initiatorOid, run.initiatorOid),
-            isNull(runs.parentRunId),
-            eq(runs.identity, 'delegated'),
-            inArray(runs.status, [...RUN_STATUS_OPEN]),
-          ),
-        )
+        .where(openRunsOf(run.initiatorOid))
         .get();
       const open = Number(c?.open ?? 0);
       if (open >= limit.max) return { ok: false, open };
       return { ok: true, row: toRun(tx.insert(runs).values(this.values(run)).returning().get()) };
     });
+  }
+
+  async countOpenRuns(initiatorOid: string): Promise<number> {
+    const [c] = await this.db
+      .select({ open: sql<number>`count(*)` })
+      .from(runs)
+      .where(openRunsOf(initiatorOid));
+    return Number(c?.open ?? 0);
   }
 
   async getRun(id: string): Promise<RunRow | null> {

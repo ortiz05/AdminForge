@@ -143,6 +143,8 @@ export interface RunRepository {
    * is (a replayed confirmation).
    */
   insertOpenRun(run: NewRun, limit: { max: number; ifAbsent?: boolean }): Promise<OpenRunInsert>;
+  /** F-08: the open runs of `initiatorOid`, counted as insertOpenRun counts them. */
+  countOpenRuns(initiatorOid: string): Promise<number>;
   getRun(id: string): Promise<RunRow | null>;
   /** CAS on status when `expect` is given; null when the row is missing or the CAS failed. */
   updateRun(id: string, patch: RunRowPatch, expect?: readonly RunStatus[]): Promise<RunRow | null>;

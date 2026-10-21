@@ -3,6 +3,7 @@ import {
   checkDefinition,
   findStep,
   hasWriteSteps,
+  isParked,
   isTerminal,
   redactInputs,
   stepIdOf,
@@ -138,7 +139,7 @@ export const tooManyRuns = (max: number) =>
     'too_many_runs',
     `You already have ${max} runs queued or running, the most one person can have at once.`,
     {
-      hint: 'Wait for one to finish, or cancel one you don’t need (Runs), then start this again. Runs waiting for an approval, input, write access or a sign-in don’t count.',
+      hint: 'Wait for one to finish, or cancel one you don’t need (Runs), then try again. Runs waiting for an approval, input, write access or a sign-in don’t count.',
     },
   );
 
@@ -1079,6 +1080,11 @@ export class RunService {
         'forbidden',
         'Only the engineers acting in this run (or a Portal.Admin) can resume it.',
       );
+    // F-08: a parked run stopped counting towards its initiator's open runs; resuming it opens it again.
+    if (isParked(root.status) && root.identity === 'delegated' && root.initiatorOid === oid) {
+      const max = this.deps.maxOpenRuns ?? DEFAULT_MAX_OPEN_RUNS;
+      if ((await this.deps.repo.countOpenRuns(oid)) >= max) throw tooManyRuns(max);
+    }
     await this.checkContinuable(caller, root, tree, tasks);
     // ADR-010: steps run with the actor's *current* session; rebind it everywhere this user acts in the run tree.
     let rebound = 0;

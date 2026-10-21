@@ -10,7 +10,6 @@ import { repoRoot } from '../lib/repo';
 // A ratchet: the definitions below still name keys the same way (docs/backlog.md). The list only shrinks — reword one,
 // bump its version and take it off; a new definition can't join it.
 const STILL_NAMING_KEYS = new Set([
-  'identity.remove-group-members',
   'probes.activity-failed-writes-spike',
   'probes.arm-subscription-access',
   'probes.avd-connection-errors',

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.assign-licence
-version: 1.0.0
+version: 1.1.0
 title: Assign licence
 summary: >-
   Assigns a subscribed licence (by SKU part number such as SPE_E5, or SKU id) directly to a user. Checks for free seats
@@ -15,8 +15,11 @@ requires:
   scopes:
     graph: [User.Read.All, Organization.Read.All, LicenseAssignment.ReadWrite.All, User.ReadWrite.All]
   entraRoles: [License Administrator]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# user: their sign-in name.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.lookup.output.userPrincipalName }
   message: >-
     ${ 'Assign ' & steps.pick.output.skuPartNumber & ' to ' & steps.lookup.output.userPrincipalName & '? '
        & (steps.pick.output.prepaidUnits.enabled - steps.pick.output.consumedUnits) & ' seat(s) free.' }

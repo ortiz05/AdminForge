@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: identity.compromised-account
-version: 3.0.0
+version: 3.1.0
 title: Compromised account response
 summary: >-
   Guided response to a suspected account compromise: confirm and scope the signal, contain (block sign-in, revoke
@@ -29,8 +29,10 @@ requires:
       - UserAuthenticationMethod.ReadWrite.All
       - Policy.Read.All
   entraRoles: [User Administrator, Authentication Administrator, Security Operator]
+# Typed (high risk): the affected user's sign-in name — containment blocks them from every app.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.account.output.userPrincipalName }
   message: >-
     ${ 'Start incident response for ' & steps.account.output.userPrincipalName & ' (' & inputs.ticket
        & ')? Containment blocks the user from every app until you restore access in step 4. Tell their manager first.' }

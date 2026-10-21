@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.revoke-sessions
-version: 1.0.0
+version: 1.1.0
 title: Revoke sessions
 summary: >-
   Invalidates every refresh token and browser session cookie for one user, so they must sign in again on every device.
@@ -15,8 +15,11 @@ requires:
   scopes:
     graph: [User.Read.All, User.RevokeSessions.All]
   entraRoles: [User Administrator]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# user: their sign-in name.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.lookup.output.userPrincipalName }
   message: ${ 'Sign ' & steps.lookup.output.userPrincipalName & ' out of every session?' }
 approval:
   required: false

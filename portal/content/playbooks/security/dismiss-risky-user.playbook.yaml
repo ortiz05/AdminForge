@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: security.dismiss-risky-user
-version: 1.1.0
+version: 1.2.0
 title: Dismiss user risk
 summary: Clears Microsoft Entra ID Protection risk for one user after you have verified the activity was legitimate.
 owner: security-team
@@ -14,8 +14,11 @@ requires:
     graph: [IdentityRiskyUser.ReadWrite.All]
   entraRoles: [Security Operator]
   licences: [identityProtection]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# user: their sign-in name.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.risk.output.userPrincipalName }
   message: "${ 'Dismissing risk for ' & steps.risk.output.userPrincipalName & ' closes all of their open risk detections without remediation.' }"
 approval:
   required: false

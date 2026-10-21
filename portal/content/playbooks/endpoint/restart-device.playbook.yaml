@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: endpoint.restart-device
-version: 1.0.1
+version: 1.1.0
 title: Restart Intune device
 summary: >-
   Restarts an Intune-managed Windows, macOS or supervised iOS/iPadOS device the next time it checks in. The user gets
@@ -16,8 +16,11 @@ requires:
     graph: [DeviceManagementManagedDevices.Read.All, DeviceManagementManagedDevices.PrivilegedOperations.All]
   entraRoles: [Intune Administrator]
   licences: [intune]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# device: its name.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.device.output.deviceName }
   message: ${ 'Restart ' & steps.device.output.deviceName & ' (' & steps.device.output.userPrincipalName & ')? Unsaved work may be lost.' }
 approval:
   required: false

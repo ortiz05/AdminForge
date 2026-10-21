@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.remove-distribution-list-members
-version: 1.0.1
+version: 1.1.0
 title: Remove members from a distribution list
 summary: Removes one or more addresses from a distribution list or mail-enabled security group. Addresses that aren't members are skipped.
 owner: m365-team
@@ -14,9 +14,14 @@ requires:
     exchange: [Exchange.Manage]
   entraRoles: [Exchange Recipient Administrator]
   licences: [exchange]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# list: its address.
 confirm:
-  type: click
-  message: Remove these members? They stop receiving mail sent to the list right away.
+  type: typed
+  value: ${ inputs.identity }
+  message: >-
+    ${ 'Remove ' & $count(steps.collect.output.addresses) & ' member(s) from ' & inputs.identity
+       & '? They stop receiving mail sent to the list right away.' }
 
 inputs:
   identity: { type: string, format: email, label: Distribution list, description: Primary email address of the list }

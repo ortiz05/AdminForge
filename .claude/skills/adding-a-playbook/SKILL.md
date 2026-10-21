@@ -51,10 +51,14 @@ Markdown sections, manual steps and executable steps.
    - `compensate` runs only when a **later** step fails with `onError: compensate` (completed steps are undone in
      reverse). A playbook whose last step is its only write has nothing to undo it: don't promise an undo — say "run it
      again with the other setting" (`avd.set-drain-mode`).
-5. **Risk:** `risk: low|medium|high|critical`. `high` and `critical` need a `confirm` block (the schema enforces it) — `typed`
-   with the value the person recognises (the UPN, the object's name; a bulk run then asks for the item count); `click`
-   only for low-impact changes, never on a bulk action; `critical` also needs `approval: { required: true }` (two-person; the approver runs the
-   remaining steps as themselves). A change that **grants access** (a directory or Azure role, membership of a
+5. **Risk:** `risk: low|medium|high|critical`. `high` and `critical` playbooks and runbooks need a `confirm` block (the
+   schema enforces it), `typed` with the value the person recognises (the UPN, the object's name). A playbook offered as
+   a bulk action (`bulkActions`) confirms by typing from `medium` up too: a bulk run asks for the item count. `click` is
+   for low risk, and for medium-risk changes never offered in bulk; low-risk bulk actions may click
+   (`tests/content/high-risk-typed-confirm.test.ts` enforces the typing). A name anyone can choose (an app's, a group's)
+   can't always be typed: work out the value in a `confirmAs` step that falls back to the object id
+   (`identity.revoke-consent-grant`). `critical` also needs `approval: { required: true }` (two-person; the approver
+   runs the remaining steps as themselves). A change that **grants access** (a directory or Azure role, membership of a
    role-assignable group, app ownership) names who it benefits in `approval.excludes` (an expression yielding object
    ids — the principal, and a group's members when the principal is a group) so they can't approve it, and refuses
    adding yourself (`notSelf` assert). Approvals expire after 72 hours unless you set `expiresIn`. Don't put
@@ -138,7 +142,7 @@ Operator` for drain mode, `Desktop Virtualization User Session Operator` for mes
 | `x != 'a'` on a value that may be missing (false when `x` is undefined)              | `$not(x = 'a')`                                                                                 |
 | A row action on an id that can be reused (session numbers) without an owner check    | Pass `expected…` from the row and `assert` it against the fresh read before the write           |
 | Promising an undo for a playbook whose only write is its last step                   | `compensate` runs only when a later step fails; describe how to reverse it by hand              |
-| `risk: high` with `confirm: click` on a bulk action                                  | `typed`: one click would apply to every selected row; typed asks for the count                  |
+| `confirm: click` on a bulk action of risk `medium` or higher                         | `typed`: one click would apply to every selected row; a bulk run asks for the count             |
 
 ## See also
 

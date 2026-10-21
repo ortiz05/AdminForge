@@ -22,13 +22,18 @@ const content = (file: string) => ({
   sha256: 'a'.repeat(64),
 });
 const revokeGrant = content('identity/revoke-consent-grant.playbook.yaml');
-const revokeSessions = content('identity/revoke-sessions.playbook.yaml');
+// A click confirmation (medium risk, never offered in bulk). `identity.revoke-sessions` was this test's playbook until
+// it became typed (bulk actions from medium risk up confirm by typing).
+const enableApp = content('identity/enable-enterprise-app.playbook.yaml');
 
 /** An attacker-named app: a zero-width space and a Cyrillic letter e (U+0435) (escapes: nothing hidden in this source). */
 const SHADY = 'PDF\u{200b} Convert\u{435}r';
 const PREVIEW = 'a9d0c4f2-1111-4b6e-9c3a-5e7f9a1b3c5d';
 const GRANT_INPUTS = { grantId: 'grant-shady', reason: 'Consent phishing reported in SEC-311' };
-const SESSION_INPUTS = { userId: IDS.aLee, reason: 'INC-4821 account compromised' };
+const APP_INPUTS = {
+  servicePrincipalId: '00000000-0000-4000-8000-000000000404',
+  reason: 'INC-4821 false positive',
+};
 
 type Confirm = { type: 'typed' | 'click'; value: string | null; message: string | null };
 
@@ -188,14 +193,14 @@ describe('Playbook confirm dialog: the message and value rendered by the API', (
   });
 
   it('click confirmation: shows the rendered message instead of the template', async () => {
-    const { mock, dialog } = await openConfirm(revokeSessions as never, SESSION_INPUTS, {
+    const { mock, dialog } = await openConfirm(enableApp as never, APP_INPUTS, {
       type: 'click',
       value: null,
-      message: 'Sign a.lee@example.com out of every session?',
+      message: 'Allow sign-in to Example HR Sync again?',
     });
-    expect(within(dialog).getByText('Sign a.lee@example.com out of every session?')).toBeInTheDocument();
+    expect(within(dialog).getByText('Allow sign-in to Example HR Sync again?')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('${');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Revoke sessions' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enable enterprise app sign-in' }));
     await waitFor(() => expect(mock.posts.filter((p) => !p.dryRun)).toHaveLength(1));
   });
 });

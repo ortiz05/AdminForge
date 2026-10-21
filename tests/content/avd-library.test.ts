@@ -547,7 +547,8 @@ describe('Azure Virtual Desktop playbooks', () => {
   const pattern = (id: string, input: string) => new RegExp(def(id).inputs[input].pattern);
 
   it.each([
-    ['avd.set-drain-mode', 'medium', 'click'],
+    // Typed since 1.1.0: a bulk action from medium risk up confirms by typing (high-risk-typed-confirm.test.ts).
+    ['avd.set-drain-mode', 'medium', 'typed'],
     ['avd.log-off-user-session', 'high', 'typed'],
     ['avd.send-user-message', 'low', 'click'],
   ])('%s is a confirmed, Operator-only %s-risk write through Azure Resource Manager', (id, risk, confirm) => {

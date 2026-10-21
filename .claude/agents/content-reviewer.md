@@ -20,10 +20,12 @@ You review AdminForge content changes. Read `CLAUDE.md`, the skill in `.claude/s
    - **Write safety** (playbook skill, steps 4–8): write steps have `mode: write` + plain-language `describe`;
      preconditions are read and `assert`ed before writes (not a branch `if` or a forEach `items` filter: only asserts
      run again before a resumed run's next write); no `onError: continue` on an approval; `risk` matches impact (`high`
-     → a `confirm`, typed with the value the person recognises — always typed on a bulk action; `critical` → `approval`
-     with `excludes` for whoever it grants access); `idempotent: false` on writes whose repeat hurts (a restart retries
-     steps in flight); compensation where possible and no promised undo `compensate` can't deliver; secrets only via
-     `secretOutputs`; writes on reusable ids carry an `expected…` input from the row and an `assert`.
+     and `critical` playbooks and runbooks → a `typed` confirm with the value the person recognises; a bulk action of
+     risk `medium` or higher → typed too, low-risk bulk actions may click; a name anyone can choose falls back to the
+     object id in a `confirmAs` step; `critical` → `approval` with `excludes` for whoever it grants access);
+     `idempotent: false` on writes whose repeat hurts (a restart retries steps in flight); compensation where possible
+     and no promised undo `compensate` can't deliver; secrets only via `secretOutputs`; writes on reusable ids carry an
+     `expected…` input from the row and an `assert`.
    - **Queries:** user data placed as `docs/content-recipes.md` › Quoting user data shows (quoted literals, not
      `$replace` character stripping); advanced filters via `${ advanced }`; filtering at the source, transforms small.
      Resource Graph: the join limits in `CLAUDE.md` (non-negotiable 14) — also read each query for joins hidden in

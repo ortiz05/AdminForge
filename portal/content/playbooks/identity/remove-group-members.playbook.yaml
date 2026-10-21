@@ -1,12 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.remove-group-members
-version: 1.1.0
+version: 1.2.0
 title: Remove group members
 summary: >-
   Removes users, devices or nested groups from a cloud security or Microsoft 365 group. Refuses dynamic groups, groups
   synced from on-premises AD, distribution lists / mail-enabled security groups, AdminForge's own role groups and
-  accounts marked as protected (AF_PROTECTED_USER_IDS).
+  accounts marked as protected, such as break-glass accounts.
 owner: identity-team
 tags: [identity, groups, bulk]
 risk: medium
@@ -17,10 +17,14 @@ requires:
     graph: [Group.Read.All, GroupMember.ReadWrite.All]
   # Role-assignable groups also need Privileged Role Administrator.
   entraRoles: [Groups Administrator]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# group: its name, or its object id when the name can't be typed (`confirmAs`).
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.confirmAs.output.value }
   message: >-
-    ${ 'Remove ' & $count(inputs.memberIds) & ' member(s) from ' & steps.group.output.displayName
+    ${ 'Remove ' & $count(inputs.memberIds) & ' member(s) from '
+       & (steps.confirmAs.output.byName ? steps.group.output.displayName : 'the group with object id ' & steps.group.output.id)
        & '? They lose any access, licences or roles granted through this group.' }
 approval:
   required: false
@@ -45,6 +49,21 @@ steps:
       path: /groups/${ $encode($guid(inputs.groupId)) }
       query:
         $select: id,displayName,uniqueName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,isAssignableToRole
+
+  # What the confirmation asks for: the group's name (anyone who may create groups chooses one), or its object id when
+  # the name has nothing a person can type (spaces or invisible characters only) or holds a masked value — such a name
+  # could never be confirmed (the class: what the API's comparison drops, control characters, anything outside the BMP).
+  - id: confirmAs
+    type: transform
+    describe: Work out what the confirmation asks for
+    expression: >-
+      ${ (
+        $name := steps.group.output.displayName;
+        $byName := $type($name) = 'string'
+          and $contains($name, /[^\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\uffa0\ufff0-\ufffb\ud800-\udfff]/)
+          and $not($contains($name, '[redacted]'));
+        { 'value': $byName ? $name : steps.group.output.id, 'byName': $byName }
+      ) }
 
   # AdminForge refuses any write naming a portal group or a protected account by id (protected_object); these checks
   # explain it before anything runs.

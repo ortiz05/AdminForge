@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.enable-user
-version: 1.0.0
+version: 1.1.0
 title: Enable sign-in
 summary: Re-enables sign-in for a disabled cloud user account.
 owner: identity-team
@@ -13,8 +13,11 @@ requires:
   scopes:
     graph: [User.Read.All, User.EnableDisableAccount.All]
   entraRoles: [User Administrator]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# user: their sign-in name.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.lookup.output.userPrincipalName }
   message: ${ 'Allow ' & steps.lookup.output.userPrincipalName & ' to sign in again?' }
 approval:
   required: false

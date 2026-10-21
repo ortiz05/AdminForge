@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.add-distribution-list-members
-version: 1.0.1
+version: 1.1.0
 title: Add members to a distribution list
 summary: Adds people (and any other mail recipients by address) to a distribution list or mail-enabled security group. People who are already members are skipped.
 owner: m365-team
@@ -15,9 +15,14 @@ requires:
     exchange: [Exchange.Manage]
   entraRoles: [Exchange Recipient Administrator]
   licences: [exchange]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# list: its address.
 confirm:
-  type: click
-  message: Add these members? They start receiving mail sent to the list right away.
+  type: typed
+  value: ${ inputs.identity }
+  message: >-
+    ${ 'Add ' & $count(steps.collect.output.addresses) & ' member(s) to ' & inputs.identity
+       & '? They start receiving mail sent to the list right away.' }
 
 inputs:
   identity: { type: string, format: email, label: Distribution list, description: Primary email address of the list }

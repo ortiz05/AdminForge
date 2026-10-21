@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: avd.set-drain-mode
-version: 1.0.0
+version: 1.1.0
 title: Turn drain mode on or off
 summary: >-
   Turns drain mode on for an Azure Virtual Desktop session host (it takes no new sessions; people already signed in
@@ -17,8 +17,11 @@ requires:
     arm: [user_impersonation]
   # Desktop Virtualization Session Host Operator (or Desktop Virtualization Contributor) on the host pool.
   azureRoles: [Desktop Virtualization Session Host Operator]
+# Typed: offered as a bulk action (risk medium or higher), where a run asks for the number of items instead. One
+# host: its name.
 confirm:
-  type: click
+  type: typed
+  value: ${ $split(steps.lookup.output.name, '/')[-1] }
   message: >-
     ${ inputs.drainMode
        ? 'Turn on drain mode for ' & steps.lookup.output.name & '? It takes no new sessions until you turn it off; the ' & $string(steps.lookup.output.properties.sessions ? steps.lookup.output.properties.sessions : 0) & ' signed-in session(s) stay connected.'

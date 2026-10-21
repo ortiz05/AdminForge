@@ -6,9 +6,10 @@ import { repoRoot } from '../lib/repo';
 
 // Typed confirmations on names anyone can choose (security review L4, content review S1). The API never asks anyone to
 // type a value with nothing visible in it or one that holds a masked value (`[redacted]`), so a preview of such a name
-// could never be confirmed — and whoever registered an app could block its revocation that way. These playbooks
-// work out what to ask for in a `confirmAs` step: the name when a person can type it, otherwise the object's id,
-// which the message then shows.
+// could never be confirmed — and whoever registered an app (or created a group) could block a revocation that way.
+// These playbooks work out what to ask for in a `confirmAs` step: the name when a person can type it, otherwise the
+// object's id, which the message then shows. The two that remove things were converted from a click (content review
+// S6: medium-risk bulk actions confirm by typing).
 
 interface Step {
   id: string;
@@ -55,6 +56,19 @@ const CASES: Record<string, { steps: (name: string) => Record<string, { output: 
         },
       },
       role: { output: { properties: { roleName: name } } },
+    }),
+  },
+  'identity.remove-expired-app-credentials': {
+    id: '00000000-0000-4000-8000-000000000302',
+    steps: (name) => ({
+      app: { output: { id: '00000000-0000-4000-8000-000000000302', displayName: name } },
+      expired: { output: { secrets: [{ label: 'ci (expired 2020-01-01)' }], certificates: [] } },
+    }),
+  },
+  'identity.remove-group-members': {
+    id: '00000000-0000-4000-8000-000000000201',
+    steps: (name) => ({
+      group: { output: { id: '00000000-0000-4000-8000-000000000201', displayName: name } },
     }),
   },
 };

@@ -27,7 +27,13 @@ describe('engine: identity parking (§5.6, ADR-010)', () => {
     expect(h.outbound.paths()).toEqual(['/users/lookup']);
     h.identity.signIn(INITIATOR, true);
     expect((await h.exec()).status).toBe('succeeded');
-    expect(h.outbound.paths()).toEqual(['/users/lookup', '/things/disable', '/things/revoke']);
+    // The read runs again before the write that waited (resume-rechecks-guards.test.ts).
+    expect(h.outbound.paths()).toEqual([
+      '/users/lookup',
+      '/users/lookup',
+      '/things/disable',
+      '/things/revoke',
+    ]);
     expect(h.runEvents()).toEqual(['running', 'awaiting_arm', 'running', 'succeeded']);
   });
 

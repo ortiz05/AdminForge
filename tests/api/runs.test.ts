@@ -244,6 +244,7 @@ describe('POST /api/runs', () => {
       t.outbound.calls.map((c) => [c.call.method, c.mode, c.user, c.call.declaredWrite ?? false]),
     ).toEqual([
       ['GET', 'read', AVERY.upn, false],
+      ['GET', 'read', AVERY.upn, false], // read again before the write that waited (resume-rechecks-guards)
       ['PATCH', 'write', AVERY.upn, true],
       ['POST', 'write', AVERY.upn, true],
     ]);
@@ -256,7 +257,7 @@ describe('POST /api/runs', () => {
     ]);
     expect(writes[0]!.details).toMatchObject({
       request: { method: 'PATCH', path: `/users/${USER}`, body: { accountEnabled: false } },
-      requestId: 'req-2',
+      requestId: 'req-3',
     });
     expect(t.audit.rows.map((r) => r.action)).toEqual([
       'run.created',
@@ -388,6 +389,7 @@ describe('approvals', () => {
     expect(detail.run.status).toBe('succeeded');
     expect(t.outbound.calls.map((c) => [c.call.method, c.user, c.mode])).toEqual([
       ['GET', AVERY.upn, 'read'],
+      ['GET', BLAKE.upn, 'read'], // read again, as the approver, before the write (resume-rechecks-guards)
       ['PATCH', BLAKE.upn, 'write'],
     ]);
     expect(
@@ -731,6 +733,7 @@ describe('bulk actions', () => {
     expect(done.children[0].status).toBe('succeeded');
     expect(t.outbound.calls.map((c) => [c.call.method, c.user])).toEqual([
       ['GET', AVERY.upn],
+      ['GET', BLAKE.upn], // the child reads again before its write (resume-rechecks-guards)
       ['PATCH', BLAKE.upn],
     ]);
     await t.close();

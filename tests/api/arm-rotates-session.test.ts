@@ -246,6 +246,7 @@ describe('what the session acts through moves with it (runs, approvals, show-onc
     expect(done.run.status).toBe('succeeded');
     expect(outbound.calls.map((c) => [c.call.method, c.user])).toEqual([
       ['GET', AVERY.upn],
+      ['GET', AVERY.upn], // read again before the write that waited (resume-rechecks-guards)
       ['PATCH', AVERY.upn],
     ]);
     expect((t.repository as MemoryRunRepository).runs.get(runId)!.sessionHash).toBe(hashOf(armed.cookie));

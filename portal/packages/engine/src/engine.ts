@@ -69,6 +69,8 @@ import {
  *   the approver (delegated runs, ADR-010). Write steps park the run in `awaiting_arm` until the actor is armed;
  *   token failures park it in `awaiting_reauth`.
  * - `onError: compensate` runs completed steps' `compensate` blocks in reverse order.
+ * - A pass that continues an earlier one (after a decision, a re-arm, a sign-in, a `wait` or a restart) reads and
+ *   checks again before its next write: see `recheck`.
  */
 
 export interface EngineOptions {
@@ -133,6 +135,19 @@ interface Frame {
   locals: Map<string, View>;
   parent: Frame | null;
   vars: Record<string, unknown>;
+  /** A re-check (see `recheck`): stale reads and checks run again; nothing else starts, nothing is sent. */
+  recheck?: boolean;
+  /** What this frame reused from an earlier pass that must run again before the next write in its scope. */
+  rechecks?: Recheck[];
+}
+
+/** A stale read or check (or a finished forEach holding some), run again at most once per pass. */
+interface Recheck {
+  /** Walk order, so a transform runs after the read it is built from. */
+  order: number;
+  /** Runs it again as `actor` (who the write it guards runs as). */
+  run: (actor: Actor) => Promise<Flow>;
+  done?: Promise<Flow>;
 }
 
 type ApprovalStep = Extract<Step, { type: 'approval' }>;
@@ -143,6 +158,10 @@ type ForEachStep = Extract<Step, { type: 'forEach' }>;
 
 const CONTROL = new Set(['branch', 'forEach', 'approval', 'manual', 'wait']);
 const REUSABLE: readonly StepStatus[] = ['succeeded', 'skipped', 'planned', 'failed', 'compensated'];
+/** A write record in one of these states was sent (or may have been): what was read before it is not read again. */
+const SENT: readonly StepStatus[] = ['succeeded', 'failed', 'compensated', 'needs_review'];
+const RECHECK_HINT =
+  'The run had paused before this change (for an approval, input, write access, a sign-in or a restart), so this was checked again first. Check what changed, then start a new run if the change is still needed.';
 const NON_TERMINAL: readonly RunStatus[] = [
   'queued',
   'running',
@@ -219,6 +238,16 @@ class Execution {
    * has secrets their outputs may hold `[redacted]` instead of the real value (see `restoreView`).
    */
   private readonly restored = new Set<string>();
+  /**
+   * Paths of reads, transforms and asserts an earlier pass ran after the last write sent in their scope: run again
+   * before this pass sends a write (see `recheck`). Empty on a first pass and in dry runs.
+   */
+  private readonly stale = new Set<string>();
+  /** Highest attempt number recorded per path (a step run again continues the count). */
+  private readonly attempts = new Map<string, number>();
+  /** Attempts of an earlier re-check left in flight (a restart): closed at start, the finished record before stands. */
+  private readonly dangling: StepRecord[] = [];
+  private recheckOrder = 0;
 
   constructor(
     private readonly engine: Engine,
@@ -252,12 +281,15 @@ class Execution {
     this.dryRun = run.dryRun;
     this.depth = opts.depth ?? 0;
     this.secrets = secretInputValues(def.inputs, run.inputs ?? {});
-    for (const r of [...records].sort((a, b) => a.seq - b.seq)) {
+    const sorted = [...records].sort((a, b) => a.seq - b.seq);
+    for (const r of sorted) {
       this.records.set(r.path, r);
       this.restored.add(r.path);
       this.seq = Math.max(this.seq, r.seq + 1);
+      this.attempts.set(r.path, Math.max(this.attempts.get(r.path) ?? 0, r.attempt));
     }
     for (const s of allSteps(def)) this.byId.set(s.id, s);
+    if (!this.dryRun) this.findStale(sorted);
     // The reason travels with the abort: an interrupt (shutdown, lost lock) is not a cancel.
     const signal = opts.signal;
     if (signal) {
@@ -311,6 +343,7 @@ class Execution {
     this.run = updated;
     if (was !== 'running') await this.runEvent('running');
     this.top = { prefix: '', actor: this.run.initiator, locals: new Map(), parent: null, vars: {} };
+    await this.closeDangling();
 
     const tooBig = checkDefinition(this.def, this.limits);
     if (tooBig)
@@ -648,6 +681,175 @@ class Execution {
     return null;
   }
 
+  // ───────────────────────────── checking again on resume ─────────────────────────────
+
+  /**
+   * A run that paused (an approval, input, write access, a sign-in, a `wait`, a restart) reads and checks again before
+   * it writes. A pass that continues an earlier one runs again, right before it sends its next write, the reads,
+   * transforms and asserts the earlier pass ran since the last write sent in their scope — as the person the write runs
+   * as — so a guard such as "the session still belongs to the person the list showed" holds now, not when the run
+   * paused. A step that fails now fails like the first time (its `onError` applies: by default the run ends `failed`
+   * with the assert's message) and the write is not sent.
+   *
+   * What the run decided stays as recorded: approvals and input, `when`, branch arms and forEach items. Writes already
+   * sent are never sent again, and what was read before them is not read again. Steps with show-once secrets and child
+   * playbooks (which check for themselves) are not run again. Scope: a step inside a forEach iteration guards that
+   * iteration's writes, a step outside guards every write after it; a finished forEach before the write is walked
+   * again with its items as recorded, so its reads run again and its output is rebuilt.
+   */
+  private findStale(sorted: readonly StepRecord[]) {
+    // A re-check attempt that never finished (a restart, a sign-in needed mid-call) leaves the finished record before
+    // it in force: that step is still due to run again.
+    const finished = new Map<string, StepRecord>();
+    for (const r of sorted) if (r.status === 'succeeded' || r.status === 'failed') finished.set(r.path, r);
+    for (const [path, rec] of this.records) {
+      const before = finished.get(path);
+      if (!before || before === rec || !this.recheckable(before)) continue;
+      if (rec.status === 'running') this.dangling.push(rec);
+      this.records.set(path, before);
+    }
+    // Writes sent, in seq order: a step is covered by one sent after it that could build on it.
+    const sent = [...this.records.values()]
+      .filter((r) => this.wasSent(r))
+      .sort((a, b) => a.seq - b.seq)
+      .map((r) => ({ seq: r.seq, frames: framesOf(r.path) }));
+    for (const [path, rec] of this.records) {
+      if ((rec.status !== 'succeeded' && rec.status !== 'failed') || !this.recheckable(rec)) continue;
+      const frames = framesOf(path);
+      let lo = 0;
+      for (let hi = sent.length; lo < hi;) {
+        const mid = (lo + hi) >> 1;
+        if (sent[mid]!.seq > rec.seq) hi = mid;
+        else lo = mid + 1;
+      }
+      let covered = false;
+      for (let i = lo; i < sent.length && !covered; i++) covered = sameStrand(frames, sent[i]!.frames);
+      if (!covered) this.stale.add(path);
+    }
+  }
+
+  /** What a re-check runs again: reads, transforms and asserts (not show-once secrets, not child playbooks). */
+  private recheckable(rec: StepRecord): boolean {
+    const step = this.byId.get(rec.stepId);
+    if (!step || rec.path.includes('#') || CONTROL.has(step.type) || stepMode(step) !== 'read') return false;
+    if (step.secret || step.secretOutputs) return false;
+    const handler = this.handlers[step.type];
+    return !!handler && !handler.plansItself;
+  }
+
+  /** A write that was sent (or may have been), or a child playbook that started: what came before it stays. */
+  private wasSent(rec: StepRecord): boolean {
+    if (rec.mode !== 'write' || rec.path.includes('#')) return false;
+    if (SENT.includes(rec.status)) return true;
+    return this.handlers[rec.type]?.plansItself === true && !['skipped', 'cancelled'].includes(rec.status);
+  }
+
+  /** Closes the re-check attempts a stop left in flight; the record before each stands (see `findStale`). */
+  private async closeDangling() {
+    for (const rec of this.dangling.splice(0))
+      await this.store.saveStep(
+        this.run.id,
+        {
+          ...rec,
+          status: 'retried',
+          endedAt: this.clock.now(),
+          error: {
+            code: 'interrupted',
+            message: 'The worker stopped while this attempt was in flight.',
+            stepId: rec.stepId,
+            path: rec.path,
+          },
+        },
+        { actor: null, dryRun: this.dryRun },
+      );
+  }
+
+  /** The frame a re-check runs in: `frame`'s steps and loop variables, as `actor`. */
+  private recheckFrame(frame: Frame, actor: Actor): Frame {
+    const { prefix, locals, parent, vars } = frame;
+    return { prefix, actor, locals, parent, vars, recheck: true };
+  }
+
+  /** Whether a frame still holds something to run again (a write in it hasn't covered it yet). */
+  private pendingRechecks(frame: Frame): boolean {
+    return (frame.rechecks ?? []).some((u) => !u.done);
+  }
+
+  /** Notes a stale step this pass reused: it runs again before the next write in its scope. */
+  private keepForRecheck(step: Step, frame: Frame, path: string) {
+    if (frame.recheck || !this.stale.has(path)) return;
+    (frame.rechecks ??= []).push({
+      order: this.recheckOrder++,
+      run: (actor) => this.runLeaf(step, this.recheckFrame(frame, actor)),
+    });
+  }
+
+  /**
+   * Before a write is sent: runs again, in walk order and as the person the write runs as, what this pass reused from
+   * an earlier one in the write's scope (its frame and the frames around it). Returns the flow to stop with when one of
+   * them now fails, or null to send. A sign-in that a step needs is thrown, and the write parks on it.
+   */
+  private async recheck(frame: Frame, path: string): Promise<Flow | null> {
+    const units: Recheck[] = [];
+    for (let f: Frame | null = frame; f; f = f.parent) units.push(...(f.rechecks ?? []));
+    if (!units.length) return null;
+    units.sort((a, b) => a.order - b.order);
+    if (units.some((u) => !u.done))
+      await this.emit(null, {
+        type: 'log',
+        level: 'info',
+        data: {
+          message: 'The run paused before this change, so what it read and checked runs again first.',
+          path,
+        },
+      });
+    for (const u of units) {
+      u.done ??= u.run(frame.actor);
+      const flow = await u.done;
+      if (flow.kind !== 'ok') return flow;
+    }
+    return null;
+  }
+
+  /** A stale step run again: a new attempt (its `when` isn't evaluated again — it ran). */
+  private async rerun(
+    step: Step,
+    frame: Frame,
+    handler: StepHandler,
+    path: string,
+    mode: Mode,
+  ): Promise<Flow> {
+    this.stale.delete(path);
+    const outcome = await this.attempt({
+      stepId: step.id,
+      type: step.type,
+      path,
+      mode,
+      handler,
+      body: step,
+      retry: step.retry,
+      timeout: step.timeout,
+      frame,
+      describe: step.describe,
+      dryRunOutput: step.dryRunOutput,
+      existing: undefined,
+      firstAttempt: (this.attempts.get(path) ?? 0) + 1,
+    });
+    if (outcome.kind === 'flow') return outcome.flow;
+    this.setView(frame, step.id, this.viewOf(outcome.rec));
+    if (outcome.kind === 'ok') return OK;
+    const error = outcome.rec.error!;
+    return this.policy(step, error.hint ? error : { ...error, hint: RECHECK_HINT });
+  }
+
+  /** In a re-check only what already ran is walked: nothing new starts, nothing waits, no write is sent. */
+  private rewalks(step: Step, frame: Frame): boolean {
+    const rec = this.records.get(frame.prefix + step.id);
+    if (!rec) return false;
+    if (step.type === 'branch' || step.type === 'forEach') return true;
+    return REUSABLE.includes(rec.status);
+  }
+
   // ───────────────────────────── step walk ─────────────────────────────
 
   private async runSteps(steps: readonly Step[], frame: Frame): Promise<Flow> {
@@ -661,6 +863,7 @@ class Execution {
   }
 
   private runStep(step: Step, frame: Frame): Promise<Flow> {
+    if (frame.recheck && !this.rewalks(step, frame)) return Promise.resolve(OK);
     switch (step.type) {
       case 'branch':
         return this.runBranch(step, frame);
@@ -849,8 +1052,12 @@ class Execution {
     const path = frame.prefix + step.id;
     const mode = stepMode(step);
     const handler = this.handlers[step.type];
+    if (frame.recheck && handler && this.stale.has(path)) return this.rerun(step, frame, handler, path, mode);
     const pre = await this.prelude(step, frame, mode);
-    if ('done' in pre) return pre.done;
+    if ('done' in pre) {
+      this.keepForRecheck(step, frame, path);
+      return pre.done;
+    }
     const rec = pre.rec;
     if (!handler) {
       const error: RunError = {
@@ -872,6 +1079,7 @@ class Execution {
     if (rec) {
       if (REUSABLE.includes(rec.status)) {
         this.setView(frame, step.id, await this.restoreView(step, handler, rec, frame, path, mode));
+        this.keepForRecheck(step, frame, path);
         return OK;
       }
       if (rec.status === 'running') {
@@ -910,6 +1118,9 @@ class Execution {
       describe: step.describe,
       dryRunOutput: step.dryRunOutput,
       existing: rec && (rec.status === 'waiting' || rec.status === 'retried') ? rec : undefined,
+      ...(mode === 'write' && handler.external && !this.dryRun && !frame.recheck
+        ? { beforeSend: () => this.recheck(frame, path) }
+        : {}),
     });
     if (outcome.kind === 'ok') {
       this.setView(frame, step.id, this.viewOf(outcome.rec));
@@ -940,6 +1151,10 @@ class Execution {
     dryRunOutput: unknown;
     existing: StepRecord | undefined;
     compensation?: boolean;
+    /** Attempt number of a new record (a step run again continues its count). Default 1. */
+    firstAttempt?: number;
+    /** Once the identity is resolved, before the first send: re-checks on resume (see `recheck`). */
+    beforeSend?: () => Promise<Flow | null>;
   }): Promise<
     { kind: 'ok'; rec: StepRecord } | { kind: 'failed'; rec: StepRecord } | { kind: 'flow'; flow: Flow }
   > {
@@ -951,7 +1166,9 @@ class Execution {
       const r =
         rec ??
         this.newRecord(a.stepId, a.type, path, mode, frame.actor, {
-          attempt: a.existing ? a.existing.attempt + (a.existing.status === 'retried' ? 1 : 0) : 1,
+          attempt: a.existing
+            ? a.existing.attempt + (a.existing.status === 'retried' ? 1 : 0)
+            : (a.firstAttempt ?? 1),
         });
       await this.close(r, frame.actor, { status: 'failed', error });
       return { kind: 'failed' as const, rec: r };
@@ -1030,15 +1247,47 @@ class Execution {
         if (mode === 'write' && identity.mode !== 'write') throw new IdentityUnavailable('not_armed');
       } catch (err) {
         if (!(err instanceof IdentityUnavailable)) return fail(err);
+        // A step run again for a write: the write parks on the sign-in, not this step (see `recheck`).
+        if (frame.recheck) throw err;
         return { kind: 'flow', flow: await this.parkIdentity(a, err) };
       }
+    }
+
+    // A pass that continues an earlier one reads and checks again before the write goes out (see `recheck`) — not when
+    // it only follows a child playbook that already started.
+    if (a.beforeSend && !(a.existing?.status === 'waiting' && !a.existing.error)) {
+      let stop: Flow | null;
+      try {
+        stop = await a.beforeSend();
+      } catch (err) {
+        if (err instanceof IdentityUnavailable)
+          return { kind: 'flow', flow: await this.parkIdentity(a, err) };
+        throw err;
+      }
+      if (stop) {
+        // Never sent: a write that waited for write access or a sign-in stops waiting.
+        if (stop.kind === 'fail' && a.existing?.status === 'waiting')
+          await this.close(a.existing, frame.actor, { status: 'skipped', error: null });
+        return { kind: 'flow', flow: stop };
+      }
+      // The request is built from what was read now.
+      try {
+        prep = await handler.prepare(
+          a.body as never,
+          this.context(a.stepId, path, mode, frame, this.ac.signal, seqRef),
+        );
+      } catch (err) {
+        return fail(err);
+      }
+      if (handler.external && !handler.plansItself && !intercepted && containsRedacted(prep.payload))
+        return fail(redactedValueError());
     }
 
     let attempt = a.existing
       ? a.existing.status === 'retried'
         ? a.existing.attempt + 1
         : a.existing.attempt
-      : 1;
+      : (a.firstAttempt ?? 1);
     let reuseSeq = a.existing?.status === 'waiting' ? a.existing.seq : undefined;
     for (;;) {
       const rec = this.newRecord(a.stepId, a.type, path, mode, frame.actor, {
@@ -1109,6 +1358,14 @@ class Execution {
         const why = RunInterrupted.from(this.ac.signal) ?? RunInterrupted.from(err);
         if (why) return { kind: 'flow', flow: { kind: 'interrupted', why } };
         if (err instanceof IdentityUnavailable) {
+          if (frame.recheck) {
+            // A step run again for a write: the write parks; this attempt is superseded (see `findStale`).
+            await this.close(rec, frame.actor, {
+              status: 'retried',
+              error: { code: err.reason, message: err.message, stepId: a.stepId, path },
+            });
+            throw err;
+          }
           await this.close(rec, frame.actor, {
             status: 'waiting',
             error: { code: err.reason, message: err.message, stepId: a.stepId, path },
@@ -1313,6 +1570,9 @@ class Execution {
     let park: Extract<Flow, { kind: 'park' }> | null = null;
     /** Cancelled or interrupted: the loop stops as it is (an interrupted one resumes later). */
     let halted: Extract<Flow, { kind: 'cancelled' | 'interrupted' }> | null = null;
+    /** Thrown by an iteration: rethrown once the iterations in flight have finished (none keeps going alone). */
+    let thrown: { err: unknown } | null = null;
+    const iframes: Frame[] = [];
 
     const iterate = async (index: number) => {
       const iframe: Frame = {
@@ -1321,7 +1581,9 @@ class Execution {
         locals: new Map(),
         parent: frame,
         vars: { [as]: items[index], index },
+        ...(frame.recheck ? { recheck: true } : {}),
       };
+      iframes.push(iframe);
       const flow = await this.runSteps(step.steps, iframe);
       const outputs: Record<string, unknown> = {};
       let failed = false;
@@ -1352,11 +1614,17 @@ class Execution {
     const worker = async () => {
       while (!stop && next < items.length) {
         const i = next++;
-        await iterate(i);
+        try {
+          await iterate(i);
+        } catch (err) {
+          stop = true;
+          thrown ??= { err };
+        }
       }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, items.length)) }, worker));
 
+    if (thrown) throw (thrown as { err: unknown }).err;
     if (halted) return halted;
     const output = results.filter((r): r is Record<string, unknown> => r !== undefined);
     if (failure) {
@@ -1382,6 +1650,13 @@ class Execution {
       });
     } else loopRec.output = output;
     this.setView(frame, step.id, this.viewOf(loopRec));
+    // Reads and checks reused inside the loop that no write in it has covered: the loop is walked again (its items as
+    // recorded) before the next write after it, so they run again and its output is rebuilt (see `recheck`).
+    if (!frame.recheck && iframes.some((f) => this.pendingRechecks(f)))
+      (frame.rechecks ??= []).push({
+        order: this.recheckOrder++,
+        run: (actor) => this.runForEach(step, this.recheckFrame(frame, actor)),
+      });
     return OK;
   }
 
@@ -1856,6 +2131,22 @@ class Execution {
     };
     return this.end(failures.length ? 'needs_review' : 'compensated', { error });
   }
+}
+
+/** The forEach iterations a step path is inside: `outer[1].inner[0].get` → `['outer[1]', 'inner[0]']`. */
+const framesOf = (path: string): string[] => path.split('.').slice(0, -1);
+
+/**
+ * Whether a step in `later` frames (which ran after one in `earlier` frames) could build on it: anywhere but another
+ * iteration of a forEach both are in (`loop[1].x` doesn't build on `loop[0].get`; `after` and `loop[0].w` build on
+ * `get`, and `after` on `loop[0].get`).
+ */
+function sameStrand(earlier: readonly string[], later: readonly string[]): boolean {
+  for (let k = 0; k < Math.min(earlier.length, later.length); k++) {
+    if (earlier[k] === later[k]) continue;
+    return earlier[k]!.replace(/\[\d+\]$/, '') !== later[k]!.replace(/\[\d+\]$/, '');
+  }
+  return true;
 }
 
 /** Exponential (or fixed) backoff from the policy's first delay (default 1 s), capped at 5 min; Retry-After wins when longer. */

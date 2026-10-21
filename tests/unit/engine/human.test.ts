@@ -49,8 +49,10 @@ describe('engine: approvals (ADR-010)', () => {
         comment: 'ok by me',
       },
     });
+    // The read before the gate runs again (as the approver) before the first write: the run paused.
     expect(h.outbound.calls.map((c) => [c.call.path, c.identity.actor.oid])).toEqual([
       ['/users/lookup', INITIATOR.oid],
+      ['/users/lookup', APPROVER.oid],
       ['/things/disable', APPROVER.oid],
       ['/things/revoke', APPROVER.oid],
     ]);

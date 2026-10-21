@@ -8,5 +8,9 @@
  * enum value dropped, a default that changes meaning). Additive, optional changes keep the number. After an upgrade
  * that bumps it, publish the content again (`adminforge publish`); rows that still fail are refused, never run.
  * Rule recorded in docs/decisions.md (Content and monitoring).
+ *
+ * 1 — rows published before the version existed.
+ * 2 — param and input `pattern:`s refused when they can backtrack without bound; `status` columns need tones and
+ *     plain categories are `enum` columns (platform review, 2026-10-21).
  */
-export const CONTENT_SCHEMA_VERSION = 1;
+export const CONTENT_SCHEMA_VERSION = 2;

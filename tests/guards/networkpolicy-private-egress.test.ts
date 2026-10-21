@@ -43,7 +43,7 @@ const within = (inner: string, outer: string) => {
 };
 
 describe('NetworkPolicy: private egress is refused', () => {
-  const [base] = policies('base/');
+  const base = policies('base/').find((p) => p.metadata.name === 'adminforge');
 
   it('the base policy allows 443 to public addresses only', () => {
     expect(base, 'base/networkpolicy.yaml').toBeDefined();
@@ -68,6 +68,18 @@ describe('NetworkPolicy: private egress is refused', () => {
         // DNS only to the cluster's resolver: an open port 53 is a way out for data.
         expect(rule.to.every((t: Doc) => t.podSelector?.matchLabels?.['k8s-app'] === 'kube-dns')).toBe(true);
     }
+  });
+
+  it('the loader pod gets no network at all (kubectl cp and exec need none)', () => {
+    const loader = all.find((m) => m.file === `${DIR}tools/loader-pod.yaml`)?.doc;
+    const label = loader?.metadata?.labels?.['app.kubernetes.io/name'];
+    expect(label).toBe('adminforge-loader');
+    const policy = policies('base/').find(
+      (p) => p.spec.podSelector?.matchLabels?.['app.kubernetes.io/name'] === label,
+    );
+    expect(policy?.spec.policyTypes).toEqual(['Ingress', 'Egress']);
+    expect(policy?.spec.ingress ?? []).toEqual([]);
+    expect(policy?.spec.egress ?? []).toEqual([]);
   });
 
   it("the example overlay never loosens the base: it doesn't patch the base policy's egress", () => {

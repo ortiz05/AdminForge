@@ -15,7 +15,8 @@
 #   kubectl -n adminforge scale deploy/adminforge --replicas=1
 #
 # Same user, group and security settings as the api container, so the file is the API's; the image is the app image
-# (it has `sleep`), pinned like the Deployment's.
+# (it has `sleep`), pinned like the Deployment's. No network, in or out: the base's NetworkPolicy adminforge-loader
+# selects it by its label (kubectl cp and exec go through the kubelet).
 apiVersion: v1
 kind: Pod
 metadata:

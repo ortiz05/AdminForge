@@ -26,7 +26,7 @@ import type { RunErrorInfo, ScheduleRow, ScheduleRunRow, ScheduleRunStatus, Sche
  * `overlap: queue`), then report progress (the heartbeat /readyz reads). Every run is a `schedule_runs` row and an
  * audit event "scheduled by X, executed as automation identity"; failures also raise `schedule.failed` (audit +
  * event). Runs are bounded by `timeoutSeconds`; a slot stays taken until the job itself ends (capped). Run now on a
- * switched-off schedule is file only: nothing is emailed, posted or notified.
+ * disabled schedule only writes its file: nothing is emailed, posted or notified.
  */
 
 type Log = {
@@ -373,7 +373,18 @@ export class Scheduler {
         continue;
       }
       if (s.definition.overlap !== 'allow' && busy.has(s.id)) continue;
-      const claimed = await this.o.store.updateRun(q.id, { status: 'running', startedAt: now }, 'queued');
+      // A Run now queued while the schedule was enabled, and disabled before it started, is file only too (F-10):
+      // decided from this pass's row, not only when it was asked for.
+      const fileOnly = q.trigger === 'manual' && !s.enabled && q.result?.fileOnly !== true;
+      const claimed = await this.o.store.updateRun(
+        q.id,
+        {
+          status: 'running',
+          startedAt: now,
+          ...(fileOnly ? { result: { ...q.result, fileOnly: true } } : {}),
+        },
+        'queued',
+      );
       if (!claimed) continue;
       busy.add(s.id);
       this.launch(s, claimed);
@@ -592,7 +603,7 @@ export class Scheduler {
     // Run now (and its retries): who asked, by oid — a UPN can't be compared with an approver's oid.
     const requestedByOid = typeof run.result?.requestedByOid === 'string' ? run.result.requestedByOid : null;
     const attempt = typeof run.result?.attempt === 'number' ? run.result.attempt : 0;
-    // Run now while the schedule was off (F-10): the job writes its file, nobody is emailed, posted or notified.
+    // Run now while the schedule is disabled (F-10): the job writes its file, nobody is emailed, posted or notified.
     const fileOnly = run.result?.fileOnly === true;
     // Portal schedules: the creator's UPN (the row keeps their oid; the definition's owner is their UPN).
     const scheduledBy =
@@ -883,6 +894,9 @@ export class Scheduler {
           ...(run.runId ? { runId: run.runId } : {}),
           ...(run.artifactPath ? { artifact: run.artifactPath } : {}),
           ...(error ? { error: error.code } : {}),
+          // Whether it could have delivered anything, and which occurrence a missed run was.
+          ...(run.result?.fileOnly === true ? { fileOnly: true } : {}),
+          ...(typeof run.result?.missedAt === 'string' ? { missedAt: run.result.missedAt } : {}),
           ...(transactions > 0 ? { transactions: run.result?.transactionCodes } : {}),
         },
       })

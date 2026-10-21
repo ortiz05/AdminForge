@@ -74,8 +74,12 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
         aria-label={withLabel ? undefined : label}
         label={withLabel ? (schedule.enabled ? 'Enabled' : 'Disabled') : undefined}
         description={
-          withLabel && schedule.writeCapable && !schedule.enabled
-            ? 'Enabling needs a second approver.'
+          withLabel && !schedule.enabled
+            ? schedule.writeCapable
+              ? 'Enabling needs a second approver.'
+              : schedule.job.kind === 'report'
+                ? 'Run now only writes the file until you enable it.'
+                : 'Run now sends nothing until you enable it.'
             : undefined
         }
         checked={schedule.enabled}
@@ -101,19 +105,31 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
 }
 
 /**
- * What Run now does on a switched-off schedule (F-10): the job runs, but nothing is sent until the schedule is on — a
- * report writes its file only. Null while the schedule is on.
+ * What Run now does on a disabled schedule (F-10): the job runs, but nothing is sent until the schedule is enabled — a
+ * report only writes its file. Null while it is enabled, and for write-capable jobs (Run now refuses those until a
+ * second person approved enabling them).
  */
-export function fileOnlyNote(schedule: Pick<ScheduleItem, 'enabled' | 'job'>): string | null {
-  if (schedule.enabled) return null;
+export function fileOnlyNote(
+  schedule: Pick<ScheduleItem, 'enabled' | 'writeCapable' | 'job'>,
+): string | null {
+  if (schedule.enabled || schedule.writeCapable) return null;
   return schedule.job.kind === 'report'
-    ? 'The schedule is off, so Run now writes the file only: nothing is emailed, posted to Teams or notified.'
-    : 'The schedule is off, so Run now sends no email, Teams message or notification.';
+    ? 'This schedule is disabled, so Run now only writes the file: it sends no email, Teams message or notification.'
+    : 'This schedule is disabled, so Run now sends no email, Teams message or notification.';
+}
+
+/** The toast after Run now: what it does, from the API's answer (the page's state may be a moment old). */
+function startedText(schedule: ScheduleItem, fileOnly: boolean): string {
+  if (!fileOnly) return `It runs ${runsAsPhrase(schedule.runsAs)}; the result appears in its history.`;
+  return schedule.job.kind === 'report'
+    ? 'The schedule is disabled, so this run only writes the file and sends nothing. To send it, enable the schedule and run it again.'
+    : 'The schedule is disabled, so this run sends no email, Teams message or notification. The result appears in its history.';
 }
 
 /**
  * Run the job now, as whoever the schedule runs as. Write-capable jobs confirm first; one that waits for its creator to
- * sign in is locked, saying so. On a switched-off schedule it sends nothing, and says so before and after.
+ * sign in is locked, saying so. On a disabled schedule it sends nothing, and says so before (its description) and
+ * after (the toast).
  */
 export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem; size?: 'sm' | 'md' }) {
   const { toast } = useToast();
@@ -122,13 +138,11 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
   const fileOnly = fileOnlyNote(schedule);
   const mutation = useMutation({
     mutationFn: () => runScheduleNow(schedule.key),
-    onSuccess: () => {
+    onSuccess: (r) => {
       toast({
         tone: 'info',
         title: `${schedule.title} started`,
-        description: fileOnly
-          ? `${fileOnly} The result appears in its history.`
-          : `It runs ${runsAsPhrase(schedule.runsAs)}; the result appears in its history.`,
+        description: startedText(schedule, r.fileOnly),
       });
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['reports'] });

@@ -124,7 +124,7 @@ export interface ScheduleRunItem {
   runId?: string;
   artifact?: { name: string; href: string; size: number | null };
   error?: { code: string; message: string; hint?: string };
-  /** Why a run didn't happen (skipped runs), or sent nothing (Run now while the schedule was off). */
+  /** Why a run didn't happen (skipped runs), or sent nothing (Run now while the schedule was disabled). */
   reason?: string;
 }
 
@@ -133,16 +133,16 @@ function fileOnlyReason(r: Pick<ScheduleRunRow, 'status'>, report: boolean): str
   const now = r.status === 'queued' || r.status === 'running';
   if (report)
     return now
-      ? 'The schedule is off, so this run writes the file only: nothing is emailed, posted to Teams or notified.'
-      : 'The schedule was off, so this run wrote the file only: nothing was emailed, posted to Teams or notified.';
+      ? 'The schedule is disabled, so this run only writes the file: it sends no email, Teams message or notification.'
+      : 'The schedule was disabled, so this run only wrote the file: it sent no email, Teams message or notification.';
   return now
-    ? 'The schedule is off, so this run sends no email, Teams message or notification.'
-    : 'The schedule was off, so this run sent no email, Teams message or notification.';
+    ? 'The schedule is disabled, so this run sends no email, Teams message or notification.'
+    : 'The schedule was disabled, so this run sent no email, Teams message or notification.';
 }
 
-/** Run now on a switched-off schedule (F-10): what the answer says. */
+/** Run now on a disabled schedule (F-10): what the answer says. */
 export const FILE_ONLY_MESSAGE =
-  'The schedule is switched off, so this run writes the file only: nothing is emailed, posted to Teams or notified.';
+  'The schedule is disabled, so this run only writes the file: it sends no email, Teams message or notification.';
 
 /** Schedule approvals in the inbox shape the web UI reads (same as run TaskViews, subjectType 'schedule'). */
 export interface ScheduleApprovalView {
@@ -540,8 +540,8 @@ export class ScheduleService {
   }
 
   /**
-   * POST /run: queues a manual run for the scheduler. On a switched-off schedule it is how an owner tries it before
-   * turning it on, so the run writes its file only (F-10): no email, Teams post or notification until it is on.
+   * POST /run: queues a manual run for the scheduler. On a disabled schedule it is how an owner tries it before
+   * enabling it, so the run only writes its file (F-10): no email, Teams post or notification until it is enabled.
    */
   async runNow(
     c: Caller,
@@ -671,7 +671,7 @@ export class ScheduleService {
       ...(r.error ? { error: r.error } : {}),
       // Why a run didn't happen (overlap, paused, deleted, needs sign-in): written by the scheduler, never tenant data.
       ...(r.status === 'skipped' && typeof r.result?.reason === 'string' ? { reason: r.result.reason } : {}),
-      // Run now while the schedule was off: the history says why nobody heard about it.
+      // Run now while the schedule was disabled: the history says why nobody heard about it.
       ...(r.status !== 'skipped' && r.result?.fileOnly === true ? { reason: fileOnlyReason(r, report) } : {}),
     };
   }

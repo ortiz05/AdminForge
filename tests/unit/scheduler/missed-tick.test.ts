@@ -60,6 +60,7 @@ describe('a missed tick', () => {
       status: 'skipped',
       trigger: 'cron',
       error: 'schedule_missed',
+      missedAt: due.toISOString(),
       scheduleRunId: run!.id,
     });
     expect(h.published).toContainEqual({

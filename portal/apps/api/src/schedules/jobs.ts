@@ -69,12 +69,12 @@ export interface JobContext {
   scheduledBy: string | null;
   /** Run now: the requester's oid (they can't approve gates in the run they asked for). */
   requestedByOid?: string | null;
-  /** Run now on a switched-off schedule (F-10): write the file, send nothing — no email, no Teams post. */
+  /** Run now on a disabled schedule (F-10): write the file, send nothing — no email, no Teams post. */
   fileOnly?: boolean;
 }
 
 /** The delivery note of an email or Teams target a file-only run didn't send. */
-export const FILE_ONLY_NOTE = 'Not sent: the schedule is switched off, so Run now writes the file only.';
+export const FILE_ONLY_NOTE = 'Not sent: the schedule is disabled, so Run now only writes the file.';
 
 /** What happened to one email or Teams target of a report run (`skipped`: a file-only run). */
 type DeliveryNote = Omit<DeliveryStatus, 'status'> & { status: DeliveryStatus['status'] | 'skipped' };

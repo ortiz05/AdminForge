@@ -303,10 +303,16 @@ export async function setScheduleEnabled(
   });
 }
 
-export async function runScheduleNow(key: string): Promise<{ scheduleRunId: string | null }> {
+export async function runScheduleNow(
+  key: string,
+): Promise<{ scheduleRunId: string | null; fileOnly: boolean }> {
   return api(`/api/schedules/${encodeURIComponent(key)}/run`, {
     method: 'POST',
-    schema: parser((input) => ({ scheduleRunId: pick(rec(input), 'scheduleRunId', 'id') ?? null })),
+    schema: parser((input) => ({
+      scheduleRunId: pick(rec(input), 'scheduleRunId', 'id') ?? null,
+      // The schedule is disabled: the run only writes its file (F-10).
+      fileOnly: bool(rec(input).fileOnly) ?? false,
+    })),
   });
 }
 

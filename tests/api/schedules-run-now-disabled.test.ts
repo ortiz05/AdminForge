@@ -69,7 +69,7 @@ describe('Run now on a switched-off schedule', () => {
       scheduleRunId: expect.any(String),
       fileOnly: true,
       message:
-        'The schedule is switched off, so this run writes the file only: nothing is emailed, posted to Teams or notified.',
+        'The schedule is disabled, so this run only writes the file: it sends no email, Teams message or notification.',
     });
     expect(jobs.calls).toHaveLength(1);
     expect(jobs.calls[0]!.fileOnly).toBe(true);
@@ -81,11 +81,12 @@ describe('Run now on a switched-off schedule', () => {
     expect(item).toMatchObject({
       status: 'succeeded',
       trigger: 'manual',
-      reason: 'The schedule was off, so this run sent no email, Teams message or notification.',
+      reason: 'The schedule was disabled, so this run sent no email, Teams message or notification.',
     });
     expect(t.audit.rows.find((r) => r.action === 'schedule.run_requested')!.details).toMatchObject({
       fileOnly: true,
     });
+    expect(t.audit.rows.find((r) => r.action === 'schedule.run')!.details).toMatchObject({ fileOnly: true });
     await t.close();
   });
 
@@ -95,7 +96,7 @@ describe('Run now on a switched-off schedule', () => {
     const [item] = (await op.get('/api/schedules/reports.month-close/runs')).json().items;
     expect(item).toMatchObject({
       status: 'queued',
-      reason: 'The schedule is off, so this run sends no email, Teams message or notification.',
+      reason: 'The schedule is disabled, so this run sends no email, Teams message or notification.',
     });
     await t.close();
   });
@@ -110,6 +111,24 @@ describe('Run now on a switched-off schedule', () => {
       notify: [],
       fileOnly: true,
     });
+    await t.close();
+  });
+
+  it('a run asked for while the schedule was on, and disabled before it started, sends nothing either', async () => {
+    const { t, op, jobs, posts } = await setup({ enabled: true });
+    const res = await op.post('/api/schedules/reports.month-close/run');
+    expect(res.json().fileOnly).toBeUndefined();
+    // Still queued (the scheduler hasn't ticked): an Operator disables the schedule.
+    expect((await op.patch('/api/schedules/reports.month-close', { enabled: false })).statusCode).toBe(200);
+    await t.clock.advance(1);
+    await t.schedules.scheduler!.drain();
+    expect(jobs.calls[0]!.fileOnly).toBe(true);
+    expect(posts).toEqual([]);
+    const [item] = (await op.get('/api/schedules/reports.month-close/runs')).json().items;
+    expect(item.reason).toBe(
+      'The schedule was disabled, so this run sent no email, Teams message or notification.',
+    );
+    expect(t.audit.rows.find((r) => r.action === 'schedule.run')!.details).toMatchObject({ fileOnly: true });
     await t.close();
   });
 

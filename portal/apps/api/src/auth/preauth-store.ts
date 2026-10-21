@@ -1,4 +1,4 @@
-import { count, eq, gt, lt } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNull, lt } from 'drizzle-orm';
 import { writeTx, type Db } from '../db/client';
 import { preauth } from '../db/schema';
 import { AppError } from '../errors';
@@ -35,15 +35,24 @@ export const PREAUTH_TTL_MS = 10 * 60_000;
 
 /**
  * Round trips that may be pending at once (S-28). Every anonymous `GET /auth/login` writes one, on the one SQLite
- * writer, and the per-address limits don't bound the table when many addresses send them. Beyond this many unexpired
- * rows a new sign-in start is refused with `signin_busy` and nothing is written; arming and a schedule's consent (which
- * need a signed-in session and are limited per session) still start. Far above what ~50 people signing in at once need.
+ * writer, and the per-address limits don't bound the table when many addresses send them. Far above what ~50 people
+ * signing in at once need. When the table is full, the oldest pending sign-in that has had PREAUTH_EVICT_AFTER_MS to
+ * finish makes room (its callback then says the sign-in expired): a flood from a few addresses (300 a minute each)
+ * cycles through the table without locking anyone out, and a real sign-in started amid it still has minutes to
+ * finish. Only when even the oldest pending sign-in is younger than that (more than 2,500 starts a minute, from many
+ * addresses) is a new sign-in refused with `signin_busy`, and nothing is written. Arming and a schedule's consent
+ * (which need a signed-in session and are limited per session) always start and are never evicted.
  */
 export const PREAUTH_MAX_PENDING = 5_000;
+
+/** How long a pending sign-in is kept, however full the table, before a newer one may take its place. */
+export const PREAUTH_EVICT_AFTER_MS = 2 * 60_000;
 
 export interface PreauthStoreOptions {
   /** Default PREAUTH_MAX_PENDING. */
   maxPending?: number;
+  /** Default PREAUTH_EVICT_AFTER_MS. */
+  evictAfterMs?: number;
 }
 
 /** 503: the pending sign-ins are full; the person waits for them to expire. */
@@ -66,8 +75,18 @@ const capped = (record: PreauthRecord) => record.sessionIdHash === null;
  */
 const startOf = (record: PreauthRecord) => new Date(record.expiresAt.getTime() - PREAUTH_TTL_MS);
 
+/**
+ * The latest `expiresAt` a pending sign-in may have and still be evicted for `record`: one that started at least
+ * `evictAfterMs` before it.
+ */
+const evictableUntil = (record: PreauthRecord, evictAfterMs: number) =>
+  startOf(record).getTime() - evictAfterMs + PREAUTH_TTL_MS;
+
 export interface PreauthStore {
-  /** Writes the record; a sign-in start beyond PREAUTH_MAX_PENDING pending rows throws `signin_busy` instead. */
+  /**
+   * Writes the record. A sign-in start that finds PREAUTH_MAX_PENDING round trips pending first evicts the oldest
+   * pending sign-ins that are old enough; if there are none, it throws `signin_busy` and writes nothing.
+   */
   put(record: PreauthRecord): Promise<void>;
   /** Removes and returns the record (single use). Expiry is checked by the caller. */
   take(state: string): Promise<PreauthRecord | null>;
@@ -76,23 +95,41 @@ export interface PreauthStore {
 
 export class SqlitePreauthStore implements PreauthStore {
   private readonly maxPending: number;
+  private readonly evictAfterMs: number;
   constructor(
     private readonly db: Db,
     opts: PreauthStoreOptions = {},
   ) {
     this.maxPending = opts.maxPending ?? PREAUTH_MAX_PENDING;
+    this.evictAfterMs = opts.evictAfterMs ?? PREAUTH_EVICT_AFTER_MS;
   }
 
   async put(record: PreauthRecord): Promise<void> {
-    // The count and the insert in one write transaction: two sign-ins can't both take the last place.
+    // Count, evict and insert in one write transaction: two sign-ins can't both take the last place.
     const written = writeTx(this.db, (tx) => {
       if (capped(record)) {
-        const [row] = tx
-          .select({ n: count() })
-          .from(preauth)
-          .where(gt(preauth.expiresAt, startOf(record)))
-          .all();
-        if ((row?.n ?? 0) >= this.maxPending) return false;
+        const start = startOf(record);
+        const [row] = tx.select({ n: count() }).from(preauth).where(gt(preauth.expiresAt, start)).all();
+        const over = (row?.n ?? 0) - this.maxPending + 1;
+        if (over > 0) {
+          const oldest = tx
+            .select({ state: preauth.state, expiresAt: preauth.expiresAt })
+            .from(preauth)
+            .where(and(isNull(preauth.sessionIdHash), gt(preauth.expiresAt, start)))
+            .orderBy(asc(preauth.expiresAt))
+            .limit(over)
+            .all();
+          const until = evictableUntil(record, this.evictAfterMs);
+          if (oldest.length < over || oldest.some((r) => r.expiresAt.getTime() > until)) return false;
+          tx.delete(preauth)
+            .where(
+              inArray(
+                preauth.state,
+                oldest.map((r) => r.state),
+              ),
+            )
+            .run();
+        }
       }
       tx.insert(preauth).values(record).run();
       return true;
@@ -128,16 +165,26 @@ export class SqlitePreauthStore implements PreauthStore {
 export class MemoryPreauthStore implements PreauthStore {
   readonly rows = new Map<string, PreauthRecord>();
   private readonly maxPending: number;
+  private readonly evictAfterMs: number;
   constructor(opts: PreauthStoreOptions = {}) {
     this.maxPending = opts.maxPending ?? PREAUTH_MAX_PENDING;
+    this.evictAfterMs = opts.evictAfterMs ?? PREAUTH_EVICT_AFTER_MS;
   }
 
   async put(record: PreauthRecord): Promise<void> {
     if (capped(record)) {
       const start = startOf(record).getTime();
-      let pending = 0;
-      for (const r of this.rows.values()) if (r.expiresAt.getTime() > start) pending++;
-      if (pending >= this.maxPending) throw signinBusy();
+      const pending = [...this.rows.values()].filter((r) => r.expiresAt.getTime() > start);
+      const over = pending.length - this.maxPending + 1;
+      if (over > 0) {
+        const oldest = pending
+          .filter((r) => r.sessionIdHash === null)
+          .sort((a, b) => a.expiresAt.getTime() - b.expiresAt.getTime())
+          .slice(0, over);
+        const until = evictableUntil(record, this.evictAfterMs);
+        if (oldest.length < over || oldest.some((r) => r.expiresAt.getTime() > until)) throw signinBusy();
+        for (const r of oldest) this.rows.delete(r.state);
+      }
     }
     this.rows.set(record.state, structuredClone(record));
   }

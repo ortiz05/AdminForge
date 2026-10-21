@@ -356,14 +356,40 @@ export class DenialAudit {
 }
 
 /**
+ * 5xx refusals that shed load on purpose (a flood of sign-in starts): expected, so logged at info without a stack —
+ * one warning a minute per code says it is happening and how often.
+ */
+export const SHED_LOAD: ReadonlySet<string> = new Set(['signin_busy']);
+
+/** Counts shed-load refusals per code; `warn` is called for the first one and then at most once a minute. */
+export class ShedLog {
+  private readonly last = new Map<string, { at: number; refused: number }>();
+  refused(code: string, warn: (refused: number) => void, now = Date.now()) {
+    const prev = this.last.get(code);
+    if (prev && now - prev.at < 60_000) {
+      prev.refused++;
+      return;
+    }
+    warn((prev?.refused ?? 0) + 1);
+    this.last.set(code, { at: now, refused: 0 });
+  }
+}
+
+/**
  * The single error handler: every failure leaves as an ApiErrorBody — except a browser navigation to /auth/* (Entra
  * redirects back there) or to a report download link, which goes to the problem page so nobody sees raw JSON.
  * With `denials`, security-relevant refusals are also audited.
  */
 export function registerErrorHandler(app: FastifyInstance, opts: { denials?: DenialAudit } = {}) {
+  const sheds = new ShedLog();
   app.setErrorHandler(async (err, request, reply) => {
     const appErr = toAppError(err);
-    if (appErr.status >= 500) request.log.error({ err }, 'request failed');
+    if (SHED_LOAD.has(appErr.code)) {
+      request.log.info({ code: appErr.code, status: appErr.status }, 'request rejected');
+      sheds.refused(appErr.code, (refused) =>
+        request.log.warn({ code: appErr.code, refused }, 'refusing requests to protect the service'),
+      );
+    } else if (appErr.status >= 500) request.log.error({ err }, 'request failed');
     else request.log.info({ code: appErr.code, status: appErr.status }, 'request rejected');
     if (opts.denials)
       await opts.denials

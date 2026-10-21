@@ -92,7 +92,7 @@ const SIGN_IN: Record<string, ProblemCopy> = {
     body: 'Too many sign-ins were started in the last few minutes, so AdminForge didn’t start yours.',
     next: 'Wait a few minutes, then sign in again.',
     admin:
-      'More than 5,000 sign-ins are pending at once, which usually means requests are flooding the sign-in address. Check the Ingress logs for where they come from.',
+      'Sign-ins are being started faster than AdminForge keeps them (more than 2,500 a minute), which usually means requests are flooding the sign-in address. Check the Ingress logs for where they come from.',
     primary: 'sign-in',
   },
   rate_limited: {

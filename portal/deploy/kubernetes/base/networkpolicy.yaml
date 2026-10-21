@@ -3,12 +3,12 @@
 # Ingress: only the HTTP port (narrow `from` to the ingress controller's namespace in the overlay). Egress: DNS to the
 # cluster's resolver, and HTTPS to public addresses only — Microsoft's endpoints (Graph, ARM, Log Analytics,
 # login.microsoftonline.com, Exchange/Teams/SharePoint for the runner, the first-party feeds; README.md → Requirements
-# lists the hosts). Every private range is refused (S-40): other services in the cluster and in the network around it,
-# the cloud instance metadata service (so the pod can't borrow the node's identity) and Azure's WireServer. Private
-# addresses an installation needs — its own Ingress for the portal-readiness probe, a Private Link endpoint — go in a
-# policy of the overlay's own (overlays/example/networkpolicy-private-egress.yaml); NetworkPolicies add up, so that
-# never loosens this one. The runner sidecar shares the pod's network, so it is covered too; it listens on the pod's
-# loopback only. IPv4 only: on a dual-stack cluster IPv6 egress is refused.
+# lists the hosts). Every private and reserved range is refused (S-40): other services in the cluster and in the
+# network around it, the cloud instance metadata service (so the pod can't borrow the node's identity) and Azure's
+# WireServer. Private addresses an installation needs — its own Ingress for the portal-readiness probe, a Private
+# Link endpoint — go in a policy of the overlay's own (overlays/example/networkpolicy-private-egress.yaml);
+# NetworkPolicies add up, so that never loosens this one. The runner sidecar shares the pod's network, so it is
+# covered too; it listens on the pod's loopback only. IPv4 only: on a dual-stack cluster IPv6 egress is refused.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -51,6 +51,12 @@ spec:
               # Link-local (the cloud instance metadata service at 169.254.169.254 among it) and Azure's WireServer.
               - 169.254.0.0/16
               - 168.63.129.16/32
+              # Reserved ranges no Microsoft endpoint uses, which some clusters use for pods or Services: "this
+              # network", IETF protocol assignments, benchmarking, and multicast with class E (224.0.0.0 and up).
+              - 0.0.0.0/8
+              - 192.0.0.0/24
+              - 198.18.0.0/15
+              - 224.0.0.0/3
       ports:
         - port: 443
           protocol: TCP

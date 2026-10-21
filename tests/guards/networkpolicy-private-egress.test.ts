@@ -1,22 +1,27 @@
-import { parseAllDocuments } from 'yaml';
+import { parse, parseAllDocuments } from 'yaml';
 import { committableFiles, readText } from '../lib/repo';
 
 // S-40: the pod's egress on 443 reaches public addresses only. AdminForge talks to Microsoft's public endpoints; the
-// base NetworkPolicy refuses every private range (RFC 1918, carrier-grade NAT, link-local with the cloud metadata
-// service, Azure's WireServer), so HTTP probes, PowerShell in write mode or a compromised dependency can't reach other
+// base NetworkPolicy refuses every private and reserved range (RFC 1918, carrier-grade NAT, link-local with the cloud
+// metadata service, Azure's WireServer, "this network", IETF, benchmarking, multicast and class E — some clusters put
+// pods or Services there), so HTTP probes, PowerShell in write mode or a compromised dependency can't reach other
 // services in the cluster or the network around it. An installation names the private addresses it needs (its
 // Ingress, a Private Link endpoint) in a policy of its own — the example overlay shows how — never by loosening the
-// base.
+// base. NetworkPolicies add up, so every policy and every patch in the base and the example is checked.
 const DIR = 'portal/deploy/kubernetes/';
 type Doc = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-const PRIVATE = [
-  '10.0.0.0/8',
-  '172.16.0.0/12',
-  '192.168.0.0/16',
-  '100.64.0.0/10',
+/** Private networks an installation may name an exception in. */
+const PRIVATE = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10'];
+/** Never an exception: the metadata service, WireServer and ranges no service of anyone's lives in. */
+const RESERVED = [
   '169.254.0.0/16',
   '168.63.129.16/32',
+  '0.0.0.0/8',
+  '192.0.0.0/24',
+  '198.18.0.0/15',
+  '224.0.0.0/3',
 ];
+const BLOCKED = [...PRIVATE, ...RESERVED];
 
 const manifests = committableFiles().filter((f) => f.startsWith(DIR) && f.endsWith('.yaml'));
 const all = manifests.flatMap((file) =>
@@ -42,8 +47,22 @@ const within = (inner: string, outer: string) => {
   return al >= bl && Math.floor(a / size) === Math.floor(b / size);
 };
 
+/** A selector that names something: at least one label (an empty one selects everything). */
+const names = (sel: Doc | undefined) =>
+  Object.keys(sel?.matchLabels ?? {}).length > 0 && !sel?.matchExpressions;
+
 describe('NetworkPolicy: private egress is refused', () => {
-  const base = policies('base/').find((p) => p.metadata.name === 'adminforge');
+  const basePolicies = policies('base/');
+  const base = basePolicies.find((p) => p.metadata.name === 'adminforge');
+
+  it('the base has one policy that allows anything out, and it is the adminforge one', () => {
+    expect(basePolicies.filter((p) => p.metadata.name === 'adminforge')).toHaveLength(1);
+    // Policies add up: any other base policy may only deny (no rules at all).
+    for (const p of basePolicies.filter((x) => x !== base)) {
+      expect(p.spec.egress ?? [], p.metadata.name).toEqual([]);
+      expect(p.spec.ingress ?? [], p.metadata.name).toEqual([]);
+    }
+  });
 
   it('the base policy allows 443 to public addresses only', () => {
     expect(base, 'base/networkpolicy.yaml').toBeDefined();
@@ -52,8 +71,9 @@ describe('NetworkPolicy: private egress is refused', () => {
     for (const rule of https) {
       expect(rule.ports).toEqual([{ port: 443, protocol: 'TCP' }]);
       for (const to of rule.to) {
-        expect(to.ipBlock?.cidr).toBe('0.0.0.0/0');
-        for (const range of PRIVATE) expect(to.ipBlock.except, range).toContain(range);
+        expect(Object.keys(to)).toEqual(['ipBlock']);
+        expect(to.ipBlock.cidr).toBe('0.0.0.0/0');
+        for (const range of BLOCKED) expect(to.ipBlock.except, range).toContain(range);
       }
     }
   });
@@ -66,7 +86,12 @@ describe('NetworkPolicy: private egress is refused', () => {
       for (const p of rule.ports) expect([53, 443]).toContain(p.port);
       if (rule.ports.some((p: Doc) => p.port === 53))
         // DNS only to the cluster's resolver: an open port 53 is a way out for data.
-        expect(rule.to.every((t: Doc) => t.podSelector?.matchLabels?.['k8s-app'] === 'kube-dns')).toBe(true);
+        for (const t of rule.to) {
+          expect(t.namespaceSelector?.matchLabels, JSON.stringify(t)).toEqual({
+            'kubernetes.io/metadata.name': 'kube-system',
+          });
+          expect(t.podSelector?.matchLabels, JSON.stringify(t)).toEqual({ 'k8s-app': 'kube-dns' });
+        }
     }
   });
 
@@ -82,11 +107,20 @@ describe('NetworkPolicy: private egress is refused', () => {
     expect(policy?.spec.egress ?? []).toEqual([]);
   });
 
-  it("the example overlay never loosens the base: it doesn't patch the base policy's egress", () => {
+  it('the example overlay never loosens the base: its only NetworkPolicy patch narrows who may connect', () => {
     const k = all.find((m) => m.file === `${DIR}overlays/example/kustomization.yaml`)?.doc;
-    for (const p of k?.patches ?? []) {
-      if (p.target?.kind !== 'NetworkPolicy') continue;
-      expect(String(p.patch)).not.toMatch(/\/spec\/egress/);
+    expect(k).toBeDefined();
+    // Forms this check can't read are refused outright.
+    expect(k!.patchesStrategicMerge).toBeUndefined();
+    expect(k!.patchesJson6902).toBeUndefined();
+    for (const p of k!.patches ?? []) {
+      // Every patch names its kind (a patch by name alone could hit the NetworkPolicy) and is inline.
+      expect(p.target?.kind, JSON.stringify(p)).toBeTruthy();
+      expect(p.path, JSON.stringify(p)).toBeUndefined();
+      if (p.target.kind !== 'NetworkPolicy') continue;
+      const ops = parse(String(p.patch)) as Doc[];
+      expect(Array.isArray(ops), 'a JSON patch').toBe(true);
+      for (const op of ops) expect(op.path).toMatch(/^\/spec\/ingress\/\d+\/from$/);
     }
   });
 
@@ -101,16 +135,21 @@ describe('NetworkPolicy: private egress is refused', () => {
         expect(rule.to?.length).toBeGreaterThan(0);
         for (const to of rule.to) {
           if (to.ipBlock) {
-            // A private address or a small subnet (a private endpoint's), never a whole private range.
+            // A private address or a small subnet (a private endpoint's), never a whole private range — and never
+            // the metadata service, WireServer or a reserved range.
             expect(
               PRIVATE.some((r) => within(to.ipBlock.cidr, r)),
               to.ipBlock.cidr,
             ).toBe(true);
             expect(cidr(to.ipBlock.cidr)[1], to.ipBlock.cidr).toBeGreaterThanOrEqual(24);
+            expect(to.ipBlock.except, to.ipBlock.cidr).toBeUndefined();
           } else {
-            // Or named pods: a namespace and the pods in it.
-            expect(to.namespaceSelector?.matchLabels, JSON.stringify(to)).toBeDefined();
-            expect(to.podSelector?.matchLabels, JSON.stringify(to)).toBeDefined();
+            // Or named pods: one namespace by name, and labelled pods in it.
+            expect(Object.keys(to).sort(), JSON.stringify(to)).toEqual(['namespaceSelector', 'podSelector']);
+            expect(Object.keys(to.namespaceSelector.matchLabels ?? {}), JSON.stringify(to)).toEqual([
+              'kubernetes.io/metadata.name',
+            ]);
+            expect(names(to.podSelector), JSON.stringify(to)).toBe(true);
           }
         }
       }

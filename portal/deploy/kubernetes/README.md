@@ -194,8 +194,8 @@ volumes replicated synchronously over a slow link (e.g. Longhorn replicas on dis
   the API doesn't use `HTTPS_PROXY` (only the runner's PowerShell workers pass it on,
   `portal/apps/runner/src/config.ts:117`). **No TLS interception**: Node and .NET check Microsoft's certificates
   against the images' own trust stores. IPv4: the policy allows no IPv6 egress.
-- **Private addresses are refused** by the base policy (10/8, 172.16/12, 192.168/16, 100.64/10, link-local with the
-  cloud metadata service, Azure's WireServer). Name the private addresses you need — the Ingress for the
+- **Private and reserved addresses are refused** by the base policy (10/8, 172.16/12, 192.168/16, 100.64/10,
+  link-local with the cloud metadata service, Azure's WireServer, 0/8, 192.0.0/24, 198.18/15, 224/3). Name the private addresses you need — the Ingress for the
   portal-readiness probe, a Private Link endpoint — in `overlays/example/networkpolicy-private-egress.yaml`; through
   the ingress controller the pod reaches every site that controller serves, so keep internal-only sites on another
   controller. A network that uses other ranges internally (public addresses used privately) adds them to the base

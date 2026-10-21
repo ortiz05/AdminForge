@@ -30,7 +30,7 @@ const nav = tv({
     heading: 'af-eyebrow flex h-6 min-w-0 flex-1 items-center gap-2 px-2 nav-collapsed:sr-only',
     /** Section rows toggle their section (not in the icon rail, where headings are hidden): full size, like a page. */
     headingToggle: [
-      'flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md pr-1.5 pl-2 text-left text-md font-semibold text-fg-2',
+      'flex h-(--af-control-h) w-full min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2 text-left text-md font-semibold text-fg-2',
       'transition-colors duration-(--af-motion-fast) hover:bg-hover hover:text-fg',
     ],
     caret: 'shrink-0 text-fg-3 transition-transform duration-(--af-motion-fast)',
@@ -39,11 +39,11 @@ const nav = tv({
     list: 'flex flex-col gap-0.5 pb-2 nav-collapsed:pb-0',
     /** Check status: a dot when healthy, a ring with no result yet, the status glyph when degraded or failing. */
     check: [
-      'inline-flex size-6 shrink-0 items-center justify-center rounded-sm',
+      'ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-sm',
       'transition-colors duration-(--af-motion-fast) hover:bg-hover',
     ],
     checkActive: 'bg-selected hover:bg-selected',
-    checkSlot: 'size-6 shrink-0',
+    checkSlot: 'ml-1 size-6 shrink-0',
     item: [
       'group flex h-(--af-control-h) min-w-0 items-center gap-2.5 rounded-md px-2 text-fg-2',
       'transition-colors duration-(--af-motion-fast) hover:bg-hover hover:text-fg',
@@ -320,13 +320,17 @@ export function NavRail({
 }: NavRailProps) {
   const pathname = useRouterState({ select: (st) => st.location.pathname });
   const search = useRouterState({ select: (st) => st.location.search }) as Record<string, unknown>;
-  const checks = useSectionChecks();
+  const { checks, pending: checksPending } = useSectionChecks();
   const checkHref = (key: string) => `/monitoring?group=${key}`;
-  // A section's check view (/monitoring?group=…) is its dot's place, not Synthetic monitoring's.
+  // A section's check view (/monitoring?group=…) is its mark's place, not Synthetic monitoring's — except in the icon
+  // rail, which has no marks: there Synthetic monitoring stays the current place.
   const hrefs = [
     ...(sections?.flatMap((x) => x.items.map((i) => i.href)) ?? []),
-    ...(sections ?? []).filter((x) => checks?.[x.key]).map((x) => checkHref(x.key)),
+    ...(collapsed ? [] : (sections ?? []).filter((x) => checks?.[x.key]).map((x) => checkHref(x.key))),
   ];
+  // Every row keeps the status column while it loads and once some section has checks, so the carets line up and
+  // nothing moves when the answer arrives.
+  const statusColumn = !collapsed && (checksPending || Object.keys(checks ?? {}).length > 0);
   const active = (href: string) => isActive(href, pathname, search, hrefs);
   const s = nav();
   return (
@@ -348,10 +352,9 @@ export function NavRail({
           const hidden = section.items.length - items.length;
           // In the icon rail headings are hidden, and so is the check status (Synthetic monitoring has every probe).
           const check = collapsed ? undefined : checks?.[section.key];
-          // Only when some section has checks does every row keep the status column, so the carets line up.
           const status = check ? (
             <SectionCheckLink section={section} check={check} active={active(checkHref(section.key))} />
-          ) : checks && Object.keys(checks).length > 0 && !collapsed ? (
+          ) : statusColumn ? (
             <span className={s.checkSlot()} aria-hidden />
           ) : null;
           return (
@@ -376,7 +379,11 @@ export function NavRail({
                         {section.label}
                       </span>
                       {closed && hidden > 0 && (
-                        <span className={s.hiddenCount()} aria-hidden>
+                        <span
+                          className={s.hiddenCount()}
+                          title={`${hidden} ${hidden === 1 ? 'page' : 'pages'} hidden`}
+                          aria-hidden
+                        >
                           {hidden}
                         </span>
                       )}

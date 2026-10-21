@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
+import { me } from '../../support/web/fixtures/session';
 import type { MockHandler } from '../../support/web/mock-handler';
 import { axeViolations } from '../axe';
 import { renderApp } from './automation/render';
@@ -125,6 +126,27 @@ describe('navigation: check status per section', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Example Org' })).toBeInTheDocument();
     expect(checkLinks()).toHaveLength(0);
     expect(screen.queryByText('You can’t see this.')).toBeNull();
+  });
+
+  it('the status mark is reached with the keyboard, right after its section toggle', async () => {
+    renderApp({ handlers: [probesAnswer({ body: PROBES })] });
+    await screen.findByRole('navigation', { name: 'Primary' });
+    const toggle = await within(nav()).findByRole('button', { name: /^Identity \(/ });
+    const link = await within(nav()).findByRole('link', { name: /^Identity service checks/ });
+    toggle.focus();
+    await userEvent.tab();
+    expect(link).toHaveFocus();
+  });
+
+  it('does not ask for probes without the Reader role (the API would refuse)', async () => {
+    const { calls } = renderApp({
+      session: me({ roles: ['Playbook.Approver'] }),
+      handlers: [probesAnswer({ body: PROBES })],
+    });
+    await screen.findByRole('navigation', { name: 'Primary' });
+    expect(await within(nav()).findByRole('button', { name: /^Identity/ })).toBeInTheDocument();
+    expect(calls.some((c) => c.url === '/api/probes')).toBe(false);
+    expect(checkLinks()).toHaveLength(0);
   });
 
   it('the icon rail has no section rows, so no marks either', async () => {

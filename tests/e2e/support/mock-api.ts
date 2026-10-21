@@ -119,6 +119,10 @@ export async function mockApi(page: Page, opts: MockOptions = {}) {
             seenAt: null,
             feeds: [],
           });
+        case 'GET /api/probes':
+          // The navigation rail reads it on every page (each section's check status): no probes unless a spec says
+          // otherwise (feature handlers and page.route answer first).
+          return json(route, { items: [], groups: [] });
         case 'GET /api/emergency':
           // The shell's emergency-stop banner reads it on every page: nothing paused unless a spec says otherwise.
           return json(route, {

@@ -1,5 +1,5 @@
 import { loadEnv } from '@adminforge/config';
-import { notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
+import { deliveryEnv, notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
 import { RoleCheck } from '../auth/session-plugin';
 import { isArmed } from '../auth/session-store';
 import { Heartbeat } from '../health/heartbeat';
@@ -139,7 +139,8 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     // DATA_MODE=fixtures: the approvers' Teams webhook gets the fixture fetch, like schedules' delivery (e-mail already
     // goes through the fixture outbound), so mock mode never reaches the internet.
     fetch: ctx.config.DATA_MODE === 'fixtures' ? fixtureFetch(ctx.config) : ctx.fetch,
-    env: testing ? {} : loadEnv(),
+    // Only the delivery keys of the configuration (sender, recipient lists, webhooks), like schedules' delivery.
+    env: testing ? {} : deliveryEnv(loadEnv()),
     publicBaseUrl: ctx.config.PUBLIC_BASE_URL,
     ...opts.delivery,
   };

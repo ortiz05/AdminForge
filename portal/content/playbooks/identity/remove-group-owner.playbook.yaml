@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.remove-group-owner
-version: 1.2.0
+version: 1.2.1
 title: Remove group owner
 summary: >-
   Removes an owner from a group. Refuses to remove the last owner, so groups never end up ownerless, and refuses
@@ -17,7 +17,8 @@ requires:
   entraRoles: [Groups Administrator]
 confirm:
   type: click
-  message: ${ 'Remove ' & steps.current.output.userPrincipalName & ' as owner of ' & steps.group.output.displayName & '?' }
+  # `name`: a person's sign-in name, or an app's display name (apps own groups too).
+  message: ${ 'Remove ' & steps.current.output.name & ' as owner of ' & steps.group.output.displayName & '?' }
 approval:
   required: false
 

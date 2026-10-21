@@ -12,11 +12,6 @@
   },
   "dependencies": {
     "@adminforge/api": "workspace:*",
-    "@adminforge/config": "workspace:*",
-    "@adminforge/connectors": "workspace:*",
-    "@adminforge/engine": "workspace:*",
-    "@adminforge/expressions": "workspace:*",
-    "@adminforge/runner": "workspace:*",
     "@adminforge/schemas": "workspace:*",
     "@azure/msal-node": "^7.1.0",
     "better-sqlite3": "^13.0.3",

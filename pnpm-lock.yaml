@@ -121,9 +121,6 @@ importers:
       fastify:
         specifier: ^5.12.7
         version: 5.12.7
-      jose:
-        specifier: ^6.2.12
-        version: 6.2.12
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -137,21 +134,6 @@ importers:
       '@adminforge/api':
         specifier: workspace:*
         version: link:../api
-      '@adminforge/config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@adminforge/connectors':
-        specifier: workspace:*
-        version: link:../../packages/connectors
-      '@adminforge/engine':
-        specifier: workspace:*
-        version: link:../../packages/engine
-      '@adminforge/expressions':
-        specifier: workspace:*
-        version: link:../../packages/expressions
-      '@adminforge/runner':
-        specifier: workspace:*
-        version: link:../runner
       '@adminforge/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas

@@ -4,7 +4,8 @@ import jsonata from 'jsonata';
  * Size limits for JSONata built-ins (§7.6). JSONata checks its timeout between evaluation steps, but a single built-in
  * call runs to completion: `$pad("", 1e9)`, `$string` of a huge value, `$sort` (an O(n²)-memory merge in JSONata) or
  * `$distinct` (O(n²)) on a big range could stall the event loop for seconds or exhaust memory. These overrides keep
- * JSONata's behaviour and refuse sizes no AdminForge content needs. `$eval` (code from data) is disabled.
+ * JSONata's behaviour and refuse sizes no AdminForge content needs. `$eval` (code from data) is disabled. `&` is an
+ * operator, not a built-in: evaluation rewrites it into a size-checked concatenation (`rewriteConcat`).
  */
 
 /** Largest range (`[1..n]`) or sequence an expression may build. */
@@ -178,8 +179,103 @@ async function replace(
   return (await builtin('replace')).implementation.call(this, str, pattern, replacement, limit);
 }
 
+/** The size-checked `&` evaluation calls instead of JSONata's operator (`$__af…` names are reserved for AdminForge). */
+export const CONCAT_FUNCTION = '__afConcat';
+
+/** One `&` operand as JSONata turns it into text: undefined → '', a string as it is, anything else as `$string` does. */
+async function text(this: Focus, value: unknown): Promise<string> {
+  if (value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'function' && exceeds(value, MAX_TEXT))
+    throw tooLarge('&', `a value is too large to turn into text (over ${MAX_TEXT} characters)`);
+  return (await (await builtin('string')).implementation.call(this, value)) as string;
+}
+
+/**
+ * `a & b & …` exactly as JSONata evaluates it — every operand turned into text, undefined as '' — refused past
+ * MAX_TEXT characters like `$join`. A chain is one call: `((a & b) & c)` is the text of a, b and c either way.
+ */
+function concat(this: Focus, ...operands: unknown[]): string | Promise<string> {
+  // Strings, finite numbers, booleans and null (the usual cases) without a round trip through JSONata's `$string`.
+  const parts: string[] = [];
+  let length = 0;
+  for (const v of operands) {
+    const part = scalarText(v);
+    if (part === undefined)
+      return Promise.all(operands.map((x) => text.call(this, x))).then((all) => concat.call(this, ...all));
+    length += part.length;
+    if (length > MAX_TEXT) throw tooLarge('&', `the result would exceed ${MAX_TEXT} characters`);
+    parts.push(part);
+  }
+  return parts.join('');
+}
+
+/** `$string` of a scalar, as JSONata writes it (numbers to 15 significant digits); undefined for anything else. */
+function scalarText(v: unknown): string | undefined {
+  if (v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number')
+    return Number.isFinite(v) ? String(Number.isInteger(v) ? v : Number(v.toPrecision(15))) : undefined;
+  if (typeof v === 'boolean' || v === null) return String(v);
+  return undefined;
+}
+
+/** A `&` node with nothing else on it (no predicate, grouping, …): its chain can be read as one concatenation. */
+const plainConcat = (n: unknown): n is Record<string, unknown> =>
+  !!n &&
+  typeof n === 'object' &&
+  (n as { type?: unknown }).type === 'binary' &&
+  (n as { value?: unknown }).value === '&' &&
+  Object.keys(n).every(
+    (k) => k === 'type' || k === 'value' || k === 'lhs' || k === 'rhs' || k === 'position',
+  );
+
+/**
+ * Rewrites every `&` of a compiled expression's AST, in place, into a call of the size-checked concatenation — a chain
+ * `a & b & c` into one call — keeping its other keys (a predicate, a grouping). For evaluation only: validation and
+ * lint read the AST as written. Returns how many calls it made.
+ */
+export function rewriteConcat(ast: unknown): number {
+  let rewritten = 0;
+  const seen = new WeakSet<object>();
+  const stack: unknown[] = [ast];
+  while (stack.length) {
+    const v = stack.pop();
+    if (!v || typeof v !== 'object' || seen.has(v)) continue;
+    seen.add(v);
+    if (Array.isArray(v)) {
+      for (const x of v) stack.push(x);
+      continue;
+    }
+    const n = v as Record<string, unknown>;
+    if (n.type !== 'binary' || n.value !== '&') {
+      for (const x of Object.values(n)) if (x && typeof x === 'object') stack.push(x);
+      continue;
+    }
+    const operands: unknown[] = [];
+    const flatten = (x: unknown): void => {
+      if (plainConcat(x)) {
+        flatten(x.lhs);
+        flatten(x.rhs);
+      } else operands.push(x);
+    };
+    flatten(n.lhs);
+    flatten(n.rhs);
+    stack.push(...operands);
+    n.type = 'function';
+    n.value = '(';
+    n.procedure = { type: 'variable', value: CONCAT_FUNCTION, position: n.position };
+    n.arguments = operands;
+    delete n.lhs;
+    delete n.rhs;
+    rewritten++;
+  }
+  return rewritten;
+}
+
 /** Registers the size-limited built-ins on a compiled expression (signatures as JSONata's own). */
 export function registerLimits(expr: jsonata.Expression): void {
+  expr.registerFunction(CONCAT_FUNCTION, concat);
   expr.registerFunction('pad', pad, '<s-ns?:s>');
   expr.registerFunction('string', string, '<x-b?:s>');
   expr.registerFunction('join', join, '<a<s>s?:s>');

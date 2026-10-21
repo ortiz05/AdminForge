@@ -1,15 +1,15 @@
 import jsonata from 'jsonata';
 import { DEADLINE_BINDING, deadlineGuard } from './budget';
 import { registerHelpers } from './helpers';
-import { MAX_SEQUENCE, registerLimits } from './limits';
+import { MAX_SEQUENCE, registerLimits, rewriteConcat } from './limits';
 import { groupByFunction, rewriteGroupBy, type GroupSpec } from './group-by';
 import { orderByFunction, rewriteOrderBy, type Spec } from './order-by';
 
 /**
  * JSONata evaluation with AdminForge limits (§7.6): compiled expressions are cached (LRU), evaluation is timeboxed
  * (250 ms default) and depth-limited, ranges and sequences are capped at MAX_SEQUENCE items, built-ins that could
- * run long in one step are size-limited and `$eval` is disabled (limits.ts), and every error names the expression it
- * came from.
+ * run long in one step and `&` are size-limited and `$eval` is disabled (limits.ts), and every error names the
+ * expression it came from.
  */
 
 /** Expression scope: `params`, `inputs`, `row`, `rows`, `value`, `steps`, `run`, `user`, `env`, `now`, … */
@@ -21,8 +21,9 @@ export interface EvaluateOptions {
   /** Max evaluation depth (recursion guard). Default 500. */
   maxDepth?: number;
   /**
-   * Compile for evaluation: order-bys (`^( … )`) are rewritten into a native sort (order-by.ts). `evaluate` sets it;
-   * validation and lint read the AST as written (the default).
+   * Compile for evaluation: `&` is rewritten into a size-checked concatenation (limits.ts), groupings and order-bys
+   * (`^( … )`) into a native group-by and sort (group-by.ts, order-by.ts). `evaluate` sets it; validation and lint read
+   * the AST as written (the default).
    */
   forEvaluation?: boolean;
 }
@@ -112,7 +113,11 @@ export function compile(expr: string, opts: EvaluateOptions = {}): jsonata.Expre
   }
   registerHelpers(compiled);
   registerLimits(compiled);
-  if (opts.forEvaluation) fastPaths(compiled, timeout, stack);
+  if (opts.forEvaluation) {
+    // Before the fast paths, which move parts of the AST into expressions of their own.
+    rewriteConcat(compiled.ast());
+    fastPaths(compiled, timeout, stack);
+  }
   cache.set(key, compiled);
   return compiled;
 }

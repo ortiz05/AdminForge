@@ -164,24 +164,29 @@ export function ArmControl({
 
   if (arm.armed) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 max-lg:gap-1.5">
         <span
-          className="inline-flex h-7 items-center gap-1.5 rounded-pill bg-on-armed px-3 font-mono text-xs font-bold whitespace-nowrap text-armed tabular-nums"
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill bg-on-armed px-3 font-mono text-xs font-bold whitespace-nowrap text-armed tabular-nums max-lg:px-2"
           aria-live="off"
         >
           <LightningIcon size={13} weight="fill" aria-hidden />
-          {`Armed · ${formatRemaining(arm.remainingMs)}`}
+          {/* Below `lg` the time left: the rail is ember and Disarm sits beside it. */}
+          <span className="max-lg:sr-only">{`Armed · ${formatRemaining(arm.remainingMs)}`}</span>
+          <span className="lg:hidden" aria-hidden>
+            {formatRemaining(arm.remainingMs)}
+          </span>
         </span>
         <span className="sr-only" aria-live="polite">
           {announcement}
         </span>
         {arm.canExtend && (
+          // Not below `lg`, where the rail has no room: the five-minute warning and the command palette offer it.
           <Button
             size="sm"
             intent="ghost"
             pending={busy === 'extend'}
             onClick={() => void run('extend')}
-            className="border-on-armed text-on-armed hover:not-aria-disabled:bg-on-armed/15 hover:not-aria-disabled:text-on-armed"
+            className="border-on-armed text-on-armed hover:not-aria-disabled:bg-on-armed/15 hover:not-aria-disabled:text-on-armed max-lg:hidden"
           >
             Extend
           </Button>
@@ -190,7 +195,7 @@ export function ArmControl({
           size="sm"
           pending={busy === 'disarm'}
           onClick={() => void run('disarm')}
-          className="border-transparent bg-on-armed text-armed hover:not-aria-disabled:bg-on-armed hover:not-aria-disabled:opacity-90"
+          className="shrink-0 border-transparent bg-on-armed text-armed hover:not-aria-disabled:bg-on-armed hover:not-aria-disabled:opacity-90"
         >
           Disarm
         </Button>
@@ -199,16 +204,20 @@ export function ArmControl({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="inline-flex h-7 items-center gap-1.5 rounded-pill border border-accent px-2.5 text-xs font-semibold whitespace-nowrap text-accent">
-        <EyeIcon size={14} weight="bold" aria-hidden />
+    <div className="flex items-center gap-2 max-lg:gap-1.5">
+      <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-accent px-2.5 text-xs font-semibold whitespace-nowrap text-accent max-lg:px-2">
+        <EyeIcon size={14} weight="bold" aria-hidden className="max-lg:hidden" />
         Read-only
       </span>
       {canArm && (
         <>
-          <Button size="sm" onClick={() => onDialogOpenChange(true)}>
+          <Button size="sm" onClick={() => onDialogOpenChange(true)} className="shrink-0">
             <LockKeyOpenIcon size={14} aria-hidden />
-            Arm write access
+            {/* Below `lg` "Arm"; the name stays "Arm write access" (it starts with what's shown). */}
+            <span className="max-lg:sr-only">Arm write access</span>
+            <span className="lg:hidden" aria-hidden>
+              Arm
+            </span>
           </Button>
           <ArmDialog
             open={dialogOpen}

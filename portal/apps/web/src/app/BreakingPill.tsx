@@ -6,7 +6,7 @@ const pill = tv({
     // Info, not crit: "breaking" covers advisories and deadlines too, and the pill is on every page. The News page
     // gives each item its own tone (incidents in crit).
     // No outline: in the top bar only the mode pill (Read-only) is outlined.
-    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill bg-accent-subtle px-2.5 text-xs font-semibold text-info',
+    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill bg-accent-subtle px-2.5 text-xs font-semibold text-info max-lg:px-2',
     'transition-colors duration-(--af-motion-fast) hover:bg-accent/25',
     // In write mode the rail turns ember: the pill follows the rail's ink instead of adding a second colour.
     'armed:bg-on-armed/15 armed:text-on-armed armed:hover:bg-on-armed/25',
@@ -30,7 +30,8 @@ export function BreakingPill({ count }: { count: number }) {
     >
       <NewspaperIcon size={14} weight="fill" aria-hidden />
       <span className="tabular-nums">{text}</span>
-      <span>new breaking</span>
+      {/* Below `lg` the rail shows the icon and the count; the name still says what they are. */}
+      <span className="max-lg:hidden">new breaking</span>
     </Link>
   );
 }

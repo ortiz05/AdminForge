@@ -34,7 +34,7 @@ export function UserMenu({ me, onSignOut }: { me: MeResponse; onSignOut: () => v
         <button
           type="button"
           aria-label={`Account and appearance: ${me.user.name}`}
-          className="inline-flex size-9 items-center justify-center rounded-pill hover:bg-hover armed:hover:bg-on-armed/15"
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-pill hover:bg-hover armed:hover:bg-on-armed/15 max-lg:size-8"
         >
           <Avatar name={me.user.name} />
         </button>
@@ -43,6 +43,10 @@ export function UserMenu({ me, onSignOut }: { me: MeResponse; onSignOut: () => v
         <div className="flex flex-col gap-1 px-2 pt-2 pb-2.5">
           <span className="truncate text-sm font-semibold text-fg">{me.user.name}</span>
           <span className="truncate font-mono text-2xs text-fg-3">{me.user.upn}</span>
+          {/* The session rail names the tenant from `xl`; narrower, it's here. */}
+          <span className="mt-1 truncate text-xs text-fg-2 xl:hidden">
+            {me.tenant.name} · <span className="font-mono text-2xs text-fg-3">{me.tenant.domain}</span>
+          </span>
           {me.roles.length > 0 && (
             <span className="mt-1 flex flex-wrap gap-1">
               {me.roles.map((r) => (

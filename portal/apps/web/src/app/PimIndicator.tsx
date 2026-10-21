@@ -22,6 +22,7 @@ type SearchPatch = Record<string, unknown>;
 /**
  * Privileged roles in the session rail: how many Entra roles are active and eligible for you right now, and a menu that
  * opens the activation playbook for an eligible role. Hidden detail when PIM can't be read (no licence or permission).
+ * Below `lg` only the word shows, so the session rail fits a phone.
  */
 export function PimIndicator({ className }: { className?: string }) {
   const caps = useQuery(capabilitiesQuery);
@@ -39,7 +40,7 @@ export function PimIndicator({ className }: { className?: string }) {
     return (
       <Tooltip content={why} side="bottom">
         <button type="button" className={className} aria-label={`Privileged roles: ${why}`} aria-disabled>
-          <ShieldStarIcon size={15} aria-hidden />
+          <ShieldStarIcon size={15} aria-hidden className="max-lg:hidden" />
           PIM
         </button>
       </Tooltip>
@@ -60,9 +61,10 @@ export function PimIndicator({ className }: { className?: string }) {
     <Menu>
       <MenuTrigger asChild>
         <button type="button" className={className} aria-label={`Privileged roles: ${summary}`}>
-          <ShieldStarIcon size={15} aria-hidden />
+          {/* Below `lg` the word only; the menu lists the roles and the name gives the counts. */}
+          <ShieldStarIcon size={15} aria-hidden className="max-lg:hidden" />
           <span>PIM</span>
-          <span className="font-mono tabular-nums">
+          <span className="font-mono tabular-nums max-lg:hidden">
             {active.length}·{eligible.length}
           </span>
         </button>

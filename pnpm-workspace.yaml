@@ -23,3 +23,6 @@ minimumReleaseAgeExclude:
 overrides:
   # exceljs pins uuid 8 (GHSA moderate, fixed in 11.1.1); 11 keeps the CommonJS build exceljs requires.
   exceljs>uuid: ^11.1.1
+  # monaco-editor 0.57.0 (the latest) pins dompurify 3.4.15: two low advisories (GHSA-p98j-92pf-mc4p,
+  # GHSA-6688-9rhm-gjv2), fixed in 3.4.16 (S-30). Drop this once a monaco-editor release requires a fixed version.
+  dompurify: ^3.4.16

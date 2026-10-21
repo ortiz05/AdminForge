@@ -95,7 +95,7 @@ methods, disabled users with licences, groups and apps without owners, password 
 secrets, certificates, days to expiry), credential expiry and hygiene, app registration risks, the SAML enterprise app,
 the AF-Audit Conditional Access policies, the named location, SKU seats, the sign-in accounts' sign-ins, PIM eligibility,
 Intune compliance and configuration policies, and the registration report. The mismatches and follow-ups are in
-`docs/backlog.md` › Live accuracy (2026-10-17).
+`docs/backlog.md` › Tests and CI.
 
 Learned from it — Graph v1.0's `/groups/{id}/owners` list can leave out service-principal owners that `owners/$count`
 and `$filter=owners/$count eq 0` count (Microsoft 365 groups created with application permissions keep the creating app

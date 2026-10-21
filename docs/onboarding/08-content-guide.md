@@ -28,12 +28,12 @@ The navigation rail's parent sections (`navigation.yaml`) are `overview`, `ident
 `sharepoint`, `teams`, `endpoint`, `security`, `azure`, `avd`, `billing`, `automation`, `reports` and `admin`. A
 definition joins one with `nav.section`; a report's catalogue area is its id's first segment or `area:`; a probe's
 service is `group:` (a section key, or `platform` for AdminForge itself). Folders follow the id, not the section: the
-Exchange, SharePoint and Teams pages kept their `m365.*` ids (and `pages/m365/`) when they moved to their own sections,
-so links, schedules and saved views kept working. `adminforge validate` enforces it (folder = id prefix; the exceptions
-and the full taxonomy are in [`portal/content/README.md`](../../portal/content/README.md)), and
-`adminforge list --section <key>` finds a section's content wherever it is filed. A new section for a service or team follows the pattern in
-[`docs/extending.md`](../extending.md#extension-points) (navigation entry, overview dashboard, reports area, probes
-with a group and a "Service checks" item).
+Exchange, SharePoint and Teams pages kept their `m365.*` ids (and `pages/m365/`) when they moved to their own
+sections, so links, schedules and saved views kept working. `adminforge validate` enforces it (folder = id prefix;
+the exceptions and the full taxonomy are in [`portal/content/README.md`](../../portal/content/README.md)), and
+`adminforge list --section <key>` finds a section's content wherever it is filed. A new section for a service or team
+follows the pattern in [`docs/extending.md`](../extending.md#extension-points) (navigation entry, overview dashboard,
+reports area, probes with a group: the section's row then shows their status and links to `/monitoring?group=<key>`).
 
 ## Every definition
 
@@ -65,6 +65,13 @@ requires:
   values. Expressions can read only non-secret `AF_*` keys.
 - **Requirements:** `requires` can also name `azureRoles`. Licences: declare them and record anything new in
   `docs/licensing-review.md`.
+- **Columns:** `kind: status` only for values that are fine or not (a tone); a category is `kind: enum` with a `map`
+  of labels (`map: { AzureAd: Entra joined }`), shown as plain text with a facet filter ([widgets](../widgets.md)).
+- **Entity pages** declare `entity:` (`user`, `group`, `device`, `app` or `resource`) and take an `id` param; the
+  command palette opens that kind of search result there, so `validate` allows one active page per kind.
+- **Patterns** (`pattern:` on params and inputs) always match the whole value — they run as `^(?:…)$` with the `u`
+  flag — and `validate` refuses one that can backtrack without bound: nested or side-by-side repetition of the same
+  characters, backreferences, inline flags.
 - The JSON schemas behind `$schema` are generated (`pnpm --filter @adminforge/schemas build`), not committed.
 
 ## Versions and status
@@ -74,26 +81,37 @@ requires:
   view relies on.
 - `publish` refuses a version that is already published with different content ("Bump the version"), and published
   versions only move forward.
-- `status`: `draft` (out of navigation and unattended use while you work), `preview`, `active` (default),
-  `deprecated` (still works, steer people elsewhere), `retired` (gone from use). Retire with `status: retired` plus a
-  version bump — deleting the file leaves the old version live in the database. Retire everything that belongs
-  together (pages, reports, their schedules — also `enabled: false` — playbooks, runbooks, probes, connections), remove
-  links to them from active content (`tests/content/retired-content.test.ts` fails otherwise) and say in
-  `docs/backlog.md` how to bring them back. A retired definition must still pass `validate`.
+- `status`: `draft` (out of navigation and unattended use while you work), `active` (default), `deprecated` (still
+  works, steer people elsewhere), `retired` (gone from use). Retire with `status: retired`, a version bump and a
+  `summary` that starts `Retired — <why, or replaced by Title (id)>.` — what people who open it are shown — because
+  deleting the file leaves the old version live in the database. Retire everything that belongs together (pages,
+  reports, their schedules — also `enabled: false` — playbooks, runbooks, probes, connections), remove links to them
+  from active content (`tests/content/retired-content.test.ts` fails otherwise) and say in `docs/backlog.md` how to
+  bring them back. A retired definition must still pass `validate`.
+- **Preview:** a definition not yet confirmed to work against a live tenant (checked only on fixtures, or with a known
+  live problem) carries `preview: true` plus a version bump: pages show a quiet "Preview" badge and
+  `adminforge validate` lists them. It changes nothing about how it runs; remove it (version bump) once it works live.
+  Don't use `status: preview`.
 - Approvals cover a fingerprint of the definition: a new version of a playbook that a write-capable schedule runs
   switches that schedule off until a second person approves again. That is intended.
+- A schema change that isn't backward-compatible bumps `CONTENT_SCHEMA_VERSION`
+  (`portal/packages/schemas/src/schema-version.ts`) in the same change; `publish --dry-run` then lists the rows
+  published under an older version.
 
 ## Writing queries safely
 
 - Filter at the source (`$filter`, `$select`, `$top`, KQL `where`); transforms have a 250 ms budget.
 - Untrusted values: `$odata()` / `$odataSearch()` in Graph filters and searches, `$kql()` in KQL, `$encode()` in path
   segments, `$guid()` for ids. Advanced filters are compiled server-side: declare `filters.advanced.fields` and use
-  `${ advanced }`.
-- **Resource Graph limits:** at most three `join`/`union` operations per query, counted together, and one join to
-  another table unless every one is between `resources` and `resourcecontainers`; a `union` stays within one table or
-  that pair. `validate` refuses the rest. Rows that already join another table (patch assessments, Recovery Services,
-  Defender assessments) get subscription names from a small `resourcecontainers` datasource joined with `$attach` in
-  the rows' transform (`azure.vms-without-backup`: `subs`) — the only transform such a list has.
+  `${ advanced }`. `validate` follows user data — params (except enum params), inputs, rows, `ds.<name>` per field —
+  through functions, variables and lambdas, so wrapping a value doesn't hide it; write
+  `name eq ${ $odata(params.q) }` and `| where name == ${ $kql(params.q) }` (never inside your own quotes) and
+  `"displayName:${ $odataSearch(params.q) }"` (inside them). A whole path may be a guid or entity param as it is; a
+  whole KQL query from a param needs `${ /* adminforge: user-query */ params.kql }`.
+- **Resource Graph limits:** `validate` refuses the queries Azure refuses ([CLAUDE.md](../../CLAUDE.md) rule 14;
+  `adding-a-page-or-report` has the detail). Rows that already join another table (patch assessments, Recovery
+  Services, Defender assessments) get subscription names from a small `resourcecontainers` datasource joined with
+  `$attach` in the rows' transform (`azure.vms-without-backup`: `subs`) — the only transform such a list has.
 - **Scale:** lists that can reach thousands of rows page in Resource Graph or Graph with no per-row transform; numbers
   come from a separate `summarize` query. A transform over a big list uses the native helpers and gets a
   `tests/content/content-at-scale-*.scale.test.ts` case at the list's largest size under the real 250 ms budget.
@@ -114,8 +132,10 @@ The schema refuses most mistakes; know the rules so you design for them (`adding
 - Secrets a step produces (temporary access passes, passwords, app secrets) are listed in `secretOutputs` — shown once,
   never stored in run outputs or the audit log. Inputs that are sensitive are `redact: true`.
 - Make steps safe to re-run or undo: `assert` preconditions, `compensate` where a change can be reversed, and mark
-  non-idempotent steps `idempotent: false`. A `compensate` block runs only when a **later** step fails — it isn't an
-  undo button, so don't promise one for a playbook whose last step is the write.
+  non-idempotent steps `idempotent: false` — it matters on every restart, not only a crash: a step still in flight
+  ten seconds after a stop is sent again unless it says `idempotent: false` (then the run ends `needs_review`). A
+  `compensate` block runs only when a **later** step fails — it isn't an undo button, so don't promise one for a
+  playbook whose last step is the write.
 - **Act on what the person saw.** When the target's id can be reused or change hands (AVD session ids are Windows
   session numbers; a list can be minutes old), pass what the row showed (`expectedUser`) and `assert` the looked-up
   target still matches before writing (`avd.log-off-user-session`).
@@ -127,7 +147,10 @@ The schema refuses most mistakes; know the rules so you design for them (`adding
   opt-in (`AF_ALLOW_PRIVILEGED_WRITE_SCOPES`) — design so you don't need them.
 - Playbooks carry `tests:` (dry runs with mocked step outputs) run by `pnpm adminforge test`.
 - AdminForge refuses writes to its own apps, its role groups and protected accounts centrally; don't try to route
-  around that in content.
+  around that in content. Because it matches by object id, a write names a user by id: the segment after `/users/` —
+  in the path, a `$id` query or an `@odata.id` / `…@odata.bind` reference — is `$guid(…)`, even for an id an earlier
+  step returned; look a sign-in name up in a `mode: read` step first (`user_not_by_id` otherwise). Don't set
+  `Authorization`, `Cookie`, `Host` or the client-request-id headers.
 
 ## Unattended work (schedules and probes)
 

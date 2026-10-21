@@ -49,8 +49,8 @@ Copy what you need into your PR or your notes. Each item links to where it's exp
 
 - [ ] `navigation.yaml` section (key, label, icon, order); pages and overview dashboard under `nav.section: <key>`
 - [ ] Reports in the catalogue area `<key>`; a "… reports" item when the section is mostly reports
-- [ ] Checks: probes with `group: <key>`, a "Service checks" item (`/monitoring?group=<key>`), `probeStatus` with
-      `group: <key>` on the overview
+- [ ] Checks: probes with `group: <key>` (the section's row shows their status and links to
+      `/monitoring?group=<key>`), `probeStatus` with `group: <key>` on the overview
 - [ ] Screenshots of the overview and a list in steel and daylight — KPI labels fit, no alert banners
 - [ ] Retiring: `status: retired` + version bump on every related definition (schedules also `enabled: false`); no
       active links left (`tests/content/retired-content.test.ts`); `publish --dry-run` shows `− retire`; backlog says

@@ -23,6 +23,7 @@ AdminForge runs as **one pod** (ADR-017) and keeps all of its state in **one SQL
 | ----------------------- | ------------------------------------------------------------------------------------------------------ |
 | `Dockerfile`            | The app image: API, built web app, `adminforge` CLI, content (runner: `portal/apps/runner/Dockerfile`) |
 | `build-images.sh`       | Builds both images tagged with the commit; records whether the content was reviewed                    |
+| `preflight.sh`          | Read-only check of a cluster against the requirements below (kubectl reads and one server dry run)     |
 | `base/`                 | Deployment, PVC, Service, ServiceAccount, NetworkPolicy, ConfigMap (kustomize)                         |
 | `overlays/example/`     | An installation to copy: namespace, images, Ingress, storage class, TRUST_PROXY, private egress        |
 | `tools/loader-pod.yaml` | A one-off pod to put a database file on the volume (or take one off)                                   |

@@ -285,6 +285,8 @@ Every datasource and KQL probe needs a synthetic fixture so mock mode, e2e and t
   the old version stays live in the database). Start the `summary` with `Retired — <why, or replaced by Title (id)>.`:
   that sentence is what people see when they open it (409 `definition_retired`). Retire everything that belongs
   together (pages, reports, schedules — also `enabled: false` — playbooks, runbooks, probes, connections), remove every
-  active link, embed, `type: playbook` step and schedule reference (`tests/content/retired-content.test.ts`), fix a
-  retired definition only as far as it must still validate, and add a `docs/backlog.md` line saying how to bring it
-  back. `publish --dry-run` lists it as `− retire`. Generic engine features (a probe kind, a datasource source) stay.
+  active link, embed, `type: playbook` step and schedule reference (`tests/content/retired-content.test.ts`), and fix a
+  retired definition only as far as it must still validate. Retired without a replacement ("not needed now"): add a
+  `docs/backlog.md` row (status `retired`) saying how to bring it back. Replaced by another definition: the summary
+  names the replacement and no row is needed — the replacement is the way back. `publish --dry-run` lists it as
+  `− retire`. Generic engine features (a probe kind, a datasource source) stay.

@@ -7,6 +7,8 @@ import { readBuildInfo, reviewState, type Git } from '@adminforge/cli/src/conten
 // checked the review rule when it built the image) stands in — for the image's own content directory only.
 const noGit: Git = () => ({ ok: false, status: 128 });
 const COMMIT = '0123456789ab';
+// The origin/main commit build-images.sh fetched and checked against, and the remote (review-state-build-remote).
+const FETCHED = { mainCommit: 'f'.repeat(40), remote: 'https://git.example.com/org/adminforge.git' };
 
 function image(build?: unknown) {
   const root = mkdtempSync(path.join(tmpdir(), 'af-image-'));
@@ -17,23 +19,34 @@ function image(build?: unknown) {
 
 describe('review state in a container image', () => {
   it('an image built from reviewed content publishes like a reviewed checkout', () => {
-    const { root, content } = image({ commit: COMMIT, reviewed: true, contentDir: 'portal/content' });
+    const { root, content } = image({
+      commit: COMMIT,
+      reviewed: true,
+      contentDir: 'portal/content',
+      ...FETCHED,
+    });
     expect(reviewState(content, noGit, { repoRoot: root })).toEqual({
       commit: COMMIT,
       dirty: false,
       onOriginMain: true,
+      ...FETCHED,
       problems: [],
       source: 'image',
     });
   });
 
   it('an image built from unreviewed content needs --allow-unreviewed, and says which commit', () => {
-    const { root, content } = image({ commit: COMMIT, reviewed: false, contentDir: 'portal/content' });
+    const { root, content } = image({
+      commit: COMMIT,
+      reviewed: false,
+      contentDir: 'portal/content',
+      ...FETCHED,
+    });
     const s = reviewState(content, noGit, { repoRoot: root });
     expect(s.problems).toEqual([
       {
         reason: 'not-on-origin-main',
-        message: `This image was built from ${COMMIT}, which was not committed and merged to origin/main when it was built.`,
+        message: `This image was built from ${COMMIT}, which was not committed and merged to origin/main (ffffffffffff) when it was built.`,
       },
     ]);
     expect(s.onOriginMain).toBe(false);

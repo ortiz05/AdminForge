@@ -148,6 +148,14 @@ outcome. Decisions taken in that review:
   recomputed from the body: the check is the schema, not the hash. It covers what bypasses `publish`
   (`db import-postgres`, a restored file, anything with the volume), not an attacker who writes a valid weaker
   definition there — the audit chain and volume access are the controls for that.
+- **Publish checks review against origin as it is now.** On a checkout `adminforge publish` asks origin
+  (`git ls-remote origin refs/heads/main`) instead of trusting a local `origin/main`, which may be stale or set by
+  hand; origin out of reach counts as unreviewed. `build-images.sh` runs `git fetch origin main` (read-only) before it
+  computes `reviewed`, stops when the fetch fails, and records the fetched commit (`mainCommit`) and origin's URL
+  without credentials (`remote`) in `BUILD.json`; a record without `mainCommit` is not trusted. The
+  `content.published` audit event carries the content commit, `mainCommit` and `remote`. In the pod the actor is the
+  image's user: **`pods/exec` on the AdminForge namespace is the publish boundary**, and the Kubernetes audit log names
+  the person. Later (owner decision): images built and pushed only by CI from `main`.
 
 ## Validation tenant specifics (not tenant identifiers)
 

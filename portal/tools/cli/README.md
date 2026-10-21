@@ -168,15 +168,18 @@ Every configuration key is documented in `config/example.env`.
 
 ### `publish [--env <name>] [--dry-run] [--allow-unreviewed]`
 
-- **Does:** runs the `validate` and `test` checks; requires reviewed content — committed, and the commit on
-  `origin/main` as last fetched; in the app image, where there is no checkout, the record `build-images.sh` wrote
-  (`/app/BUILD.json`) — unless `--allow-unreviewed` (recorded in the audit event); then brings the database file's
-  schema up to date, writes new definition versions (idempotent by sha256, all-or-nothing), sends the
-  `definitions_changed` signal (the running API drops those cache entries) and appends a `content.published` audit
-  event.
-- **Options:** `--env` (default `dev`), `--dry-run` (show what would be published and whether it would be refused),
+- **Does:** runs the `validate` and `test` checks; requires reviewed content — committed, and the commit on origin's
+  `main` as origin has it now (`git ls-remote origin refs/heads/main`; origin out of reach counts as unreviewed); in
+  the app image, where there is no checkout, the record `build-images.sh` wrote (`/app/BUILD.json`, checked against a
+  freshly fetched `main`) — unless `--allow-unreviewed` (recorded in the audit event); then brings the database
+  file's schema up to date, writes new definition versions stamped with the content schema version (idempotent by
+  sha256, all-or-nothing), sends the `definitions_changed` signal (the running API drops those cache entries) and
+  appends a `content.published` audit event with the content commit, the `main` commit it was checked against and
+  origin's URL (without credentials).
+- **Options:** `--env` (default `dev`), `--dry-run` (show what would be published and whether it would be refused,
+  and list published versions stamped with an older content schema version and whether they still pass),
   `--allow-unreviewed`.
-- **Reads:** `DATABASE_PATH`, content, git state (or `BUILD.json`).
+- **Reads:** `DATABASE_PATH`, content, git state and origin (or `BUILD.json`).
 - **Changes:** the definitions and audit tables of the file at `DATABASE_PATH` — on a workstation your dev database; a
   deployment's only from inside its pod (`kubectl -n adminforge exec deploy/adminforge -c api -- adminforge
 publish`). **Safe:** only with `--dry-run` (which may still migrate the schema). **Exit 1:** nothing could be

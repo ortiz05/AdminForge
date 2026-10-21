@@ -1,26 +1,33 @@
 /**
  * Whether the content directory is exactly what was reviewed — the rule `adminforge publish` enforces before it
- * writes to the database: every file publish reads is committed, and that commit is merged to origin/main.
+ * writes to the database: every file publish reads is committed, and that commit is merged to origin's main branch
+ * **as origin has it now**, not as a local `origin/main` last fetched (which can be stale or simply set by hand).
  *
- * Asks git (local state only — origin/main as last fetched; publish never fetches):
+ * Asks git (read-only; publish never fetches or changes a ref):
  *   - `rev-parse` for the checkout and HEAD;
  *   - `status --porcelain -z --untracked-files=all --ignored=traditional` under the content directory: modified,
  *     deleted and untracked files count, and so do ignored files publish would read (YAML outside dot-directories,
  *     fixtures/, scripts/ and node_modules — the same set @adminforge/schemas `loadContentDir` reads);
- *   - `merge-base --is-ancestor HEAD origin/main`.
+ *   - `remote get-url origin` (recorded without credentials) and `ls-remote origin refs/heads/main`: the commit main is
+ *     at on origin. Origin unreachable, or no main there, fails closed: unreviewed;
+ *   - `merge-base --is-ancestor HEAD <that commit>` (a commit this checkout hasn't fetched: unreviewed, fetch first).
  * Returns the state plus one problem per reason it isn't reviewed; publish prints them, refuses unless
- * --allow-unreviewed, and records the reasons in the audit event. `git` is injectable, so tests run without a repo.
+ * --allow-unreviewed, and records the reasons, the content commit, the main commit and the remote in the audit event.
+ * `git` is injectable, so tests run without a repo.
  *
- * In a container image there is no checkout: portal/deploy/kubernetes/build-images.sh checked the same rule when it
- * built the image and recorded the result in BUILD.json at the image's root. That record counts for the image's own
- * content directory only (the image's file system is read-only), never for content somewhere else.
+ * In a container image there is no checkout: portal/deploy/kubernetes/build-images.sh fetched origin's main, checked
+ * the same rule when it built the image and recorded the result, the fetched commit and the remote in BUILD.json at
+ * the image's root. That record counts for the image's own content directory only (the image's file system is
+ * read-only), never for content somewhere else; a record without the fetched commit (an image built before the fetch)
+ * is not trusted as reviewed.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-/** The branch reviewed content is merged to (as last fetched: publish never fetches). */
+/** The branch reviewed content is merged to, as origin has it (`git ls-remote origin refs/heads/main`). */
 export const REVIEWED_REF = 'origin/main';
+const MAIN_REF = 'refs/heads/main';
 
 export type UnreviewedReason = 'not-a-git-checkout' | 'dirty' | 'not-on-origin-main';
 
@@ -31,6 +38,10 @@ export interface ReviewState {
   dirty: boolean | null;
   /** HEAD is contained in origin/main; null when that can't be determined. */
   onOriginMain: boolean | null;
+  /** The commit origin's main was at when this was checked (full sha); null when origin couldn't say. */
+  mainCommit?: string | null;
+  /** origin's URL, without credentials (`safeRemote`); null when unknown. */
+  remote?: string | null;
   /** Why the content is not the reviewed state (empty = reviewed). */
   problems: Array<{ reason: UnreviewedReason; message: string }>;
   /** Where the state came from: git, or the image's build record (BUILD.json). */
@@ -41,10 +52,31 @@ export interface ReviewState {
 export interface BuildInfo {
   /** The commit the image was built from. */
   commit: string;
-  /** Its content was committed and the commit was on origin/main when the image was built. */
+  /** Its content was committed and the commit was on origin's main (freshly fetched) when the image was built. */
   reviewed: boolean;
   /** The content directory, relative to the image's root (portal/content). */
   contentDir: string;
+  /** The commit origin's main was at, fetched by build-images.sh; null in records from before it fetched. */
+  mainCommit: string | null;
+  /** origin's URL without credentials; null when not recorded. */
+  remote: string | null;
+}
+
+const SHA = /^[0-9a-f]{7,40}$/;
+
+/**
+ * A git remote URL fit for a record: user name, password or token, query and fragment removed
+ * (`https://x:token@host/repo.git` → `https://host/repo.git`, `git@host:org/repo.git` → `host:org/repo.git`); null
+ * when it is empty, too long, or has characters no remote URL needs (spaces, quotes, backslashes, control characters).
+ * build-images.sh applies the same rules before it writes BUILD.json.
+ */
+export function safeRemote(url: string | null | undefined): string | null {
+  const u = (url ?? '').trim();
+  const out = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(u)
+    ? u.replace(/^([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^/@]*@/, '$1').replace(/[?#].*$/s, '')
+    : u.replace(/^[^@/]+@/, '');
+  if (!out || out.length > 500 || /[\s"'\\\p{Cc}]/u.test(out)) return null;
+  return out;
 }
 
 /** The image's build record, when `repoRoot` has one and it is well-formed. */
@@ -52,10 +84,16 @@ export function readBuildInfo(repoRoot: string): BuildInfo | null {
   const file = path.join(repoRoot, 'BUILD.json');
   if (!existsSync(file)) return null;
   try {
-    const v = JSON.parse(readFileSync(file, 'utf8')) as Partial<BuildInfo>;
-    if (typeof v.commit !== 'string' || !/^[0-9a-f]{7,40}$/.test(v.commit)) return null;
+    const v = JSON.parse(readFileSync(file, 'utf8')) as Partial<Record<keyof BuildInfo, unknown>>;
+    if (typeof v.commit !== 'string' || !SHA.test(v.commit)) return null;
     if (typeof v.reviewed !== 'boolean' || typeof v.contentDir !== 'string') return null;
-    return { commit: v.commit, reviewed: v.reviewed, contentDir: v.contentDir };
+    return {
+      commit: v.commit,
+      reviewed: v.reviewed,
+      contentDir: v.contentDir,
+      mainCommit: typeof v.mainCommit === 'string' && SHA.test(v.mainCommit) ? v.mainCommit : null,
+      remote: typeof v.remote === 'string' ? safeRemote(v.remote) : null,
+    };
   } catch {
     return null;
   }
@@ -69,7 +107,13 @@ export type Git = (
 
 const runGit: Git = (args, cwd) => {
   try {
-    const out = execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    // ls-remote reaches origin: never wait on a credential prompt, and give up after a minute (unreviewed).
+    const out = execFileSync('git', args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 60_000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    }).toString();
     return { ok: true, out };
   } catch (err) {
     return { ok: false, status: (err as { status?: number | null }).status ?? null };
@@ -82,8 +126,8 @@ const publishedFile = (file: string) =>
   !file.split('/').some((s) => s.startsWith('.') || ['node_modules', 'fixtures', 'scripts'].includes(s));
 
 /**
- * The review state of `contentDir` from git (local state only: origin/main as last fetched). Ignored files count as
- * uncommitted only when publish would read them.
+ * The review state of `contentDir` from git, against origin's main as origin has it now (`ls-remote`). Ignored files
+ * count as uncommitted only when publish would read them.
  */
 export function reviewState(
   contentDir: string,
@@ -101,11 +145,22 @@ export function reviewState(
       state.source = 'image';
       state.commit = build.commit;
       state.dirty = false;
+      state.mainCommit = build.mainCommit;
+      state.remote = build.remote;
+      if (!build.mainCommit) {
+        // Built before build-images.sh fetched origin's main: its "reviewed" may rest on a stale origin/main.
+        state.onOriginMain = null;
+        state.problems.push({
+          reason: 'not-on-origin-main',
+          message: `This image (${build.commit}) doesn't record which ${REVIEWED_REF} commit it was checked against, so its review can't be trusted: rebuild it with build-images.sh.`,
+        });
+        return state;
+      }
       state.onOriginMain = build.reviewed;
       if (!build.reviewed)
         state.problems.push({
           reason: 'not-on-origin-main',
-          message: `This image was built from ${build.commit}, which was not committed and merged to ${REVIEWED_REF} when it was built.`,
+          message: `This image was built from ${build.commit}, which was not committed and merged to ${REVIEWED_REF} (${build.mainCommit.slice(0, 12)}) when it was built.`,
         });
       return state;
     }
@@ -144,20 +199,44 @@ export function reviewState(
       message: "git status failed, so uncommitted changes can't be ruled out.",
     });
   }
+  const url = git(['remote', 'get-url', 'origin'], contentDir);
+  state.remote = url.ok ? safeRemote(url.out) : null;
+  state.mainCommit = null;
   if (!state.commit) {
     state.onOriginMain = false;
     state.problems.push({ reason: 'not-on-origin-main', message: 'The checkout has no commit yet.' });
     return state;
   }
-  const merged = git(['merge-base', '--is-ancestor', 'HEAD', REVIEWED_REF], contentDir);
+  // origin's main as origin has it now: a local origin/main can be stale, or set by hand.
+  const listed = url.ok ? git(['ls-remote', 'origin', MAIN_REF], contentDir) : null;
+  const main = listed?.ok
+    ? listed.out
+        .split('\n')
+        .map((l) => l.split('\t'))
+        .find(([sha, ref]) => ref?.trim() === MAIN_REF && /^[0-9a-f]{40}$/.test(sha ?? ''))?.[0]
+    : undefined;
+  if (!main) {
+    state.onOriginMain = null;
+    state.problems.push({
+      reason: 'not-on-origin-main',
+      message: !url.ok
+        ? `This checkout has no origin remote, so HEAD can't be matched to ${REVIEWED_REF}.`
+        : listed?.ok
+          ? `origin has no main branch (git ls-remote), so HEAD can't be matched to reviewed commits.`
+          : `origin can't be reached (git ls-remote origin ${MAIN_REF}), so HEAD can't be matched to ${REVIEWED_REF}: check the network and your access to origin.`,
+    });
+    return state;
+  }
+  state.mainCommit = main;
+  const merged = git(['merge-base', '--is-ancestor', 'HEAD', main], contentDir);
   state.onOriginMain = merged.ok ? true : merged.status === 1 ? false : null;
   if (!merged.ok)
     state.problems.push({
       reason: 'not-on-origin-main',
       message:
         merged.status === 1
-          ? `HEAD (${state.commit}) is not on ${REVIEWED_REF}: merge it through review first (git fetch to update ${REVIEWED_REF}).`
-          : `${REVIEWED_REF} is not known in this checkout (git fetch origin), so HEAD can't be matched to reviewed commits.`,
+          ? `HEAD (${state.commit}) is not on ${REVIEWED_REF} (${main.slice(0, 12)}): merge it through review first.`
+          : `${REVIEWED_REF} is at ${main.slice(0, 12)}, which this checkout hasn't fetched (git fetch origin), so HEAD can't be matched to it.`,
     });
   return state;
 }

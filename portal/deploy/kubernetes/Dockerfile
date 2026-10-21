@@ -44,6 +44,10 @@ RUN find . -name node_modules -type d -prune -exec rm -rf {} + \
 FROM node:24.13.1-bookworm-slim@sha256:a81a03dd965b4052269a57fac857004022b522a4bf06e7a739e25e18bce45af2 AS runtime
 ARG ADMINFORGE_COMMIT=unknown
 ARG ADMINFORGE_REVIEWED=false
+# The origin/main commit build-images.sh fetched and checked against, and origin's URL (no credentials). Without them
+# (a plain `docker build`) `adminforge publish` doesn't trust the record as reviewed.
+ARG ADMINFORGE_MAIN_COMMIT=
+ARG ADMINFORGE_REMOTE=
 RUN groupadd --gid 10001 adminforge \
  && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /var/lib/adminforge --shell /usr/sbin/nologin adminforge \
  && install -d -o 10001 -g 10001 -m 0700 /var/lib/adminforge
@@ -65,8 +69,8 @@ COPY --from=build /src/portal/apps/web/dist ./portal/apps/web/dist
 COPY --from=build /src/portal/content ./portal/content
 COPY --from=build /src/config/example.env ./config/example.env
 COPY portal/deploy/kubernetes/adminforge.sh /usr/local/bin/adminforge
-RUN printf '{"commit":"%s","reviewed":%s,"contentDir":"portal/content"}\n' "$ADMINFORGE_COMMIT" "$ADMINFORGE_REVIEWED" \
-      > /app/BUILD.json \
+RUN printf '{"commit":"%s","reviewed":%s,"mainCommit":"%s","remote":"%s","contentDir":"portal/content"}\n' \
+      "$ADMINFORGE_COMMIT" "$ADMINFORGE_REVIEWED" "$ADMINFORGE_MAIN_COMMIT" "$ADMINFORGE_REMOTE" > /app/BUILD.json \
  && chmod 0755 /usr/local/bin/adminforge
 
 # Configuration comes from the environment only (a Secret and the ConfigMap): no env file is read.

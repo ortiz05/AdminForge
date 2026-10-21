@@ -10,7 +10,8 @@ import { publishContent } from '@adminforge/cli/src/commands/publish';
 import { repoRoot } from '../../lib/repo';
 
 // `adminforge publish` runs the same checks as `validate` and `test`, and publishes only reviewed content (committed,
-// and the commit merged to origin/main as last fetched) unless --allow-unreviewed, which the audit event records.
+// and the commit merged to origin's main as origin has it — git ls-remote, review-state-build-remote.test.ts) unless
+// --allow-unreviewed, which the audit event records.
 const NAV = `kind: navigation
 id: portal.navigation
 version: 1.0.0
@@ -78,15 +79,19 @@ function workspace(opts: { git?: boolean } = {}) {
       ],
       { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
     ).toString();
+  // origin: a bare repository of its own (outside the checkout), as a hosted remote would be.
+  const origin = mkdtempSync(path.join(tmpdir(), 'af-cli-origin-'));
   if (opts.git) {
     git('init', '-q', '-b', 'main');
     writeFileSync(path.join(root, '.gitignore'), '*.log\nignored/\n');
+    execFileSync('git', ['init', '-q', '--bare', origin]);
+    git('remote', 'add', 'origin', origin);
   }
-  /** Commits everything and points origin/main (a local remote-tracking ref, as after a fetch) at it. */
+  /** Commits everything and pushes it to origin's main (what a merged pull request does). */
   const commitToOriginMain = () => {
     git('add', '-A');
     git('commit', '-q', '-m', 'content');
-    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('push', '-q', 'origin', 'HEAD:refs/heads/main');
   };
   return {
     root,
@@ -97,7 +102,10 @@ function workspace(opts: { git?: boolean } = {}) {
     published,
     git,
     commitToOriginMain,
-    cleanup: () => rmSync(root, { recursive: true, force: true }),
+    cleanup: () => {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(origin, { recursive: true, force: true });
+    },
   };
 }
 
@@ -180,11 +188,12 @@ describe('reviewState (git)', () => {
       expect(local.onOriginMain).toBe(false);
       expect(local.problems[0]!.message).toMatch(/is not on origin\/main/);
 
-      w.git('update-ref', '-d', 'refs/remotes/origin/main');
+      // origin out of reach: fails closed (a local origin/main no longer counts).
+      w.git('remote', 'set-url', 'origin', path.join(w.root, 'gone.git'));
       const unknown = reviewState(w.contentDir);
       expect(reasons(unknown)).toEqual(['not-on-origin-main']);
       expect(unknown.onOriginMain).toBeNull();
-      expect(unknown.problems[0]!.message).toMatch(/origin\/main is not known/);
+      expect(unknown.problems[0]!.message).toMatch(/origin can't be reached/);
     } finally {
       w.cleanup();
     }

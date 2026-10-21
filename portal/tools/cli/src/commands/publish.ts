@@ -5,16 +5,19 @@
  *
  * Steps, in order — any failure stops before the database is touched:
  *   1. the `adminforge validate` check (content/check.ts) and every playbook test (content/playbook-tests.ts);
- *   2. the review rule (content/review-state.ts): content committed and merged to origin/main as last fetched — or,
- *      in an image, built from such a commit (BUILD.json) — otherwise refused, unless --allow-unreviewed (then
- *      recorded in the audit event; --dry-run only warns);
+ *   2. the review rule (content/review-state.ts): content committed and merged to origin's main as origin has it now
+ *      (`git ls-remote`; unreachable = unreviewed) — or, in an image, built from such a commit against a freshly
+ *      fetched main (BUILD.json) — otherwise refused, unless --allow-unreviewed (then recorded in the audit event;
+ *      --dry-run only warns);
  *   3. the API's DbDefinitionStore writes new versions and sends the `definitions_changed` signal (the running API
  *      drops those cache entries) — idempotent by sha256 (an unchanged version is skipped) and all-or-nothing (changed
  *      content without a version bump, or an older version, is refused, and then nothing is written). Each row is
  *      stamped with the content schema version (@adminforge/schemas CONTENT_SCHEMA_VERSION), unchanged ones too;
  *      `--dry-run` lists the published versions stamped with an older one and whether they still pass;
  *   4. one `content.published` audit event in the database's hash chain (actor `cli`, the local user@host, versions,
- *      git state), awaited — only when something new was created.
+ *      and the review provenance: the content commit, the main commit it was checked against and origin's URL without
+ *      credentials), awaited — only when something new was created. In a pod the user is the image's (`adminforge`):
+ *      the person who ran `kubectl exec` is named in the Kubernetes audit log, which `pods/exec` makes the boundary.
  *
  * Reads DATABASE_PATH (`--env` picks the env file, default dev) and brings that file's schema up to date first (as
  * the API does at start). Changes the definitions and audit tables of that database; nothing in the tenant. Exit
@@ -68,7 +71,7 @@ export async function publishContent(
     `✓ ${report.definitions} definitions valid (schema, references, expressions, lint, env keys); ${tests.passed} playbook test(s) passed.`,
   );
 
-  // Only reviewed content: committed, and the commit merged to origin/main (as last fetched).
+  // Only reviewed content: committed, and the commit merged to origin's main (as origin has it now).
   const review = (ctx.review ?? ((dir: string) => reviewState(dir, undefined, { repoRoot: ctx.repoRoot })))(
     ctx.contentDir,
   );
@@ -128,10 +131,13 @@ export async function publishContent(
             (i) => `${i.kind}:${i.key}@${i.version}${i.status === 'retired' ? ' (retired)' : ''}`,
           ),
           refused: result.refused,
+          // Review provenance: what was published (commit), what it was checked against (mainCommit) and where.
           git: {
             commit: review.commit,
             dirty: review.dirty,
             onOriginMain: review.onOriginMain,
+            mainCommit: review.mainCommit ?? null,
+            remote: review.remote ?? null,
             ...(review.source === 'image' ? { source: 'image' } : {}),
           },
           unreviewed,

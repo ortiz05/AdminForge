@@ -1,7 +1,7 @@
 import './ensure-route-tree';
 import { render, screen, within } from '@testing-library/react';
 import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app/router';
-import { AppLink, followHref } from '@adminforge/web/src/lib/links';
+import { AppLink, contentKeyOf, followHref } from '@adminforge/web/src/lib/links';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { me, NAV } from '../../support/web/fixtures/session';
 
@@ -52,6 +52,15 @@ describe('AppLink', () => {
   });
 });
 
+describe('contentKeyOf', () => {
+  it('reads the key of a content page, and refuses one that is not valid percent-encoding', () => {
+    expect(contentKeyOf('/p/identity.users')).toBe('identity.users');
+    expect(contentKeyOf('/p/identity.user%2Ex')).toBe('identity.user.x');
+    expect(contentKeyOf('/p/%E0')).toBeNull();
+    expect(contentKeyOf('/runs')).toBeNull();
+  });
+});
+
 describe('followHref (useNavigateHref)', () => {
   it.each(UNSAFE)('%j neither navigates nor opens a window', (href) => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
@@ -84,6 +93,7 @@ describe('drill-down links on a content page', () => {
     { id: 'backslash', name: 'Backslash app', target: '/\\evil.example.com' },
     { id: 'protocol', name: 'Protocol-relative app', target: '//evil.example.com' },
     { id: 'script', name: 'Script app', target: 'javascript:alert(1)' },
+    { id: 'malformed', name: 'Malformed key app', target: '/p/%E0' },
   ];
   const PAGE = {
     kind: 'dashboard',
@@ -157,11 +167,14 @@ describe('drill-down links on a content page', () => {
       for (const region of [list, grid]) {
         const safe = await within(region).findByRole('link', { name: /Example Portal/ });
         expect(safe).toHaveAttribute('href', '/p/identity.app?id=safe');
+        // A key that isn't valid percent-encoding neither crashes the link nor the page.
+        expect(within(region).getByText('Malformed key app')).toBeVisible();
         for (const name of ['Backslash app', 'Protocol-relative app', 'Script app']) {
           expect(within(region).getByText(name)).toBeVisible();
           expect(within(region).getByText(name).closest('a')).toBeNull();
         }
       }
+      expect(screen.queryByRole('alert')).toBeNull();
       expect(await screen.findByRole('group', { name: 'Unsafe KPI' })).toBeInTheDocument();
       expect(screen.getByRole('group', { name: 'Unsafe KPI' }).closest('a')).toBeNull();
       for (const a of document.querySelectorAll('a[href]')) {

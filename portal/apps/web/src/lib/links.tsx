@@ -15,10 +15,15 @@ export function splitHref(href: string): {
   return { pathname: pathname || '/', search, ...(hash ? { hash } : {}) };
 }
 
-/** `/p/<key>` → key. */
+/** `/p/<key>` → key; null for any other path, or a key that isn't valid percent-encoding (`/p/%E0`). */
 export function contentKeyOf(pathname: string): string | null {
   const m = /^\/p\/([^/?#]+)\/?$/.exec(pathname);
-  return m ? decodeURIComponent(m[1]!) : null;
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]!);
+  } catch {
+    return null;
+  }
 }
 
 /**

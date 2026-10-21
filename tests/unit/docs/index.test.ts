@@ -7,8 +7,18 @@ import { codeSpanPaths, codeSpans, links, read, withoutFences } from './markdown
 // each missed documents. A document added without a row here fails this test.
 const INDEX = 'docs/README.md';
 
-/** Folders listed as one row: their files are found through the folder (and the ADR and plan indexes). */
-const FOLDERS = ['docs/adr', 'docs/plans', '.claude/skills', '.claude/agents', 'docs/onboarding/templates'];
+/**
+ * Folders listed as one row: their files are found through the folder (and the ADR and plan indexes, and the licensing
+ * review's Findings).
+ */
+const FOLDERS = [
+  'docs/adr',
+  'docs/plans',
+  'docs/licensing/findings',
+  '.claude/skills',
+  '.claude/agents',
+  'docs/onboarding/templates',
+];
 
 /** Every Markdown document in the repository, plus the configuration reference, folders counted once. */
 function documents(): string[] {

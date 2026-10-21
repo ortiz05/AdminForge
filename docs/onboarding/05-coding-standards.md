@@ -16,8 +16,8 @@ reads — **match the surrounding code** when in doubt, and treat the guidance b
 | Initial-load budget         | CI (`tooling/ci/check-bundle.mjs`)          | The web app's initial JavaScript stays ≤ 250 KB gzip                                                                                                                                     |
 | Claude Code after-edit hook | `.claude/hooks/after-edit.mjs`              | On files Claude writes: Prettier, `adminforge validate` for content YAML and runner scripts (reports stale script pins), design-token checks (patterns shared with ESLint and the guard) |
 
-Before every push: `pnpm lint && pnpm format:check && pnpm typecheck && pnpm guard` (on a machine whose services run
-from the checkout, `pnpm -r run typecheck` — see [setup](01-setup.md#prove-everything-works)).
+Before every push: `pnpm lint && pnpm format:check && pnpm typecheck && pnpm guard`. `pnpm typecheck` builds nothing,
+so it is safe in any checkout; `pnpm build` is not ([CLAUDE.md › Commands](../../CLAUDE.md#commands)).
 
 ## TypeScript
 

@@ -32,9 +32,11 @@ and refuses unreviewed content — in the pod, an image `build-images.sh` didn't
 `origin/main` (as last fetched) with clean content. `--allow-unreviewed` exists for emergencies only; it is audited and must be followed
 by the reviewed change.
 
-Until the cluster takes over, the old host keeps running the last Postgres release; its data moves once with
-`adminforge db import-postgres` ([Kubernetes → Moving the data](../../portal/deploy/kubernetes/README.md#moving-the-data-from-the-postgres-host-once)). Leave that
-host's checkout and services alone unless a code owner asks.
+An installation that ran a Postgres release moves its data once with `adminforge db import-postgres`
+([Kubernetes → Moving the data](../../portal/deploy/kubernetes/README.md#moving-the-data-from-the-postgres-host-once)).
+A service that runs from a checkout — an interim installation on a single machine, say — serves that checkout's build:
+never build, install or run `pnpm dev` there ([CLAUDE.md › Commands](../../CLAUDE.md#commands)), and leave it and its
+services alone unless a code owner asks.
 
 ## What your PR must tell the person deploying it
 
@@ -56,7 +58,8 @@ In the PR's **Risk and rollout** section (and the commit body):
   tagging that commit `v<version>`. (Releases so far were recorded only in the changelog; tag from the next release on.)
 - Build the images from a reviewed commit — ideally a tag — never from a working copy someone is editing: the app image
   carries the built web app, the server code and the content, so what is in the image is what runs and what
-  `publish` can publish. A local `pnpm build` never reaches production.
+  `publish` can publish. `build-images.sh` builds from `git archive`, so your working tree's `dist/` never reaches an
+  image.
 - **Rolling back code:** put the previous release's image tags or digests back in the overlay and `kubectl apply -k`.
   Migrations only add, so older code runs on the newer schema.
 - **Rolling back content:** published versions only move forward — an older version can't be republished. Revert the

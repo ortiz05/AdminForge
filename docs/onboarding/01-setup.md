@@ -80,8 +80,9 @@ pnpm adminforge test                # playbook and runbook tests
 All of it should pass on a fresh clone of `main`. If something fails, it's either your setup (see below) or a real
 bug — say so in the team channel rather than working around it.
 
-`pnpm typecheck` and `pnpm build` go through turbo and (re)build packages' `dist/` folders. That's fine anywhere:
-production runs the app image, never a checkout ([Releases and operations](13-releases-and-operations.md)).
+`pnpm typecheck` only type-checks: it writes no `dist/` (it regenerates the git-ignored web route tree). `pnpm build`
+(re)builds the `dist/` folders — never in a checkout a running service serves
+([CLAUDE.md › Commands](../../CLAUDE.md#commands)).
 
 ## Working against a real tenant (later)
 

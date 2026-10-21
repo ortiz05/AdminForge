@@ -61,6 +61,9 @@ parallel agents — and stays consistent only with clear boundaries:
 - **Schema and engine first.** A field content will use (a probe's `remedy`) lands before the agents that write
   content with it; an agent that needs a generic engine or policy change stops and asks instead of making it.
 - **Ports are shared.** Only one agent runs the dev server, e2e or Playwright at a time.
+- **Worktrees, not the served checkout.** Give each agent its own worktree. None builds, installs or runs `pnpm dev`
+  in a checkout a running service serves ([CLAUDE.md › Commands](../../CLAUDE.md#commands)), and none uses
+  `git stash`: every worktree of a repository shares one stash, so a `pop` can apply another agent's work.
 - **Review the result as one change.** Run `content-reviewer` and `security-reviewer` over the whole diff after the
   agents finish (they find what each agent couldn't see — a query limit, a stale-target write), fix, then run the full
   suite once more before committing.

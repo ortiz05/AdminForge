@@ -38,7 +38,7 @@ Copy what you need into your PR or your notes. Each item links to where it's exp
 - [ ] New queries checked live (read-only), or listed as fixture-only in `docs/licensing-review.md` and
       `docs/backlog.md`
 - [ ] Big lists paged at the source; a `content-at-scale-*` case for any transform over them
-- [ ] Web dependency or bundling changed: `pnpm build && pnpm test:e2e:prod` (in your own checkout)
+- [ ] Web dependency or bundling changed: `pnpm build && pnpm test:e2e:prod` (in a checkout no service serves)
 - [ ] UI: screenshots in steel + daylight reviewed; keyboard and axe checked
 - [ ] API: contract in `@adminforge/schemas`; role checks; audit per state change; `docs/api.md`
 - [ ] Reviewer agents run where they apply (content, security, design) and findings handled

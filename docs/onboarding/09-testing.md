@@ -111,8 +111,8 @@ through DevTools, which ignores the page's CSP, so a control evaluates an inline
 - **Look at every new or changed image** before committing it; a baseline is a reviewed artefact, not a byproduct.
   `--update-snapshots` rewrites only images that differ by more than the 1 % tolerance, so after changing a new spec's
   fixture, delete its images and run it twice (the first run writes, the second must pass).
-- `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. Run it whenever you need to: production runs
-  the app image, so a local build never reaches it.
+- `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. Run it in a checkout of your own — never in
+  one a running service serves, where the build is a deploy ([CLAUDE.md › Commands](../../CLAUDE.md#commands)).
 
 ## Live validation
 

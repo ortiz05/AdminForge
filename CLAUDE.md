@@ -83,7 +83,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Playbook/runbook tests         | `pnpm adminforge test [pattern]`                                                                                                         |
 | All tests                      | `pnpm test` · e2e: `pnpm test:e2e` · production build: `pnpm build && pnpm test:e2e:prod` · guards: `pnpm guard`                         |
 | Focused tests                  | `pnpm --filter @adminforge/tests exec vitest run --project <unit\|component\|api\|content\|guards> <path>`                               |
-| Lint / types                   | `pnpm lint` · `pnpm typecheck`                                                                                                           |
+| Lint / types                   | `pnpm lint` · `pnpm typecheck` (type-checks only: builds nothing and writes no `dist/`)                                                  |
 | Format                         | `pnpm format` (write) · `pnpm format:check` (CI)                                                                                         |
 | Publish content to the DB      | `pnpm adminforge publish [--dry-run]` (runs validate + tests; needs committed content on `origin/main`, else `--allow-unreviewed`)       |
 | Deploy to Kubernetes           | Code owners only, when asked: `portal/deploy/kubernetes/README.md` › Upgrade (build and push images, apply, publish, `/readyz`)          |
@@ -96,9 +96,10 @@ is also the run worker and the scheduler — no Docker, nothing else to start. N
 deployment's file. Provisioner and live-test credentials live in `<env>.admin.env` (CLI and live tests only). System
 Chrome is used by Playwright (no browser download).
 
-Production runs the app image (API, built web app, CLI, content), so a local `pnpm build` never reaches it; content
-goes live only through `adminforge publish` in the pod. Until the cluster takes over, the old host keeps running the
-last Postgres release: leave its checkout and services alone unless a code owner asks.
+**Never build or install in a checkout a running service serves.** A service that runs from a checkout uses its
+`dist/` and `node_modules`, so `pnpm build`, `pnpm install` or `pnpm dev` there (anything that writes them) is a
+deploy: the web app changes at once, server code at the next restart. Work in a clone or worktree no service runs
+from; `pnpm typecheck` builds nothing and is safe anywhere. Content goes live only through `adminforge publish`.
 
 ## Commits and pull requests
 
@@ -113,7 +114,7 @@ session that spans several features commits each on its own (shared files such a
 - `pnpm adminforge validate` and `pnpm adminforge test` are clean for content changes.
 - The focused vitest project(s) you touched pass; `pnpm guard` passes; `pnpm lint` is clean for your files.
 - UI changes: screenshot them (Playwright, steel + daylight) and look at the images. Web dependencies or bundling:
-  `pnpm build && pnpm test:e2e:prod`.
+  `pnpm build && pnpm test:e2e:prod`, in a checkout no service serves.
 - The reviewer agents that apply (`content-reviewer`, `security-reviewer`, `design-reviewer`) ran and their findings
   are fixed or answered.
 - Report licence/permission needs you discovered, and what you could only check against fixtures.

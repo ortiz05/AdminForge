@@ -34,9 +34,9 @@ describe('control characters in params', () => {
   });
 
   it('entity ids refuse them too', async () => {
-    expect(await issues({ user: '.\t.' })).toEqual([{ param: 'user', message: 'expected an id' }]);
+    expect(await issues({ user: '.\t.' })).toEqual([{ param: 'user', message: 'must be an id' }]);
     expect(await issues({ users: ['ok-id', 'bad\nid'] })).toEqual([
-      { param: 'users', message: 'expected an id' },
+      { param: 'users', message: 'must be an id' },
     ]);
     expect(await resolveParams(DECL, { user: '00000000-0000-4000-8000-000000000001' }, scope)).toMatchObject({
       user: '00000000-0000-4000-8000-000000000001',

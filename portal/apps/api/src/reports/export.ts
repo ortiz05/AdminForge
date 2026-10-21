@@ -1,11 +1,19 @@
 import { PassThrough, Readable } from 'node:stream';
 import { renderString } from '@adminforge/expressions';
-import type {
-  Datasource,
-  ExportSpec,
-  TableColumn,
-  TableWidgetConfig,
-  WidgetBlock,
+import {
+  STATUS_TONE_LABEL,
+  columnMapEntry,
+  columnMapLabel,
+  getPath,
+  isStatusTone,
+  splitDataRef,
+  splitPath,
+  tagList,
+  type Datasource,
+  type ExportSpec,
+  type TableColumn,
+  type TableWidgetConfig,
+  type WidgetBlock,
 } from '@adminforge/schemas';
 import ExcelJS from 'exceljs';
 import {
@@ -22,8 +30,8 @@ export type ExportFormat = 'csv' | 'xlsx';
 export interface ExportPlan {
   spec: ExportSpec;
   datasource: string;
-  /** Path inside the datasource result, e.g. ['value'] or ['rows']. */
-  path: string[];
+  /** Path inside the datasource result, e.g. ['value'], ['rows'] or ['value', 0, 'members']. */
+  path: Array<string | number>;
   columns: TableColumn[];
   fileName: string;
   /** Rows come page by page (no transform, a collection result): streamed without holding everything in memory. */
@@ -98,8 +106,10 @@ export async function planExport(
   const all = tables(page);
   const dataRef = spec.data ?? (all[0]?.data as string | undefined);
   if (!dataRef) throw new AppError(400, 'export_not_supported', `${page.key} has no table to export.`);
-  const [datasource, ...path] = dataRef.split('.');
-  const ds = page.def.datasources?.[datasource!];
+  // The table's own path reader (`value[0].items` included), so the file holds what the table shows.
+  const { root: datasource, rest } = splitDataRef(dataRef);
+  const path = [...splitPath(rest)];
+  const ds = page.def.datasources?.[datasource];
   if (!ds)
     throw new AppError(
       400,
@@ -126,7 +136,7 @@ export async function planExport(
     (ds as { paging?: string }).paging !== 'none';
   return {
     spec,
-    datasource: datasource!,
+    datasource,
     path,
     columns,
     fileName: await exportFileName(spec, page, params, format),
@@ -138,11 +148,6 @@ export async function planExport(
   };
 }
 
-const getPath = (value: unknown, path: readonly string[]): unknown =>
-  path.reduce<unknown>(
-    (v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined),
-    value,
-  );
 const asRows = (v: unknown): Record<string, unknown>[] =>
   Array.isArray(v) ? v.filter((r): r is Record<string, unknown> => !!r && typeof r === 'object') : [];
 
@@ -224,18 +229,23 @@ export function trackIncomplete(pages: AsyncIterable<ExportPage>): {
   };
 }
 
-/** A cell's export value: status labels, joined lists, JSON for objects, Date for date columns (xlsx). */
+/**
+ * A cell's export value: the words a `status` column shows (the table's own lookup), the table's tag list, JSON for
+ * objects, Date for date columns (xlsx).
+ */
 export function cellValue(
   row: Record<string, unknown>,
   col: TableColumn,
   format: ExportFormat,
 ): string | number | boolean | Date | null {
-  const v = getPath(row, col.field.split('.'));
-  if (v === undefined || v === null) return null;
-  if (col.kind === 'status' && col.map) {
-    const m = col.map[String(v)];
-    if (m) return Array.isArray(m) ? m[1] : m.label;
+  const v = getPath(row, col.field);
+  if (col.kind === 'status') {
+    const hit = col.map ? columnMapEntry(col.map, v) : undefined;
+    if (hit !== undefined) return columnMapLabel(hit);
+    if (isStatusTone(v)) return STATUS_TONE_LABEL[v];
   }
+  if (v === undefined || v === null) return null;
+  if (col.kind === 'tags') return tagList(v).join('; ') || null;
   if (DATE_KINDS.has(col.kind ?? '') && typeof v === 'string' && format === 'xlsx') {
     const d = new Date(v);
     if (!Number.isNaN(d.getTime())) return d;

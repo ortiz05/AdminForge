@@ -1,13 +1,14 @@
 import type { RowsFilterCondition, RowsFilterGroup } from '@adminforge/expressions';
 import {
   advancedOpsFor,
+  checkAdvancedValue,
   DEFAULT_ADVANCED_PARAM,
   type AdvancedField,
   type AdvancedOp,
   type FilterBar,
 } from '@adminforge/schemas';
 import { z } from 'zod';
-import { resolveDate, type ParamIssue } from './params';
+import type { ParamIssue } from './params';
 
 /**
  * The query builder's filter (`filters.advanced`, R9) arrives as structured data — never as OData/KQL text — and is
@@ -22,10 +23,6 @@ import { resolveDate, type ParamIssue } from './params';
 
 export const MAX_CONDITIONS = 20;
 export const MAX_IN_VALUES = 50;
-const MAX_STRING = 256;
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
 const OData_PROPERTY = /^[A-Za-z_][A-Za-z0-9_]*(\/[A-Za-z_][A-Za-z0-9_]*)*$/;
 const KQL_PROPERTY = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/;
 
@@ -100,33 +97,9 @@ function checkValue(
     return { ok: true, value: out };
   }
   if (Array.isArray(value)) return bad('expects a single value');
-  switch (f.type) {
-    case 'string':
-      if (typeof value !== 'string') return bad('expects text');
-      if (value.length > MAX_STRING) return bad(`at most ${MAX_STRING} characters`);
-      if (CONTROL.test(value)) return bad('control characters are not allowed');
-      return { ok: true, value };
-    case 'number':
-      return typeof value === 'number' && Number.isFinite(value)
-        ? { ok: true, value }
-        : bad('expects a number');
-    case 'boolean':
-      return typeof value === 'boolean' ? { ok: true, value } : bad('expects true or false');
-    case 'date': {
-      const d = typeof value === 'string' ? resolveDate(value, now) : undefined;
-      return d ? { ok: true, value: d } : bad('expects an ISO date or today, now, -30d');
-    }
-    case 'guid':
-      return typeof value === 'string' && GUID.test(value.trim())
-        ? { ok: true, value: value.trim().toLowerCase() }
-        : bad('expects a GUID');
-    case 'enum': {
-      const hit = (f.values ?? []).find((v) => v === value || String(v) === String(value));
-      return hit !== undefined
-        ? { ok: true, value: hit }
-        : bad(`expects one of ${(f.values ?? []).join(', ')}`);
-    }
-  }
+  // The same check the query builder runs in the browser (`@adminforge/schemas` › param-check).
+  const r = checkAdvancedValue(f, value, now);
+  return 'error' in r ? bad(r.error) : { ok: true, value: r.value as AdvancedValue };
 }
 
 /**

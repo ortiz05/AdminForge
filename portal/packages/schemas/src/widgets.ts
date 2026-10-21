@@ -10,6 +10,18 @@ import { DefinitionId, IconName, Identifier, exprOr } from './common';
 export const StatusTone = z.enum(['ok', 'warn', 'crit', 'info', 'neutral']);
 export type StatusTone = z.infer<typeof StatusTone>;
 
+/** Default words for a bare tone (a status value that already is ok|warn|crit|info|neutral). */
+export const STATUS_TONE_LABEL: Record<StatusTone, string> = {
+  ok: 'Healthy',
+  warn: 'Needs review',
+  crit: 'Action needed',
+  info: 'Info',
+  neutral: 'No data',
+};
+
+export const isStatusTone = (v: unknown): v is StatusTone =>
+  typeof v === 'string' && (StatusTone.options as readonly string[]).includes(v);
+
 export const COLUMN_KINDS = [
   'text',
   'identity',
@@ -31,6 +43,49 @@ export const ColumnKind = z.enum(COLUMN_KINDS);
 export const ColumnFilterType = z.enum(['text', 'facet', 'range', 'date']);
 export type ColumnFilterType = z.infer<typeof ColumnFilterType>;
 
+const StatusEntry = z.union([
+  z.tuple([StatusTone, z.string()]),
+  z.strictObject({ tone: StatusTone, label: z.string() }),
+]);
+export type ColumnMapEntry = readonly [StatusTone, string] | { tone: StatusTone; label: string };
+
+/** Raw value → map key: booleans and numbers by their text, null/undefined as "null". */
+export const columnMapKey = (v: unknown): string =>
+  v === undefined || v === null ? 'null' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+
+/**
+ * The `map` entry for a raw value — exact key first, then text values case-insensitively. The table (widgets) and
+ * the export (API) both look values up here, so a file says what the column shows.
+ */
+export function columnMapEntry(
+  map: Readonly<Record<string, ColumnMapEntry>>,
+  value: unknown,
+): ColumnMapEntry | undefined {
+  const key = columnMapKey(value);
+  if (Object.hasOwn(map, key)) return map[key];
+  if (typeof value !== 'string') return undefined;
+  const lower = value.toLowerCase();
+  const ci = Object.keys(map).find((k) => k.toLowerCase() === lower);
+  return ci === undefined ? undefined : map[ci];
+}
+
+/** The words of a map entry. */
+export const columnMapLabel = (e: ColumnMapEntry): string =>
+  Array.isArray(e) ? e[1] : (e as { label: string }).label;
+
+/**
+ * A `tags` cell's chips: a list as-is, an object (Azure tags `{ env: 'prod' }`) as `env: prod`, a single value as one
+ * chip. The table draws these and the export joins them with "; ".
+ */
+export function tagList(v: unknown): string[] {
+  if (v == null || v === '') return [];
+  if (Array.isArray(v))
+    return v.map((x) => (x != null && typeof x === 'object' ? JSON.stringify(x) : String(x))).filter(Boolean);
+  if (typeof v === 'object')
+    return Object.entries(v).map(([k, val]) => (val == null || val === '' ? k : `${k}: ${String(val)}`));
+  return [String(v)];
+}
+
 export const TableColumn = z.looseObject({
   /** Dot path into the row, e.g. `signInActivity.lastSignInDateTime`. */
   field: z.string().min(1),
@@ -38,13 +93,11 @@ export const TableColumn = z.looseObject({
   kind: ColumnKind.optional(),
   /** Second line for `identity` columns (e.g. userPrincipalName). */
   secondary: z.string().optional(),
-  /** `status` columns: raw value → [tone, label]. */
-  map: z
-    .record(
-      z.string(),
-      z.union([z.tuple([StatusTone, z.string()]), z.strictObject({ tone: StatusTone, label: z.string() })]),
-    )
-    .optional(),
+  /**
+   * `status` columns: raw value → `[tone, label]` or `{ tone, label }`. Keys are the value as text (`"true"`, `"30"`,
+   * `"null"` for a missing value); text values also match case-insensitively.
+   */
+  map: z.record(z.string(), StatusEntry).optional(),
   sortable: z.boolean().optional(),
   /** Column filter; bind to a page param with `{ type, param }` to filter server-side, otherwise rows are filtered client-side. */
   filter: z

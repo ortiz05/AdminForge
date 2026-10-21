@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { BulkAction, RowAction } from '@adminforge/schemas';
+import { tagList, type BulkAction, type RowAction } from '@adminforge/schemas';
 import {
   ArrowSquareOutIcon,
   Button,
@@ -33,15 +33,8 @@ import type { TableColumnConfig, TableConfig } from './schema';
 
 type Row = Record<string, unknown>;
 
-/** Tags from an array (`['a', 'b']`) or an object (Azure tags `{ env: 'prod' }` → `env: prod`). */
-export function tagList(v: unknown): string[] {
-  if (v == null || v === '') return [];
-  if (Array.isArray(v))
-    return v.map((x) => (x != null && typeof x === 'object' ? JSON.stringify(x) : String(x))).filter(Boolean);
-  if (typeof v === 'object')
-    return Object.entries(v).map(([k, val]) => (val == null || val === '' ? k : `${k}: ${String(val)}`));
-  return [String(v)];
-}
+/** Tags from an array (`['a', 'b']`), an object (Azure tags `{ env: 'prod' }` → `env: prod`) or one value. */
+export { tagList };
 
 /** Display text of a raw value. */
 const str = (v: unknown): string => (v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));

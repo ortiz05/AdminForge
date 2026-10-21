@@ -1,7 +1,9 @@
 import { useId, useState } from 'react';
 import {
   advancedOpsFor,
+  checkAdvancedValue,
   DEFAULT_ADVANCED_PARAM,
+  MAX_ADVANCED_STRING,
   type AdvancedField,
   type AdvancedOp,
   type FilterBar as FilterBarSpec,
@@ -48,7 +50,7 @@ export type WireInner = { all: WireCondition[] } | { any: WireCondition[] };
 
 export const MAX_CONDITIONS = 20;
 export const MAX_IN_VALUES = 50;
-export const MAX_STRING = 256;
+export const MAX_STRING = MAX_ADVANCED_STRING;
 
 export const advancedParamOf = (spec: AdvancedSpec) => spec.param ?? DEFAULT_ADVANCED_PARAM;
 
@@ -169,38 +171,49 @@ export function draftFromWire(spec: AdvancedSpec, g: WireGroup | undefined): Dra
   return { join: 'all' in g ? 'all' : 'any', items: items.length ? items : [blankCondition(spec)] };
 }
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/;
-const RELATIVE_DATE = /^(today|now|[+-]\d+[hdwmy])$/;
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
-
-/** One typed value for a field, or the reason it isn't valid. */
-export function typedValue(f: AdvancedField, raw: string): { value: Scalar } | { problem: string } {
-  const v = raw.trim();
+/** What to tell the person when the shared check refuses a value (the API words the same refusal for the request). */
+function problemFor(f: AdvancedField, v: string): string {
   switch (f.type) {
     case 'number':
-      return v !== '' && Number.isFinite(Number(v)) ? { value: Number(v) } : { problem: 'Enter a number.' };
+      return 'Enter a number.';
     case 'boolean':
-      return v === 'true' || v === 'false' ? { value: v === 'true' } : { problem: 'Choose yes or no.' };
+      return 'Choose yes or no.';
     case 'date':
-      return ISO_DATE.test(v) || RELATIVE_DATE.test(v)
-        ? { value: v }
-        : { problem: 'Enter a date like 2026-01-31, or today, now, -30d.' };
+      return 'Enter a date like 2026-01-31, or today, now, -30d.';
     case 'guid':
-      return GUID.test(v) ? { value: v.toLowerCase() } : { problem: 'Enter a GUID.' };
-    case 'enum': {
-      const hit = (f.values ?? []).find((x) => String(x) === v);
-      return hit !== undefined
-        ? { value: hit }
-        : { problem: `Choose one of ${(f.values ?? []).join(', ')}.` };
-    }
+      return 'Enter a GUID.';
+    case 'enum':
+      return `Choose one of ${(f.values ?? []).join(', ')}.`;
     default:
-      if (!v) return { problem: 'Enter a value.' };
-      if (v.length > MAX_STRING) return { problem: `Use at most ${MAX_STRING} characters.` };
-      if (CONTROL.test(v)) return { problem: 'Control characters aren’t allowed.' };
-      return { value: v };
+      return v.length > MAX_STRING
+        ? `Use at most ${MAX_STRING} characters.`
+        : 'Control characters aren’t allowed.';
   }
+}
+
+/**
+ * One typed value for a field, or the reason it isn't valid. The text becomes the type the API expects and then goes
+ * through the API's own check (`checkAdvancedValue`), so the builder never sends what the server would refuse.
+ */
+export function typedValue(
+  f: AdvancedField,
+  raw: string,
+  now = new Date(),
+): { value: Scalar } | { problem: string } {
+  const v = raw.trim();
+  if (f.type === 'string' && !v) return { problem: 'Enter a value.' };
+  const candidate =
+    f.type === 'number'
+      ? v === ''
+        ? Number.NaN
+        : Number(v)
+      : f.type === 'boolean' && (v === 'true' || v === 'false')
+        ? v === 'true'
+        : v;
+  const r = checkAdvancedValue(f, candidate, now);
+  if ('error' in r) return { problem: problemFor(f, v) };
+  // Dates stay as typed, so a relative date ("-30d") keeps its meaning in the URL; the API resolves it per request.
+  return { value: f.type === 'date' ? v : (r.value as Scalar) };
 }
 
 function conditionToWire(

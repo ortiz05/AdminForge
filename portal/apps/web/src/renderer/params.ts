@@ -1,4 +1,4 @@
-import type { Param, Params } from '@adminforge/schemas';
+import { checkParam, literalDefault, type Param, type Params } from '@adminforge/schemas';
 
 /**
  * Page params ↔ URL search (§7.3). The URL is the source of truth: params are read leniently (a hand-edited link
@@ -18,77 +18,40 @@ export interface ResolvedParams {
   issues: Record<string, string>;
 }
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const isExpr = (v: unknown) => typeof v === 'string' && v.includes('${');
-
 export const enumOptions = (p: Extract<Param, { type: 'enum' }>) =>
   p.values.map((o) =>
     typeof o === 'object' ? { value: o.value, label: o.label } : { value: o, label: String(o) },
   );
 
-function matchEnum(p: Extract<Param, { type: 'enum' }>, v: unknown): string | number | boolean | undefined {
-  for (const o of enumOptions(p)) if (o.value === v || String(o.value) === String(v)) return o.value;
-  return undefined;
-}
+/** A literal default usable in the browser (expression defaults are left to the server). */
+export { literalDefault };
 
-/** A literal default usable in the browser (expression and relative-date defaults are left to the server). */
-export function literalDefault(p: Param): unknown {
-  const d = (p as { default?: unknown }).default;
-  if (d === undefined || isExpr(d)) return undefined;
-  return d;
-}
+/** Hand-edited links write multi-value params as comma-separated text, and the router reads `?id=42` as a number. */
+const splitList = (raw: unknown) => (Array.isArray(raw) ? raw : String(raw).split(',')).map(asText);
+const asText = (v: unknown) => (typeof v === 'number' ? String(v) : v);
 
-/** Coerces one raw URL value; returns [value] or [undefined, problem]. */
-export function coerceParam(p: Param, raw: unknown): [unknown, string?] {
+/**
+ * Coerces one raw URL value with the API's own check (`checkParam`), so a value the page shows is one the API
+ * accepts; returns [value] or [undefined, problem]. Dates and date ranges stay as written ("-30d", "P7D"): the API
+ * resolves them on every request, so the link keeps its meaning.
+ */
+export function coerceParam(p: Param, raw: unknown, now: Date = new Date()): [unknown, string?] {
   if (raw === undefined || raw === null || raw === '') return [undefined];
-  switch (p.type) {
-    case 'string': {
-      const s = String(raw);
-      if (p.maxLength && s.length > p.maxLength)
-        return [undefined, `is longer than ${p.maxLength} characters`];
-      return [s];
-    }
-    case 'number': {
-      const n = typeof raw === 'number' ? raw : Number(raw);
-      if (!Number.isFinite(n)) return [undefined, 'is not a number'];
-      if (p.min !== undefined && n < p.min) return [undefined, `is below ${p.min}`];
-      if (p.max !== undefined && n > p.max) return [undefined, `is above ${p.max}`];
-      return [n];
-    }
-    case 'boolean':
-      if (raw === true || raw === 'true') return [true];
-      if (raw === false || raw === 'false') return [false];
-      return [undefined, 'is not true or false'];
-    case 'enum': {
-      if (p.multiple) {
-        const list = (Array.isArray(raw) ? raw : String(raw).split(',')).map((v) => matchEnum(p, v));
-        if (list.some((v) => v === undefined)) return [undefined, 'has a value that is not offered'];
-        return [list];
-      }
-      const v = matchEnum(p, raw);
-      return v === undefined ? [undefined, 'is not one of the offered values'] : [v];
-    }
-    case 'guid':
-      return GUID.test(String(raw)) ? [String(raw)] : [undefined, 'is not a GUID'];
-    case 'date':
-      return [String(raw)];
-    case 'dateRange':
-      if (typeof raw === 'string' && /^P/.test(raw)) return [raw];
-      if (typeof raw === 'object' && raw && typeof (raw as { from?: unknown }).from === 'string')
-        return [
+  const multiple = p.type !== 'enum' && (p as { multiple?: boolean }).multiple === true;
+  const textual = p.type !== 'number' && p.type !== 'boolean' && p.type !== 'enum';
+  const r = checkParam(p, multiple ? splitList(raw) : textual ? asText(raw) : raw, now);
+  if ('error' in r) return [undefined, r.error];
+  if (p.type === 'date') return [String(raw)];
+  if (p.type === 'dateRange')
+    return typeof raw === 'string'
+      ? [raw]
+      : [
           {
             from: (raw as { from: string }).from,
-            to: String((raw as { to?: unknown }).to ?? '') || new Date().toISOString(),
+            to: String((raw as { to?: unknown }).to ?? '') || now.toISOString(),
           },
         ];
-      return [undefined, 'is not a duration like P7D or a { from, to } range'];
-    default: {
-      // Entity pickers (user, group, device, app, resource, subscription).
-      const multiple = (p as { multiple?: boolean }).multiple;
-      if (multiple) return [(Array.isArray(raw) ? raw : String(raw).split(',')).map(String)];
-      return [String(raw)];
-    }
-  }
+  return [r.value];
 }
 
 export function resolveParams(declared: Params | undefined, search: Record<string, unknown>): ResolvedParams {

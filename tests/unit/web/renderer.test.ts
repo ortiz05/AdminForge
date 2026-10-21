@@ -67,7 +67,7 @@ describe('page params ↔ URL', () => {
   it('coerces URL values by type and reports what was wrong', () => {
     expect(coerceParam(PARAMS.days!, '90')).toEqual([90]);
     expect(coerceParam(PARAMS.includeExpired!, 'false')).toEqual([false]);
-    expect(coerceParam(PARAMS.top!, '2000')[1]).toMatch(/above 999/);
+    expect(coerceParam(PARAMS.top!, '2000')[1]).toMatch(/must be at most 999/);
     expect(coerceParam(PARAMS.id!, 'not-a-guid')[1]).toMatch(/GUID/);
     expect(coerceParam(PARAMS.userType!, 'Robot')[1]).toMatch(/not one of/);
     expect(coerceParam(PARAMS.tags!, 'a,c')).toEqual([['a', 'c']]);

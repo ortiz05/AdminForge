@@ -1,37 +1,9 @@
 /**
- * Dot paths into data (`signInActivity.lastSignInDateTime`, `value[0].id`, `counts.members`).
- * Missing segments resolve to undefined; nothing throws.
+ * Dot paths into data (`signInActivity.lastSignInDateTime`, `value[0].id`, `counts.members`): the readers live in
+ * @adminforge/schemas so exports resolve a column exactly as the table renders it. Missing segments resolve to
+ * undefined; nothing throws.
  */
-const SEGMENT = /[^.[\]]+|\[(\d+)\]/g;
-
-const cache = new Map<string, Array<string | number>>();
-
-export function splitPath(path: string): Array<string | number> {
-  const hit = cache.get(path);
-  if (hit) return hit;
-  const out: Array<string | number> = [];
-  for (const m of path.matchAll(SEGMENT)) out.push(m[1] !== undefined ? Number(m[1]) : m[0]);
-  if (cache.size > 500) cache.clear();
-  cache.set(path, out);
-  return out;
-}
-
-export function getPath(value: unknown, path: string | undefined): unknown {
-  if (!path) return value;
-  let cur: unknown = value;
-  for (const seg of splitPath(path)) {
-    if (cur == null || typeof cur !== 'object') return undefined;
-    cur = (cur as Record<string | number, unknown>)[seg];
-  }
-  return cur;
-}
-
-/** `users.value` → { root: 'users', rest: 'value' }. */
-export function splitDataRef(ref: string): { root: string; rest: string } {
-  const m = /^([A-Za-z_][A-Za-z0-9_]*)(?:\.(.*)|(\[.*))?$/.exec(ref.trim());
-  if (!m) return { root: ref, rest: '' };
-  return { root: m[1]!, rest: m[2] ?? m[3] ?? '' };
-}
+export { getPath, splitDataRef, splitPath } from '@adminforge/schemas';
 
 /** "lastSignInDateTime" → "Last sign in date time"; "userType" → "User type". */
 export function humanize(field: string): string {

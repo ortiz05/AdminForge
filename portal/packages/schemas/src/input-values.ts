@@ -1,22 +1,29 @@
 import { z } from 'zod';
+import { parseDuration } from './common';
+import {
+  EMAIL_RE,
+  GUID_RE,
+  HOSTNAME_RE,
+  ISO_DURATION_RE,
+  RELATIVE_DATE_RE,
+  resolveDate,
+  type ParamCheck,
+} from './param-check';
 import type { Param, Params } from './params';
+import { testContentPattern } from './regex-safety';
 
 /**
- * Zod schemas for the *values* a run form collects from a playbook/runbook `inputs:` block (§7.7). The browser uses
- * them to validate the generated form before anything is sent; the engine re-validates on the server (its
- * `validateInputs` is authoritative). Messages match the engine's so the form and the API say the same thing.
+ * The *values* a run form collects from a playbook/runbook `inputs:` block (§7.7). One check, `checkInputValue`,
+ * serves both sides (design review D-06): the engine's `validateInputs` applies it on the server (authoritative, with
+ * defaults rendered first) and `inputsSchema` wraps it in zod for the run form in the browser, so the form and the API
+ * say the same thing by construction.
  *
  * Inputs are required unless `required: false` or a literal `default` is given. Blank strings and empty arrays
  * count as "not given". Expression defaults (`${ … }`) are rendered by the server, so they make a field optional here.
  */
 
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const HOSTNAME_RE =
-  /^(?=.{1,253}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
-const RELATIVE_RE = /^(today|now|[+-]\d+[hdwmy])$/;
-const ISO_DURATION_RE = /^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/;
-const MAX_STRING = 10_000;
+/** Longest text an input takes unless it declares `maxLength`. */
+export const MAX_INPUT_STRING = 10_000;
 
 /** Entity params pick directory or Azure objects; their value is the object id (or ids when `multiple`). */
 export const ENTITY_PARAM_TYPES = ['user', 'group', 'device', 'app', 'resource', 'subscription'] as const;
@@ -50,122 +57,163 @@ export function isBlankInput(v: unknown): boolean {
 const optionValue = (o: unknown) =>
   o && typeof o === 'object' && 'value' in o ? (o as { value: unknown }).value : o;
 
-function stringValue(p: Extract<Param, { type: 'string' }>): z.ZodType {
-  return z.string({ error: 'Expected text.' }).superRefine((raw, ctx) => {
-    const v = raw.trim();
-    const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
-    if (raw.length > (p.maxLength ?? MAX_STRING))
-      return fail(`Must be at most ${p.maxLength ?? MAX_STRING} characters.`);
-    if (p.minLength !== undefined && v.length < p.minLength)
-      return fail(`Must be at least ${p.minLength} characters.`);
-    if (p.pattern !== undefined) {
-      let re: RegExp | undefined;
-      try {
-        re = new RegExp(p.pattern);
-      } catch {
-        return fail('The definition declares an invalid pattern.');
-      }
-      if (!re.test(raw)) return fail('Does not match the expected format.');
-    }
-    if (p.format === 'guid' && !GUID_RE.test(v)) fail('Expected a GUID.');
-    if (p.format === 'email' && !EMAIL_RE.test(v)) fail('Expected an email address.');
-    if (p.format === 'upn' && !EMAIL_RE.test(v))
-      fail('Expected a user principal name like name@example.com.');
-    if (p.format === 'url' && !/^https?:\/\/[^\s]+$/.test(v)) fail('Expected an http(s) URL.');
-    if (p.format === 'hostname' && !HOSTNAME_RE.test(v)) fail('Expected a host name.');
-  });
+const PATTERN_PROBLEM = {
+  mismatch: 'Does not match the expected format.',
+  too_long: 'Too long to check against the expected format.',
+  invalid: 'The definition declares an invalid pattern.',
+} as const;
+
+function checkString(p: Extract<Param, { type: 'string' }>, v: unknown): ParamCheck {
+  if (typeof v !== 'string') return { error: 'Expected text.' };
+  const max = p.maxLength ?? MAX_INPUT_STRING;
+  if (v.length > max) return { error: `Must be at most ${max} characters.` };
+  if (p.minLength !== undefined && v.trim().length < p.minLength)
+    return { error: `Must be at least ${p.minLength} characters.` };
+  if (p.pattern !== undefined) {
+    const r = testContentPattern(p.pattern, v);
+    if (r !== 'match') return { error: PATTERN_PROBLEM[r] };
+  }
+  const t = v.trim();
+  switch (p.format) {
+    case 'guid':
+      return GUID_RE.test(t) ? { value: t.toLowerCase() } : { error: 'Expected a GUID.' };
+    case 'email':
+    case 'upn':
+      return EMAIL_RE.test(t)
+        ? { value: t }
+        : {
+            error:
+              p.format === 'upn'
+                ? 'Expected a user principal name like name@example.com.'
+                : 'Expected an email address.',
+          };
+    case 'url':
+      return /^https?:\/\/[^\s]+$/.test(t) ? { value: t } : { error: 'Expected an http(s) URL.' };
+    case 'hostname':
+      return HOSTNAME_RE.test(t) ? { value: t.toLowerCase() } : { error: 'Expected a host name.' };
+    default:
+      return { value: v };
+  }
 }
 
-function numberValue(p: Extract<Param, { type: 'number' }>): z.ZodType {
-  return z.preprocess(
-    (v) => (typeof v === 'string' && v.trim() !== '' ? Number(v) : v),
-    z
-      .number({ error: 'Expected a number.' })
-      .refine(Number.isFinite, 'Expected a number.')
-      .refine((n) => !p.integer || Number.isInteger(n), 'Expected a whole number.')
-      .refine((n) => p.min === undefined || n >= p.min, `Must be at least ${p.min}.`)
-      .refine((n) => p.max === undefined || n <= p.max, `Must be at most ${p.max}.`),
-  );
+function checkNumber(p: Extract<Param, { type: 'number' }>, v: unknown): ParamCheck {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN;
+  if (!Number.isFinite(n)) return { error: 'Expected a number.' };
+  if (p.integer && !Number.isInteger(n)) return { error: 'Expected a whole number.' };
+  if (p.min !== undefined && n < p.min) return { error: `Must be at least ${p.min}.` };
+  if (p.max !== undefined && n > p.max) return { error: `Must be at most ${p.max}.` };
+  return { value: n };
 }
 
-function enumValue(p: Extract<Param, { type: 'enum' }>): z.ZodType {
+function checkEnum(p: Extract<Param, { type: 'enum' }>, v: unknown): ParamCheck {
   const allowed = p.values.map(optionValue);
-  const ok = (x: unknown) => allowed.some((a) => a === x || String(a) === x);
-  if (p.multiple)
-    return z.array(z.unknown(), { error: 'Choose one or more values.' }).superRefine((list, ctx) => {
-      const bad = list.filter((x) => !ok(x));
-      if (bad.length)
-        ctx.addIssue({ code: 'custom', message: `Not an allowed value: ${bad.map(String).join(', ')}.` });
-    });
-  return z.unknown().refine(ok, `Expected one of: ${allowed.map(String).join(', ')}.`);
+  const one = (x: unknown) => allowed.some((a) => a === x || (typeof a !== 'string' && String(a) === x));
+  const coerce = (x: unknown) => allowed.find((a) => a === x || String(a) === x);
+  if (p.multiple) {
+    const list = Array.isArray(v) ? v : [v];
+    const bad = list.filter((x) => !one(x));
+    return bad.length
+      ? { error: `Not an allowed value: ${bad.map(String).join(', ')}.` }
+      : { value: list.map(coerce) };
+  }
+  return one(v) ? { value: coerce(v) } : { error: `Expected one of: ${allowed.map(String).join(', ')}.` };
 }
 
-const dateValue = z
-  .string({ error: 'Expected a date.' })
-  .refine(
-    (v) => RELATIVE_RE.test(v) || !Number.isNaN(Date.parse(v)),
-    'Expected an ISO date like 2026-01-31.',
-  );
-
-const dateRangeValue = z.union(
-  [
-    z.string().regex(ISO_DURATION_RE),
-    z
-      .object({ from: z.string(), to: z.string() })
-      .refine(
-        (r) => !Number.isNaN(Date.parse(r.from)) && !Number.isNaN(Date.parse(r.to)),
-        'Expected ISO dates in from/to.',
-      )
-      .refine((r) => Date.parse(r.from) <= Date.parse(r.to), 'from must not be after to.'),
-  ],
-  { error: 'Expected { from, to } or an ISO duration like P7D.' },
-);
-
-function entityId(type: EntityParamType): z.ZodType<string> {
-  return z
-    .string({ error: `Expected a ${type} id.` })
-    .trim()
-    .min(1, `Expected a ${type} id.`)
-    .max(2048, `Expected a ${type} id.`)
-    .superRefine((s, ctx) => {
-      const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
-      if (type === 'subscription' && !GUID_RE.test(s)) fail('Expected a subscription id (GUID).');
-      if (type === 'resource' && !/^\/subscriptions\/[^/]+\//i.test(s))
-        fail('Expected an Azure resource id (/subscriptions/…).');
-      if ((type === 'group' || type === 'device' || type === 'app') && !GUID_RE.test(s))
-        fail(`Expected a ${type} object id (GUID).`);
-      if (type === 'user' && !GUID_RE.test(s) && !EMAIL_RE.test(s))
-        fail('Expected a user object id (GUID) or user principal name.');
-    });
+function checkDate(v: unknown, now: Date): ParamCheck {
+  if (typeof v !== 'string') return { error: 'Expected a date.' };
+  if (RELATIVE_DATE_RE.test(v)) return { value: resolveDate(v, now) };
+  return Number.isNaN(Date.parse(v)) ? { error: 'Expected an ISO date like 2026-01-31.' } : { value: v };
 }
 
-/** Schema for one given (non-blank) value of a param. */
-export function inputValueSchema(p: Param): z.ZodType {
+function checkDateRange(v: unknown, now: Date): ParamCheck {
+  if (typeof v === 'string' && ISO_DURATION_RE.test(v))
+    return {
+      value: {
+        from: new Date(now.getTime() - parseDuration(v)).toISOString(),
+        to: now.toISOString(),
+        timespan: v,
+      },
+    };
+  const r = v as { from?: unknown; to?: unknown } | null;
+  if (!r || typeof r !== 'object' || typeof r.from !== 'string' || typeof r.to !== 'string')
+    return { error: 'Expected { from, to } or an ISO duration like P7D.' };
+  const from = Date.parse(r.from);
+  const to = Date.parse(r.to);
+  if (Number.isNaN(from) || Number.isNaN(to)) return { error: 'Expected ISO dates in from/to.' };
+  if (from > to) return { error: 'from must not be after to.' };
+  return { value: { from: r.from, to: r.to, timespan: `${r.from}/${r.to}` } };
+}
+
+function checkEntity(p: Extract<Param, { type: EntityParamType }>, v: unknown): ParamCheck {
+  const one = (x: unknown): ParamCheck => {
+    if (typeof x !== 'string' || x.trim() === '' || x.length > 2048)
+      return { error: `Expected a ${p.type} id.` };
+    const s = x.trim();
+    if (p.type === 'subscription' && !GUID_RE.test(s)) return { error: 'Expected a subscription id (GUID).' };
+    if (p.type === 'resource' && !/^\/subscriptions\/[^/]+\//i.test(s))
+      return { error: 'Expected an Azure resource id (/subscriptions/…).' };
+    if ((p.type === 'group' || p.type === 'device' || p.type === 'app') && !GUID_RE.test(s))
+      return { error: `Expected a ${p.type} object id (GUID).` };
+    if (p.type === 'user' && !GUID_RE.test(s) && !EMAIL_RE.test(s))
+      return { error: 'Expected a user object id (GUID) or user principal name.' };
+    return { value: GUID_RE.test(s) ? s.toLowerCase() : s };
+  };
+  if (!p.multiple) return one(v);
+  const list = Array.isArray(v) ? v : [v];
+  if (p.maxItems !== undefined && list.length > p.maxItems) return { error: `At most ${p.maxItems} items.` };
+  const out: unknown[] = [];
+  for (const x of list) {
+    const r = one(x);
+    if ('error' in r) return r;
+    out.push(r.value);
+  }
+  return { value: out };
+}
+
+/**
+ * Checks and normalises one given (non-blank) input value: "42" → 42, "true" → true, GUIDs and host names lower-cased,
+ * relative dates and ISO durations resolved against `now`. The engine runs it on every run; the browser's form
+ * schema below runs the same function.
+ */
+export function checkInputValue(p: Param, v: unknown, now: Date): ParamCheck {
   switch (p.type) {
     case 'string':
-      return stringValue(p);
+      return checkString(p, v);
     case 'number':
-      return numberValue(p);
+      return checkNumber(p, v);
     case 'boolean':
-      return z.preprocess(
-        (v) => (v === 'true' ? true : v === 'false' ? false : v),
-        z.boolean({ error: 'Expected true or false.' }),
-      );
+      if (typeof v === 'boolean') return { value: v };
+      if (v === 'true' || v === 'false') return { value: v === 'true' };
+      return { error: 'Expected true or false.' };
     case 'enum':
-      return enumValue(p);
+      return checkEnum(p, v);
     case 'date':
-      return dateValue;
+      return checkDate(v, now);
     case 'dateRange':
-      return dateRangeValue;
+      return checkDateRange(v, now);
     case 'guid':
-      return z.string({ error: 'Expected a GUID.' }).trim().regex(GUID_RE, 'Expected a GUID.');
-    default: {
-      const one = entityId(p.type);
-      if (!p.multiple) return one;
-      const list = z.array(one, { error: `Expected a list of ${p.type} ids.` });
-      return p.maxItems === undefined ? list : list.max(p.maxItems, `At most ${p.maxItems} items.`);
-    }
+      return typeof v === 'string' && GUID_RE.test(v.trim())
+        ? { value: v.trim().toLowerCase() }
+        : { error: 'Expected a GUID.' };
+    default:
+      return checkEntity(p, v);
   }
+}
+
+/**
+ * Schema for one given (non-blank) value of a param, for the run form: `checkInputValue` decides; numbers and
+ * booleans typed as text come out coerced, everything else as typed (the server normalises ids and resolves dates
+ * when the run starts, so a form left open doesn't freeze "now").
+ */
+export function inputValueSchema(p: Param): z.ZodType {
+  return z.unknown().transform((v, ctx) => {
+    const r = checkInputValue(p, v, new Date());
+    if ('error' in r) {
+      ctx.addIssue({ code: 'custom', message: r.error });
+      return z.NEVER;
+    }
+    return p.type === 'number' || p.type === 'boolean' ? r.value : v;
+  });
 }
 
 export interface InputsSchemaOptions {

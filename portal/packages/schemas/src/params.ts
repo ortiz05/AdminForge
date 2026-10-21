@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Expr, Identifier, exprOr } from './common';
+import { patternProblem } from './regex-safety';
 
 /**
  * Page params and playbook inputs share one schema (§7.3, §7.7).
@@ -39,7 +40,17 @@ export const StringParam = z.strictObject({
   default: z.string().optional(),
   minLength: z.number().int().min(0).optional(),
   maxLength: z.number().int().min(1).optional(),
-  pattern: z.string().optional(),
+  /**
+   * Regular expression the whole value must match (anchored as `^(?:…)$`, `u` flag). Nested repetition and
+   * backreferences are refused: a pattern runs synchronously on the API's event loop (regex-safety.ts).
+   */
+  pattern: z
+    .string()
+    .superRefine((source, ctx) => {
+      const problem = patternProblem(source);
+      if (problem) ctx.addIssue({ code: 'custom', message: problem });
+    })
+    .optional(),
   multiline: z.boolean().optional(),
   format: z.enum(['guid', 'email', 'upn', 'url', 'hostname']).optional(),
   /** Search-as-you-type entity picker that fills this string (usually the object id). */

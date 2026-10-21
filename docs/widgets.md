@@ -9,7 +9,7 @@ Every block in a page/dashboard/report `layout:` is a widget. Common keys (valid
 | `title`, `description` | Panel header text                                                                                        |
 | `span`                 | Columns on the 12-column grid (default 12; KPIs default 3)                                               |
 | `rows`                 | Height hint in grid rows (charts default 2)                                                              |
-| `data`                 | Datasource reference: `<datasource>` or `<datasource>.<path>` (dot path into the result)                 |
+| `data`                 | Datasource reference: `<datasource>` or `<datasource>.<path>` (dot path, `[n]` for an item)              |
 | `when`                 | `${ … }` expression; widget is hidden when false                                                         |
 | `empty`                | `{ title, body, action? }` shown when data is empty                                                      |
 
@@ -89,6 +89,10 @@ Column `kind` (default `text`):
 Other column keys: `sortable`, `hidden` (off by default; still in the column chooser and exports), `width` (px),
 `align: start|center|end`. Column `filter`: `text`, `facet`, `range`, `date`, or `{ type, param }` to bind it to a page
 param (server-side filtering).
+
+A column's `field` is a path into the row and takes `[n]` for a list item (`owners[0].displayName`). Exports (and
+scheduled report files) read every cell with the table's own path reader and `map` lookup, so the file holds what the
+column shows: the label of a `status` value, tags as `env: prod; owner: it`.
 
 Table options:
 

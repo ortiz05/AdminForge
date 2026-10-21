@@ -1,9 +1,14 @@
 # Enforced only where the cluster runs a network policy engine (AKS: Azure Network Policy Manager, Cilium or Calico) —
 # without one, any pod can reach the API and set X-Forwarded-For (README.md → Requirements).
-# Ingress: only the HTTP port (narrow `from` to the ingress controller's namespace in the overlay). Egress: DNS, and
-# HTTPS to Microsoft (Graph, ARM, Log Analytics, Exchange/Teams/SharePoint for the runner, login.microsoftonline.com,
-# first-party feeds) — never the cloud instance metadata service, so the pod can't borrow the node's identity. The
-# runner sidecar shares the pod's network, so it is covered too; it listens on the pod's loopback only.
+# Ingress: only the HTTP port (narrow `from` to the ingress controller's namespace in the overlay). Egress: DNS to the
+# cluster's resolver, and HTTPS to public addresses only — Microsoft's endpoints (Graph, ARM, Log Analytics,
+# login.microsoftonline.com, Exchange/Teams/SharePoint for the runner, the first-party feeds; README.md → Requirements
+# lists the hosts). Every private range is refused (S-40): other services in the cluster and in the network around it,
+# the cloud instance metadata service (so the pod can't borrow the node's identity) and Azure's WireServer. Private
+# addresses an installation needs — its own Ingress for the portal-readiness probe, a Private Link endpoint — go in a
+# policy of the overlay's own (overlays/example/networkpolicy-private-egress.yaml); NetworkPolicies add up, so that
+# never loosens this one. The runner sidecar shares the pod's network, so it is covered too; it listens on the pod's
+# loopback only. IPv4 only: on a dual-stack cluster IPv6 egress is refused.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -37,6 +42,12 @@ spec:
         - ipBlock:
             cidr: 0.0.0.0/0
             except:
+              # Private networks (RFC 1918): pods, Services, nodes and the networks around the cluster.
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              # Carrier-grade NAT space (RFC 6598), which some clusters and VPNs use for pods or nodes.
+              - 100.64.0.0/10
               # Link-local (the cloud instance metadata service at 169.254.169.254 among it) and Azure's WireServer.
               - 169.254.0.0/16
               - 168.63.129.16/32

@@ -1,0 +1,45 @@
+# Private addresses this installation must reach on 443. The base policy allows HTTPS to public addresses only (S-40);
+# NetworkPolicies add up, so this one opens exactly what it lists and nothing else. Replace the examples with your own
+# — a single address (/32) or the smallest subnet that holds it — and delete the rules you don't need (or the whole
+# file, and its line in kustomization.yaml). Check which form your network needs with `kubectl exec` and curl after
+# the first deploy: the portal-readiness probe on the Monitoring page goes red when the Ingress is out of reach.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: adminforge-private-egress
+  labels:
+    app.kubernetes.io/name: adminforge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: adminforge
+  policyTypes: [Egress]
+  egress:
+    # The Ingress itself: the portal-readiness probe calls PUBLIC_BASE_URL/readyz from inside the pod. Inside the
+    # cluster the load balancer's address is usually translated to the ingress controller's pods before the policy
+    # sees it, so name the controller's pods (namespace and labels of your controller) …
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - port: 443
+          protocol: TCP
+    # … and, where the path leaves the cluster (an external load balancer on a private address), that address.
+    - to:
+        - ipBlock:
+            cidr: 10.224.0.10/32
+      ports:
+        - port: 443
+          protocol: TCP
+    # A Private Link endpoint that resolves to a private address from the cluster — e.g. an Azure Monitor Private Link
+    # Scope for Log Analytics, or the private endpoint of the Function App a `kind: connection` calls: its subnet.
+    - to:
+        - ipBlock:
+            cidr: 10.225.0.0/28
+      ports:
+        - port: 443
+          protocol: TCP

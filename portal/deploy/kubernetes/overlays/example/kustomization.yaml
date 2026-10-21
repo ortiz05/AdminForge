@@ -9,6 +9,8 @@ resources:
   - namespace.yaml
   - ../../base
   - ingress.yaml
+  # The private addresses this installation needs on 443 (the base refuses every private range).
+  - networkpolicy-private-egress.yaml
 images:
   # The images build-images.sh built and pushed — pin a tag (the commit) or, better, the digest.
   - name: adminforge

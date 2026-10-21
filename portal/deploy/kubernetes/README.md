@@ -24,7 +24,7 @@ AdminForge runs as **one pod** (ADR-017) and keeps all of its state in **one SQL
 | `Dockerfile`            | The app image: API, built web app, `adminforge` CLI, content (runner: `portal/apps/runner/Dockerfile`) |
 | `build-images.sh`       | Builds both images tagged with the commit; records whether the content was reviewed                    |
 | `base/`                 | Deployment, PVC, Service, ServiceAccount, NetworkPolicy, ConfigMap (kustomize)                         |
-| `overlays/example/`     | An installation to copy: namespace, images, Ingress, storage class, TRUST_PROXY                        |
+| `overlays/example/`     | An installation to copy: namespace, images, Ingress, storage class, TRUST_PROXY, private egress        |
 | `tools/loader-pod.yaml` | A one-off pod to put a database file on the volume (or take one off)                                   |
 
 ## Requirements
@@ -101,7 +101,8 @@ Entra: the Read and Write apps need the Ingress URL as a redirect URI — set `P
 
 ```bash
 cp -r portal/deploy/kubernetes/overlays/example ~/adminforge-cluster   # or a private repository of your own
-# edit: images, host name, storage class, the ingress controller's namespace and pod network (TRUST_PROXY)
+# edit: images, host name, storage class, the ingress controller's namespace and pod network (TRUST_PROXY), and the
+# private addresses the pod may reach (networkpolicy-private-egress.yaml)
 kubectl apply -k ~/adminforge-cluster
 kubectl -n adminforge rollout status deploy/adminforge
 ```
@@ -197,12 +198,13 @@ kubectl -n adminforge exec deploy/adminforge -c api -- adminforge audit verify
 
 ## Troubleshooting
 
-| Symptom                                                                  | Cause and fix                                                                                                                                                                   |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pod `Pending`: volume node affinity / multi-attach                       | The disk is zonal and the pod was scheduled elsewhere, or the old pod still holds it. Wait for the old pod to end; pin the zone in the overlay.                                 |
-| `The database in DATABASE_PATH is not safe to use: … network filesystem` | The storage class is Azure Files/NFS/FUSE. Use a disk class (`managed-csi`) and move the data (loader pod).                                                                     |
-| `… can be read or written by other users` / `owned by another user`      | The file's mode or owner changed (copied in as another user). With the loader pod, copy it off, delete it and copy it back in (it then belongs to the API's user), `chmod 600`. |
-| `/readyz` says `degraded` (`worker` or `scheduler` not `ok`)             | The process is up but a background loop isn't reporting (look for errors in the log). A restart recovers; report it if it recurs.                                               |
-| `The database is busy (another process is writing)` from the CLI         | A long write in the API (retention, a large publish) held the lock past `DATABASE_BUSY_TIMEOUT_MS`. Run the command again.                                                      |
-| Sign-in loops or `invalid_state`                                         | `PUBLIC_BASE_URL` differs from the Ingress URL, or the apps lack it as a redirect URI (`provision entra`).                                                                      |
-| Run streams or the event dock never update                               | The ingress buffers Server-Sent Events: `proxy-buffering: off` and a long read timeout (overlay `ingress.yaml`).                                                                |
+| Symptom                                                                        | Cause and fix                                                                                                                                                                   |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pod `Pending`: volume node affinity / multi-attach                             | The disk is zonal and the pod was scheduled elsewhere, or the old pod still holds it. Wait for the old pod to end; pin the zone in the overlay.                                 |
+| `The database in DATABASE_PATH is not safe to use: … network filesystem`       | The storage class is Azure Files/NFS/FUSE. Use a disk class (`managed-csi`) and move the data (loader pod).                                                                     |
+| `… can be read or written by other users` / `owned by another user`            | The file's mode or owner changed (copied in as another user). With the loader pod, copy it off, delete it and copy it back in (it then belongs to the API's user), `chmod 600`. |
+| `/readyz` says `degraded` (`worker` or `scheduler` not `ok`)                   | The process is up but a background loop isn't reporting (look for errors in the log). A restart recovers; report it if it recurs.                                               |
+| `The database is busy (another process is writing)` from the CLI               | A long write in the API (retention, a large publish) held the lock past `DATABASE_BUSY_TIMEOUT_MS`. Run the command again.                                                      |
+| Sign-in loops or `invalid_state`                                               | `PUBLIC_BASE_URL` differs from the Ingress URL, or the apps lack it as a redirect URI (`provision entra`).                                                                      |
+| Run streams or the event dock never update                                     | The ingress buffers Server-Sent Events: `proxy-buffering: off` and a long read timeout (overlay `ingress.yaml`).                                                                |
+| Portal readiness probe red, or a Private Link / private Function App times out | The base NetworkPolicy refuses private addresses on 443. Name the address (or the ingress controller's pods) in the overlay's `networkpolicy-private-egress.yaml`.              |

@@ -1,0 +1,8 @@
+{
+  "$fixture": {
+    "status": 302,
+    "headers": {
+      "location": "https://login.microsoftonline.com/common/oauth2/authorize"
+    }
+  }
+}

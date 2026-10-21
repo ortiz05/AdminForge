@@ -154,12 +154,27 @@ function requireConfiguredPath(template: string, scope: Scope): void {
   if (missing.length) throw nothingToLookAt(missing);
 }
 
+/** The `env.X` keys a template names. */
+const envKeys = (template: string): string[] => [
+  ...new Set([...template.matchAll(/\benv\.([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]!)),
+];
+
 /** The `env.X` keys a template names that this installation doesn't set. */
 function unsetEnvKeys(template: string, scope: Scope): string[] {
   const env = (scope.env ?? {}) as Record<string, unknown>;
-  return [...new Set([...template.matchAll(/\benv\.([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]!))].filter(
+  return envKeys(template).filter(
     (k) => env[k] === undefined || env[k] === null || String(env[k]).trim() === '',
   );
+}
+
+/**
+ * A target (URL, DNS name) built from settings none of which this installation has: nothing to look at. Concatenating
+ * an unset key renders without failing (`'check@' & env.AF_PRIMARY_DOMAIN`), so this is checked up front; a target that
+ * falls back to another key still runs while one of them is set.
+ */
+function requireSomeSetting(template: string, scope: Scope): void {
+  const unset = unsetEnvKeys(template, scope);
+  if (unset.length && unset.length === envKeys(template).length) throw nothingToLookAt(unset);
 }
 
 const nothingToLookAt = (missing: string[]) =>
@@ -275,6 +290,7 @@ function httpTransport(x: CheckContext, ownOrigin: boolean): typeof fetch {
 }
 
 async function http(c: Extract<ProbeCheck, { kind: 'http' }>, x: CheckContext): Promise<CheckResult> {
+  requireSomeSetting(c.url, x.scope);
   let raw: string;
   try {
     raw = await text(c.url, x.scope);
@@ -525,6 +541,7 @@ async function dnsResolve(
   c: Extract<ProbeCheck, { kind: 'dnsResolve' }>,
   x: CheckContext,
 ): Promise<CheckResult> {
+  requireSomeSetting(c.name, x.scope);
   const name = (await text(c.name, x.scope)).replace(/\.$/, '');
   if (!name || name.startsWith('.') || /undefined|null/.test(name))
     throw new NotConfigured(
@@ -539,6 +556,7 @@ async function dnsResolve(
       timeoutMs: x.probe.timeoutMs ?? 5_000,
     });
   } catch (err) {
+    if (err instanceof AppError) throw err; // the resolver could not evaluate (e.g. no fixture), not a DNS answer
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOTFOUND' || code === 'ENODATA' || code === 'NXDOMAIN')
       return {
@@ -631,6 +649,7 @@ async function certExpiry(
       timeoutMs: x.probe.timeoutMs ?? 10_000,
     });
   } catch (err) {
+    if (err instanceof AppError) throw err; // the inspector could not evaluate (e.g. no fixture), not a handshake
     const code = (err as NodeJS.ErrnoException).code;
     return {
       metric: null,

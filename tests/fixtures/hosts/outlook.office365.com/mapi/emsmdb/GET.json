@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 401,
+    "headers": {
+      "content-type": "text/html"
+    },
+    "body": "<html><body>401 - Unauthorized</body></html>"
+  }
+}

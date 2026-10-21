@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/html"
+    },
+    "body": "<!DOCTYPE html><html lang=\"en\"><head><title>Microsoft Teams</title></head><body>Synthetic Teams web client</body></html>"
+  }
+}

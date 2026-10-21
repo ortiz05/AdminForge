@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/html"
+    },
+    "body": "<!DOCTYPE html><html lang=\"en\"><head><title>Microsoft 365</title></head><body>Synthetic Microsoft 365 start page</body></html>"
+  }
+}

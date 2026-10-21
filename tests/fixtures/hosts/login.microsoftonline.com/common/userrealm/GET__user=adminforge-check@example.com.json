@@ -1,0 +1,8 @@
+{
+  "NameSpaceType": "Managed",
+  "Login": "adminforge-check@example.com",
+  "DomainName": "example.com",
+  "FederationBrandName": "Example Org",
+  "TenantBrandingInfo": null,
+  "cloud_instance_name": "microsoftonline.com"
+}

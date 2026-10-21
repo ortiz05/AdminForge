@@ -5,9 +5,11 @@ import { randomUUID } from 'node:crypto';
 import { componentHealth, Heartbeat } from '../health/heartbeat';
 import { ArtifactStore } from '../artifacts/store';
 import type { AppContext } from '../context';
+import { fixtureFetch } from '../datasources/services';
 import { createNewsService, type NewsOptions } from '../news/module';
 import type { NewsService } from '../news/service';
 import type { ProbeDeps } from '../probes/checks';
+import { createFixtureNetwork } from '../probes/fixture-network';
 import { ProbeViews } from '../probes/views';
 import type { RunsModule } from '../runs/module';
 import { automationGraph, CreatorAccess, type CreatorAccessChecker } from './creator-access';
@@ -114,6 +116,15 @@ export function createSchedulesModule(
     tokenCache: ctx.tokenCache,
     now: ctx.now,
   });
+  // DATA_MODE=fixtures: HTTP, DNS and TLS checks answer from the fixtures directory and never touch the network.
+  const offline =
+    ctx.config.DATA_MODE === 'fixtures'
+      ? createFixtureNetwork({
+          dir: ctx.config.ADMINFORGE_FIXTURES_DIR,
+          publicBaseUrl: ctx.config.PUBLIC_BASE_URL,
+          now: ctx.now,
+        })
+      : null;
   const probeDeps: ProbeDeps = {
     outbound: ctx.outbound,
     automation: ctx.automation,
@@ -122,7 +133,8 @@ export function createSchedulesModule(
     env: () => ({ ...ctx.contentEnv(), PUBLIC_BASE_URL: ctx.config.PUBLIC_BASE_URL }),
     now: ctx.now,
     spoTenantName: ctx.config.AF_SPO_TENANT_NAME,
-    fetch: ctx.fetch,
+    fetch: offline?.fetch ?? ctx.fetch,
+    ...(offline ? { lookup: offline.lookup, dns: offline.dns, tls: offline.tls } : {}),
     audit: ctx.audit,
     ...opts.probeDeps,
   };
@@ -130,7 +142,8 @@ export function createSchedulesModule(
   // only the delivery keys of it (recipient lists, webhooks, the sender), never the rest (secrets, paths).
   const delivery: DeliveryDeps = {
     outbound: ctx.outbound,
-    fetch: ctx.fetch,
+    // DATA_MODE=fixtures: Teams webhooks get the fixture fetch too (e-mail already goes through the fixture outbound).
+    fetch: offline ? fixtureFetch(ctx.config) : ctx.fetch,
     env: ctx.config.NODE_ENV === 'test' ? {} : deliveryEnv(loadEnv()),
     publicBaseUrl: ctx.config.PUBLIC_BASE_URL,
     ...opts.delivery,

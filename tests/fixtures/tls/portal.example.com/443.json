@@ -1,0 +1,7 @@
+{
+  "expiresInDays": 200,
+  "issuedDaysAgo": 165,
+  "authorized": true,
+  "subject": "portal.example.com",
+  "issuer": "Example Org Issuing CA"
+}

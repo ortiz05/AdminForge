@@ -1,0 +1,11 @@
+{
+  "$fixture": {
+    "status": 500,
+    "body": {
+      "error": {
+        "code": "generalException",
+        "message": "Synthetic failure: AF-Test-User-02's sessions can't be revoked (fixture for compensation tests)."
+      }
+    }
+  }
+}

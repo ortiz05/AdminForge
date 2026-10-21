@@ -1,0 +1,16 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users/$entity",
+  "id": "00000000-0000-4000-8000-0000000001a1",
+  "displayName": "AF-Test-User-01",
+  "givenName": "AF-Test",
+  "surname": "01",
+  "userPrincipalName": "af-test-user-01@example.com",
+  "mail": "af-test-user-01@example.com",
+  "accountEnabled": true,
+  "userType": "Member",
+  "department": "AdminForge validation",
+  "jobTitle": "Synthetic test user",
+  "companyName": "Example Org",
+  "usageLocation": "US",
+  "createdDateTime": "2026-01-05T09:00:00Z"
+}

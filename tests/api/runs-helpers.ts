@@ -1,8 +1,8 @@
 /**
  * The runs harness: `runsApp` builds the API (support/app.ts) with the runs module wired to fakes — published
- * playbooks/runbooks from `StaticDefinitions`, Microsoft calls answered and recorded by `FakeExecutor`, an in-process
- * run queue and an in-memory (or given) run repository — and signs people in with `login(person, roles, { armed })`.
- * `drain()` waits for the worker to go idle.
+ * playbooks/runbooks from `StaticDefinitions`, Microsoft calls answered and recorded by `FakeExecutor` (or any
+ * `OutboundExecutor`, e.g. the real one on the fixture fetch), an in-process run queue and an in-memory (or given) run
+ * repository — and signs people in with `login(person, roles, { armed })`. `drain()` waits for the worker to go idle.
  *
  * Used by the runs* tests, run-role-recheck and schedule-approval-binding. The people and role sets come from
  * support/people.ts (re-exported here).
@@ -71,10 +71,11 @@ export class FakeExecutor implements OutboundExecutor {
   }
 }
 
-export interface RunsAppOptions {
+export interface RunsAppOptions<E extends OutboundExecutor = FakeExecutor> {
   config: Config;
   definitions: StaticDefinitions;
-  outbound?: FakeExecutor;
+  /** Microsoft calls (default: a new FakeExecutor). The real executor works too (runs-real-executor-compensate). */
+  outbound?: E;
   database?: Database | null;
   repository?: RunRepository;
   /** Audit writer (default: in memory). */
@@ -83,11 +84,11 @@ export interface RunsAppOptions {
 }
 
 /** The API on in-memory stores with the runs module wired to fakes; sessions for any synthetic user via `login`. */
-export async function runsApp(o: RunsAppOptions) {
+export async function runsApp<E extends OutboundExecutor = FakeExecutor>(o: RunsAppOptions<E>) {
   const clock = new Clock();
   const memoryAudit = new MemoryAuditWriter(clock.now);
   const audit = o.audit ?? memoryAudit;
-  const outbound = o.outbound ?? new FakeExecutor();
+  const outbound = o.outbound ?? (new FakeExecutor() as OutboundExecutor as E);
   const queue = new InProcessRunQueue(undefined, 10);
   const repository = o.repository ?? new MemoryRunRepository(clock.now);
   const { app, sessions } = await buildTestApp(o.config, {

@@ -29,7 +29,7 @@ import {
   type AuditEvent,
   type AuditFilter,
 } from './audit';
-import { Facts, isForbidden, QueryError, useDocumentTitle } from './ui';
+import { Callout, Facts, isForbidden, QueryError, useDocumentTitle } from './ui';
 
 export interface AuditSearch extends AuditFilter {
   event?: number;
@@ -58,11 +58,30 @@ function ChainStatus() {
       <StatusPill status="ok">Chain verified ✓ · {v.checked.toLocaleString('en-US')} events</StatusPill>
     </span>
   ) : v.keyMissing ? (
-    <span title="From this event on the chain is keyed with an audit chain key that isn't configured (AUDIT_CHAIN_PREVIOUS_KEYS), so it can't be checked.">
-      <StatusPill status="crit">Can’t verify from #{v.brokenAt ?? '?'} · key not configured</StatusPill>
-    </span>
+    // Short, so it doesn't truncate on a phone; what to do is in KeyMissingCallout.
+    <StatusPill status="crit">Can’t verify from #{v.brokenAt ?? '?'}</StatusPill>
   ) : (
     <StatusPill status="crit">Chain broken at #{v.brokenAt ?? '?'}</StatusPill>
+  );
+}
+
+/**
+ * S-10: from an event on the log is keyed with an audit chain key the portal doesn't have, so it can't be checked —
+ * what an administrator does about it (Portal Admin only, so it may name configuration keys; never the key or its id).
+ */
+function KeyMissingCallout() {
+  const v = useQuery(auditVerifyQuery).data;
+  if (!v || v.ok || !v.keyMissing) return null;
+  return (
+    <Callout
+      tone="crit"
+      title={`The audit log can’t be verified from event #${v.brokenAt ?? '?'}`}
+      className="mb-4"
+    >
+      From there on it is keyed with an audit chain key that isn’t configured. After a key rotation, put the
+      earlier key in AUDIT_CHAIN_PREVIOUS_KEYS and restart. If no such key was ever configured, the event was
+      forged: investigate who can write to the database.
+    </Callout>
   );
 }
 
@@ -378,6 +397,7 @@ export function AuditPage({ search }: { search: AuditSearch }) {
           </>
         }
       />
+      <KeyMissingCallout />
       <FilterForm
         key={JSON.stringify(filter)}
         filter={filter}

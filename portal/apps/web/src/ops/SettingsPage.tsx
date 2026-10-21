@@ -165,10 +165,12 @@ function Present({
  * that wrap (a pill truncates on a phone).
  */
 function AuditChainFact({ chain }: { chain: NonNullable<SettingsResponse['auditChain']> }) {
+  // Unformatted: it is the number to copy (the Audit page shows it the same way).
+  const event = chain.since !== null ? `#${chain.since}` : null;
   return (
     <span className="flex min-w-0 flex-col items-start gap-1">
       {chain.keyed ? (
-        <span>Keyed{chain.since !== null ? ` since event ${chain.since.toLocaleString('en-US')}` : ''}</span>
+        <span>Keyed{event ? ` since event ${event}` : ''}</span>
       ) : (
         <StatusPill status="warn" size="sm">
           Unkeyed
@@ -178,8 +180,8 @@ function AuditChainFact({ chain }: { chain: NonNullable<SettingsResponse['auditC
         {!chain.keyed
           ? 'Set AUDIT_CHAIN_KEY so changing an event needs a key the database doesn’t hold.'
           : chain.pinned
-            ? 'Changing an event needs the key, and the keyed part is pinned (AUDIT_CHAIN_KEYED_SINCE).'
-            : 'Changing an event needs the key. Set AUDIT_CHAIN_KEYED_SINCE to this event so removing the keyed part is caught too.'}
+            ? 'Changing an event needs the key, and removing the keyed part is caught too (AUDIT_CHAIN_KEYED_SINCE).'
+            : `Changing an event needs the key. To catch removal of the keyed part too, set AUDIT_CHAIN_KEYED_SINCE to the first “audit chain cut-over” seq in the API’s log${event ? ` (${event} here)` : ''}.`}
       </span>
     </span>
   );

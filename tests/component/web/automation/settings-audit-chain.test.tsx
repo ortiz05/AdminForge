@@ -33,9 +33,11 @@ describe('Settings: audit log key', () => {
 
   it('keyed: since which event, and how to pin it', async () => {
     renderApp({ session: ADMIN, path: '/settings', handlers: withChain({ keyed: true, since: 12408 }) });
-    expect(await screen.findByText('Keyed since event 12,408')).toBeInTheDocument();
+    expect(await screen.findByText('Keyed since event #12408')).toBeInTheDocument();
     expect(
-      screen.getByText(/^Changing an event needs the key\. Set AUDIT_CHAIN_KEYED_SINCE/),
+      screen.getByText(
+        /^Changing an event needs the key\. To catch removal .*AUDIT_CHAIN_KEYED_SINCE .*\(#12408 here\)\.$/,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Unkeyed/)).toBeNull();
   });
@@ -46,12 +48,13 @@ describe('Settings: audit log key', () => {
       path: '/settings',
       handlers: withChain({ keyed: true, since: 12408, pinned: true }),
     });
-    expect(await screen.findByText('Keyed since event 12,408')).toBeInTheDocument();
+    expect(await screen.findByText('Keyed since event #12408')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Changing an event needs the key, and the keyed part is pinned (AUDIT_CHAIN_KEYED_SINCE).',
+        'Changing an event needs the key, and removing the keyed part is caught too (AUDIT_CHAIN_KEYED_SINCE).',
       ),
     ).toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
   });
 
   it('an API that says nothing about it: no row', async () => {

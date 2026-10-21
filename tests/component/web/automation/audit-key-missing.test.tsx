@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { me } from '../../../support/web/fixtures/session';
+import { axeViolations } from '../../axe';
 import { renderApp } from './render';
 
 // S-10: a stretch of the audit log keyed with a key the portal doesn't have can't be checked. The Audit page says so —
@@ -14,7 +15,7 @@ describe('Audit page: a keyed stretch without its key', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('says it can’t verify from that event, not that the chain is broken', async () => {
+  it('says it can’t verify from that event, not that the chain is broken, and what to do', async () => {
     renderApp({
       session: ADMIN,
       path: '/audit',
@@ -25,7 +26,13 @@ describe('Audit page: a keyed stretch without its key', () => {
             : undefined,
       ],
     });
-    expect(await screen.findByText('Can’t verify from #121 · key not configured')).toBeInTheDocument();
+    expect(await screen.findByText('Can’t verify from #121')).toBeInTheDocument();
     expect(screen.queryByText(/Chain broken/)).toBeNull();
+    // What to do, readable on any device (not only in a hover tooltip).
+    expect(screen.getByText('The audit log can’t be verified from event #121')).toBeInTheDocument();
+    expect(
+      screen.getByText(/put the earlier key in AUDIT_CHAIN_PREVIOUS_KEYS .*the event was forged/),
+    ).toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
   });
 });

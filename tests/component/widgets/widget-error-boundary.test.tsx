@@ -8,6 +8,8 @@ import {
   createWidgetRuntime,
   type KpiConfig,
   type ListConfig,
+  type StatusGridConfig,
+  type TimelineConfig,
   type WidgetRuntime,
 } from '@adminforge/widgets';
 import { me, NAV } from '../../support/web/fixtures/session';
@@ -18,6 +20,8 @@ import { ready } from './helpers';
 // so with a reference and Try again, and the rest of the /p/<key> page keeps working (S-05).
 const List = WIDGETS.list!.component;
 const Kpi = WIDGETS.kpi!.component;
+const StatusGrid = WIDGETS.statusGrid!.component;
+const Timeline = WIDGETS.timeline!.component;
 
 const listConfig = (title: string, extra: Record<string, unknown> = {}) =>
   WIDGETS.list!.schema.parse({
@@ -53,7 +57,9 @@ function expectDesignedError(region: HTMLElement, label: string) {
   const alert = within(region).getByRole('alert');
   expect(alert).toHaveTextContent(`${label} couldn’t be shown`);
   expect(alert).toHaveTextContent('The rest of the page still works, and nothing was changed.');
-  expect(alert).toHaveTextContent('give a portal administrator the reference');
+  expect(alert).toHaveTextContent(
+    'If Try again doesn’t help, send a portal administrator the reference and this page’s address.',
+  );
   expect(within(alert).getByText('Reference')).toBeInTheDocument();
   expect(within(alert).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   // Never the error's own text or a stack trace.
@@ -132,6 +138,65 @@ describe('widget error boundary', () => {
     await user.click(within(alert).getByRole('button', { name: 'Try again' }));
     expect(screen.getByText('Recovered row')).toBeVisible();
     expect(screen.queryByRole('alert')).toBeNull();
+    // The button that had focus is gone: the outcome is announced instead.
+    expect(screen.getByText('Risky apps is shown again').closest('[aria-live="polite"]')).not.toBeNull();
+  });
+
+  it('a Try again that fails once more keeps focus on Try again, with a new reference', async () => {
+    const user = userEvent.setup();
+    render(
+      <List
+        config={listConfig('Risky apps')}
+        data={ready([explodingRow()])}
+        runtime={createWidgetRuntime()}
+        instanceId="w0"
+      />,
+    );
+    const referenceOf = () =>
+      screen.getByRole('button', { name: /^Copy Reference / }).getAttribute('aria-label');
+    const first = referenceOf();
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveFocus();
+    expect(referenceOf()).not.toBe(first);
+    expect(screen.queryByText('Risky apps is shown again')).toBeNull();
+  });
+
+  it('an untitled block that fails is named after its widget type', async () => {
+    const config = WIDGETS.statusGrid!.schema.parse({
+      widget: 'statusGrid',
+      data: 'items.value',
+      label: 'name',
+      status: 'state',
+    }) as StatusGridConfig;
+    const { container } = render(
+      <StatusGrid
+        config={config}
+        data={ready([explodingRow()])}
+        runtime={createWidgetRuntime()}
+        instanceId="s0"
+      />,
+    );
+    expectDesignedError(screen.getByRole('region', { name: 'Status grid' }), 'Status grid');
+    expect(await axeViolations(container)).toEqual([]);
+  });
+
+  it('a timeline is named by its heading (its `title` is per event)', () => {
+    const config = WIDGETS.timeline!.schema.parse({
+      widget: 'timeline',
+      heading: 'Audit trail',
+      data: 'items.value',
+      ts: 'when',
+      title: 'name',
+    }) as TimelineConfig;
+    render(
+      <Timeline
+        config={config}
+        data={ready([Object.assign(explodingRow(), { when: '2026-10-15T12:00:00Z' })])}
+        runtime={createWidgetRuntime()}
+        instanceId="t0"
+      />,
+    );
+    expectDesignedError(screen.getByRole('region', { name: 'Audit trail' }), 'Audit trail');
   });
 
   it('new data clears the error by itself', () => {
@@ -153,7 +218,7 @@ describe('widget error boundary', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('a KPI cell that fails stays a cell (no panel of its own) and names the figure', () => {
+  it('a KPI cell that fails stays a cell (no panel of its own) and names the figure', async () => {
     const runtime = createWidgetRuntime({
       resolve: () => {
         throw new Error('boom: resolve');
@@ -168,8 +233,15 @@ describe('widget error boundary', () => {
     const { container } = render(
       <Kpi config={config} data={ready(12)} runtime={runtime} instanceId="k0" variant="cell" />,
     );
-    expectDesignedError(container as HTMLElement, 'Guests');
+    // Shaped like the strip's other cells: the figure's label, "—" and a status, then the reference and Try again.
+    const figure = screen.getByRole('group', { name: 'Guests' });
+    expect(figure).toHaveTextContent('—');
+    expect(figure).toHaveTextContent('Couldn’t be shown');
+    expect(screen.getByRole('button', { name: /^Copy Reference / })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('boom');
     expect(container.querySelector('section')).toBeNull();
+    expect(await axeViolations(container)).toEqual([]);
   });
 
   it('a list with a hostile character reference in one row still renders every row', () => {

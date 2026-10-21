@@ -1,3 +1,4 @@
+import { humanize } from './lib/path';
 import { withWidgetBoundary } from './lib/WidgetPanel';
 import type { WidgetDefinition } from './types';
 import { actionBarWidget } from './widgets/action-bar';
@@ -29,6 +30,9 @@ const DEFINITIONS: Record<string, WidgetDefinition<any>> = {
   probeStatus: probeStatusWidget,
 };
 
+/** The config key that names a block on the page, where it isn't `title` (a timeline's `title` is per event). */
+const LABEL_KEY: Record<string, string> = { kpi: 'label', timeline: 'heading' };
+
 /**
  * `widget:` type → { schema, component } (§7.4). The page renderer looks blocks up here; unknown types are
  * rejected by validation (and shown as a configuration error, never a crash). Each component renders inside an error
@@ -38,7 +42,10 @@ const DEFINITIONS: Record<string, WidgetDefinition<any>> = {
 export const WIDGETS: Record<string, WidgetDefinition<any>> = Object.fromEntries(
   Object.entries(DEFINITIONS).map(([type, def]) => [
     type,
-    { ...def, component: withWidgetBoundary(def.component) },
+    {
+      ...def,
+      component: withWidgetBoundary(def.component, { name: humanize(type), labelKey: LABEL_KEY[type] }),
+    },
   ]),
 );
 

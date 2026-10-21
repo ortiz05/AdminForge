@@ -1,10 +1,12 @@
-import { Component, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
+import { Component, createRef, Fragment, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
 import {
   Badge,
   Button,
   EmptyState,
   ErrorState,
   FlaskIcon,
+  IdChip,
+  Kpi,
   Panel,
   ProvenanceFooter,
   Skeleton,
@@ -55,12 +57,17 @@ function localReference(): string {
 }
 
 interface BoundaryProps {
-  /** The block's title (or its name) for the message: "Sign-ins couldn’t be shown". */
+  /** The block's title or KPI label: "Sign-ins couldn’t be shown". */
   label?: string;
+  /** What to call the block when it has no label ("Status grid"); names an untitled panel for assistive tech. */
+  name: string;
   /** New data clears the error and renders the block again. */
   resetKey: unknown;
-  /** Draw the fallback inside its own panel (a whole block failed) rather than inside the panel it replaces. */
-  framed?: boolean;
+  /**
+   * Where the fallback stands: `panel` — in a panel of its own (the whole block failed); `body` — inside the panel it
+   * replaces the content of; `cell` — a figure in a KPI strip, shaped like the strip's other cells.
+   */
+  layout: 'panel' | 'body' | 'cell';
   children: ReactNode;
 }
 
@@ -68,6 +75,8 @@ interface BoundaryState {
   failed: boolean;
   reference?: string;
   resetKey?: unknown;
+  /** Try again was pressed since the last new data (announces the outcome, keeps focus on a retry that failed). */
+  retried?: boolean;
 }
 
 /**
@@ -79,6 +88,7 @@ interface BoundaryState {
  */
 export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
   state: BoundaryState = { failed: false };
+  private readonly retryButton = createRef<HTMLButtonElement>();
 
   static getDerivedStateFromError(): Partial<BoundaryState> {
     return { failed: true, reference: localReference() };
@@ -86,7 +96,7 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
 
   static getDerivedStateFromProps(props: BoundaryProps, state: BoundaryState): Partial<BoundaryState> | null {
     if (Object.is(props.resetKey, state.resetKey)) return null;
-    return { resetKey: props.resetKey, failed: false };
+    return { resetKey: props.resetKey, failed: false, retried: false };
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
@@ -97,47 +107,87 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
     );
   }
 
-  private readonly retry = () => this.setState({ failed: false });
+  componentDidUpdate(_props: BoundaryProps, prev: BoundaryState): void {
+    // Try again failed once more: its button is a new one, so give it the focus the old one had.
+    if (this.state.failed && this.state.retried && this.state.reference !== prev.reference)
+      this.retryButton.current?.focus();
+  }
+
+  private readonly retry = () => this.setState({ failed: false, retried: true });
 
   render() {
-    if (!this.state.failed) return this.props.children;
-    const { label, framed } = this.props;
-    const view = (
-      <ErrorState
-        compact
-        // Unframed it may stand in a KPI strip, whose own surface is the hairline colour: keep the panel surface.
-        className={framed ? undefined : 'bg-panel'}
-        title={`${label ?? 'This panel'} couldn’t be shown`}
-        message="Something in its data couldn’t be displayed. The rest of the page still works, and nothing was changed."
-        hint="Try again. If it keeps happening, give a portal administrator the reference and the page you were on."
-        correlationId={this.state.reference}
-        action={
-          <Button size="sm" onClick={this.retry}>
-            Try again
-          </Button>
-        }
-      />
+    const { label, name, layout, children } = this.props;
+    const shown = label ?? name;
+    // Present from the first failure on, so the outcome of Try again is announced in the same live region.
+    const live = (
+      <span key="live" className="sr-only" aria-live="polite">
+        {!this.state.failed && this.state.retried ? `${shown} is shown again` : ''}
+      </span>
     );
-    return framed ? <Panel title={label}>{view}</Panel> : view;
+    if (!this.state.failed)
+      return this.state.retried ? [<Fragment key="block">{children}</Fragment>, live] : children;
+    const retry = (
+      <Button ref={this.retryButton} size="sm" onClick={this.retry}>
+        Try again
+      </Button>
+    );
+    const view =
+      layout === 'cell' ? (
+        <div className="flex min-w-0 flex-col bg-panel">
+          <Kpi
+            variant="cell"
+            label={shown}
+            value="—"
+            status={{ tone: 'crit', label: 'Couldn’t be shown' }}
+            className="pb-2"
+          />
+          <div className="flex flex-wrap items-center gap-2 px-(--af-pad-panel) pb-(--af-pad-panel)">
+            {this.state.reference && <IdChip value={this.state.reference} label="Reference" />}
+            {retry}
+          </div>
+        </div>
+      ) : (
+        <ErrorState
+          compact
+          title={`${shown} couldn’t be shown`}
+          message="Something in its data couldn’t be displayed. The rest of the page still works, and nothing was changed."
+          hint="If Try again doesn’t help, send a portal administrator the reference and this page’s address."
+          correlationId={this.state.reference}
+          action={retry}
+        />
+      );
+    return [
+      layout === 'panel' ? (
+        <Panel key="block" title={label} aria-label={label ? undefined : name}>
+          {view}
+        </Panel>
+      ) : (
+        <Fragment key="block">{view}</Fragment>
+      ),
+      live,
+    ];
   }
 }
 
 /**
  * Every widget renders inside a `WidgetBoundary` (the registry wraps them), so a crash in the widget itself — not
- * only in the parts `WidgetPanel` draws — costs that block only. KPI cells keep their place in the strip without a
- * panel of their own.
+ * only in the parts `WidgetPanel` draws — costs that block only. KPI cells keep their place and shape in the strip.
+ * `name` stands in for an untitled block ("Status grid"); `labelKey` is the config key that names the block on the
+ * page — `title` for most widgets, `label` for a KPI, `heading` for a timeline (whose `title` is per event).
  */
-export function withWidgetBoundary<C>(Inner: ComponentType<WidgetProps<C>>): ComponentType<WidgetProps<C>> {
+export function withWidgetBoundary<C>(
+  Inner: ComponentType<WidgetProps<C>>,
+  { name, labelKey = 'title' }: { name: string; labelKey?: string },
+): ComponentType<WidgetProps<C>> {
   function Guarded(props: WidgetProps<C>) {
-    const config = props.config as { title?: unknown; label?: unknown };
-    const label =
-      typeof config.title === 'string' && config.title
-        ? config.title
-        : typeof config.label === 'string' && config.label
-          ? config.label
-          : undefined;
+    const given = (props.config as Record<string, unknown>)[labelKey];
     return (
-      <WidgetBoundary label={label} resetKey={props.data.value} framed={props.variant !== 'cell'}>
+      <WidgetBoundary
+        label={typeof given === 'string' && given ? given : undefined}
+        name={name}
+        resetKey={props.data.value}
+        layout={props.variant === 'cell' ? 'cell' : 'panel'}
+      >
         <Inner {...props} />
       </WidgetBoundary>
     );
@@ -261,7 +311,7 @@ export function WidgetPanel({
         )
       }
     >
-      <WidgetBoundary label={label} resetKey={data.value}>
+      <WidgetBoundary label={label} name={name} resetKey={data.value} layout="body">
         {body}
       </WidgetBoundary>
     </Panel>

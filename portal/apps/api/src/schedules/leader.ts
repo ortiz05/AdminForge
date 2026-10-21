@@ -36,7 +36,7 @@ export const realTimers: Timers = {
 type Log = { info?(obj: object, msg: string): void; warn(obj: object, msg: string): void };
 
 export interface LeaderOptions {
-  /** How often standbys try to acquire and the leader re-checks (default 5 s). */
+  /** How often a process without the lease tries to take it and the leader renews it (default 5 s). */
   intervalMs?: number;
   timers?: Timers;
   log?: Log;
@@ -120,7 +120,10 @@ export class LeaderElector {
     await this.opts.onDemoted?.(reason);
   }
 
-  /** Stops campaigning; the leader releases the lock so a standby takes over at once. */
+  /**
+   * Stops campaigning; the leader releases the lock, so the next process on the same file (the restarted pod) takes it
+   * at once instead of waiting for the lease to expire.
+   */
   async stop(): Promise<void> {
     this.running = false;
     if (this.timer) this.timers.clearTimeout(this.timer);

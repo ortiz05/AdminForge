@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: billing.month-close
-version: 1.0.0
+version: 1.0.1
 title: Azure month close
 summary: >-
   On the 4th of every month at 07:00 UTC — once Cost Management has settled the month before (up to 72 hours) —
   writes last month's Azure cost for every subscription under the management group, by subscription and then by
-  service, as XLSX, and mails it to the finance team (AF_FINANCE_RECIPIENTS) when it and AF_MAIL_SENDER are configured.
+  service, as XLSX, and mails it to the finance team once an administrator has set their address and the portal's
+  mail sender.
 owner: finance-ops
 tags: [billing, cost, finops, month-close, report]
 every: on the 4th of every month at 07:00

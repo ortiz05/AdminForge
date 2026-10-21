@@ -55,13 +55,16 @@ export function Callout({
   );
 }
 
-/** Label/value pairs in a two-column grid (run details, schedule facts, settings). */
+/**
+ * Label/value pairs in a two-column grid (run details, schedule facts, settings). Below `sm` (a phone) the label sits
+ * above its value, so a value gets the whole width instead of what a 128 px label column leaves.
+ */
 export function Facts({ items, className }: { items: Array<[ReactNode, ReactNode]>; className?: string }) {
   return (
     <dl className={cn('flex flex-col gap-2.5 text-sm', className)}>
       {items.map(([k, v], i) => (
-        <div key={i} className="flex min-w-0 items-baseline gap-4">
-          <dt className="w-32 shrink-0 text-fg-3">{k}</dt>
+        <div key={i} className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-4">
+          <dt className="text-fg-3 sm:w-32 sm:shrink-0">{k}</dt>
           <dd className="min-w-0 flex-1 break-words text-fg">{v ?? <span className="text-fg-3">—</span>}</dd>
         </div>
       ))}

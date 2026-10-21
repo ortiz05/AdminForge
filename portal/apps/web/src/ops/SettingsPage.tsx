@@ -280,9 +280,15 @@ export function SettingsPage() {
                     s.writeStepUp === 'authContext' ? (
                       'Authentication context (your Conditional Access policy decides, e.g. MFA)'
                     ) : s.writeStepUp === 'freshSignIn' ? (
-                      <StatusPill key="s" status="warn" size="sm">
-                        Fresh sign-in only — set WRITE_AUTH_CONTEXT to require MFA
-                      </StatusPill>
+                      // A short pill and the words that wrap under it (a pill truncates on a phone).
+                      <span key="s" className="flex min-w-0 flex-col items-start gap-1">
+                        <StatusPill status="warn" size="sm">
+                          Fresh sign-in only
+                        </StatusPill>
+                        <span className="max-w-full text-xs break-words text-fg-3">
+                          Set WRITE_AUTH_CONTEXT to require MFA.
+                        </span>
+                      </span>
                     ) : null,
                   ],
                   ...(s.writeAuthContext !== null

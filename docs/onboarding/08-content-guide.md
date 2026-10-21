@@ -78,6 +78,8 @@ requires:
 
 ## Versions and status
 
+Details and examples: [content recipes](../content-recipes.md#versions-previews-and-retiring).
+
 - Any change to a published definition **bumps `version`**: patch for fixes and wording, minor for additions (a
   column, a filter, an optional input), major for anything that changes what an existing input, schedule or saved
   view relies on.
@@ -111,15 +113,17 @@ requires:
   `"displayName:${ $odataSearch(params.q) }"` (inside them). A whole path may be a guid or entity param as it is; a
   whole KQL query from a param needs `${ /* adminforge: user-query */ params.kql }`.
 - **Resource Graph limits:** `validate` refuses the queries Azure refuses ([CLAUDE.md](../../CLAUDE.md) rule 14;
-  `adding-a-page-or-report` has the detail). Rows that already join another table (patch assessments, Recovery
-  Services, Defender assessments) get subscription names from a small `resourcecontainers` datasource joined with
-  `$attach` in the rows' transform (`azure.vms-without-backup`: `subs`) — the only transform such a list has.
+  [content recipes](../content-recipes.md#resource-graph) have the detail). Rows that already join another table
+  (patch assessments, Recovery Services, Defender assessments) get subscription names from a small
+  `resourcecontainers` datasource joined with `$attach` in the rows' transform (`azure.vms-without-backup`: `subs`) —
+  the only transform such a list has.
 - **Scale:** lists that can reach thousands of rows page in Resource Graph or Graph with no per-row transform; numbers
   come from a separate `summarize` query. A transform over a big list uses the native helpers and gets a
   `tests/content/content-at-scale-*.scale.test.ts` case at the list's largest size under the real 250 ms budget.
 - Run every new request once against the validation tenant, read-only — fixtures can't tell you Microsoft rejects a
-  query. The skills list the Graph and Resource Graph quirks people trip over. What you couldn't check live goes in
-  `docs/licensing-review.md` (what each request relies on) and `docs/backlog.md` (the check still to do).
+  query. The [content recipes](../content-recipes.md) list the Microsoft quirks people trip over. What you couldn't
+  check live goes in `docs/licensing-review.md` (what each request relies on) and `docs/backlog.md` (the check still
+  to do).
 
 ## Write safety (playbooks and runbooks)
 

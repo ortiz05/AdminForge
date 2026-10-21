@@ -26,9 +26,19 @@ well, it is the fastest way to a consistent change; you still own every line it 
 | `adding-a-runner-script`      | PowerShell: Exchange Online, distribution lists, Teams, SharePoint/PnP               |
 | `adding-a-widget`             | a visualisation or interaction the existing widgets can't express                    |
 | `adding-an-api-route`         | backend behaviour content can't express                                              |
+| `adding-a-coded-screen`       | a React screen the renderer can't express                                            |
+| `adding-a-configuration-key`  | a new setting or `${ env.AF_… }` value                                               |
+| `adding-an-expression-helper` | a new `$function` for content expressions                                            |
+| `adding-a-cli-command`        | a new `adminforge` command or option                                                 |
+| `adding-an-adr`               | a decision others must not undo by accident                                          |
 | `add-news-feed`               | a source in News and changes                                                         |
 | `changing-the-design-system`  | colours, fonts, spacing, radius, density, a component's style, a theme               |
 | `validating-against-a-tenant` | checking a change live: sign-in, data, a real write on `AF-Test-*`, 401/403/licences |
+
+Every skill has the same sections — Overview · When not to use · Steps · Done when · Common mistakes · See also
+(`tests/unit/docs/skills-shape.test.ts` keeps it so). Check a session's result against its skill's "Done when". The
+how-to detail skills share (quoting, expression helpers, Microsoft quirks, fixtures) is in
+[`docs/content-recipes.md`](../content-recipes.md).
 
 ## How to work with it
 

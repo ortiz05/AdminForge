@@ -7,10 +7,10 @@ status: retired
 version: 1.2.1
 title: Microsoft 365 core workloads without an open incident
 summary: >-
-  Retired — replaced by an incident check per workload (probes.exchange-service-incidents and the same for
-  SharePoint, OneDrive, Teams, Entra and Intune) and probes.m365-suite-incidents, which say which service and which
-  incident. It was critical while Microsoft had an open service incident for Exchange Online, Microsoft Teams,
-  SharePoint Online, OneDrive for Business or the Microsoft 365 suite.
+  Retired — replaced by Exchange Online without an open incident (probes.exchange-service-incidents), the matching
+  checks for SharePoint, OneDrive, Teams, Entra and Intune, and Microsoft 365 suite and apps without an open incident
+  (probes.m365-suite-incidents), which say which service and which incident. It was critical while Microsoft had an
+  open service incident for Exchange Online, Microsoft Teams, SharePoint Online, OneDrive or the Microsoft 365 suite.
 owner: m365-team
 tags: [synthetic, m365, service-health, sweep-15m]
 group: m365

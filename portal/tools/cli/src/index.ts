@@ -315,7 +315,7 @@ program
 
 program
   .command('new')
-  .argument('<kind>', 'page | dashboard | report | playbook | runbook | connection | probe | schedule')
+  .argument('<kind>', 'page | dashboard | report | playbook | runbook | connection | probe | schedule | feed')
   .argument('<path>', '<section>/<name>, e.g. identity/stale-guests')
   .description(
     'Scaffold a valid definition (with $schema for editor autocomplete) and a fixture stub under tests/fixtures',

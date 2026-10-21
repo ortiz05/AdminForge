@@ -10,7 +10,8 @@
  *   - runner script pins: every `script` reference's `sha256` must be the sha256 of the file under
  *     <content>/scripts (content/lint.ts `scriptPinProblems`);
  *   - `env.X` references to keys that config/example.env does not declare;
- *   - Graph writes naming a user after `/users/` by anything but `$guid()` (content/lint.ts `usersWriteProblems`).
+ *   - Graph writes naming a user after `/users/` by anything but `$guid()` (content/lint.ts `usersWriteProblems`);
+ *   - a file outside the folder its id names (`folderPrefixProblem`: folder = id prefix, portal/content/README.md).
  * Warnings (printed, never fail): a `$schema` that doesn't point at the generated JSON schema, Graph beta endpoints.
  *
  * Reads files only (content, scripts, config/example.env); no network, no database, nothing in the tenant.
@@ -23,6 +24,7 @@ import { formatContentError, loadContentDir, type LoadedDefinition } from '@admi
 import { hiddenFromContent } from './api-bridge';
 import { relPath, type ContentCliContext } from './context';
 import { bareDatasourceRefs, datasourceOrderProblems, scriptPinProblems, usersWriteProblems } from './lint';
+import { SCAFFOLD_KINDS } from './scaffold';
 
 export interface ValidateReport {
   definitions: number;
@@ -48,9 +50,77 @@ export function scriptHasher(scriptsDir: string): (script: string) => string | n
   };
 }
 
+/** What the folder rule reads of a definition. */
+interface Placed {
+  kind: string;
+  id: string;
+  nav?: { section?: string };
+}
+
+const prefixOf = (id: string) => id.slice(0, id.indexOf('.'));
+
+/**
+ * The folder (under the content directory) a definition belongs in: `<kind folder>/<id prefix>` — `pages/identity`
+ * for `identity.users` — or the kind folder itself when the prefix is its name (`probes.dns-mx` in `probes`,
+ * `feeds.m365-roadmap` in `feeds`). `adminforge new` writes there (content/scaffold.ts). Null for the navigation,
+ * which is `navigation.yaml` at the content root.
+ */
+export function expectedFolder(def: Pick<Placed, 'kind' | 'id'>): string | null {
+  if (!Object.hasOwn(SCAFFOLD_KINDS, def.kind)) return null;
+  const top: string = SCAFFOLD_KINDS[def.kind as keyof typeof SCAFFOLD_KINDS];
+  const prefix = prefixOf(def.id);
+  return prefix === top ? top : `${top}/${prefix}`;
+}
+
+/**
+ * Folders that also hold definitions whose id prefix isn't the folder's name. They predate the rule and stay:
+ * nothing moves (O-05), and ids never change once published (saved views, schedules, runs, approvals and the audit
+ * log key on them). Short on purpose — new content follows the rule; tests/unit/cli/content-folder-prefix.test.ts
+ * fails when an entry no longer holds a file. portal/content/README.md lists them.
+ */
+export const FOLDER_EXCEPTIONS: ReadonlyArray<{
+  folder: string;
+  /** The ids it holds, for people. */
+  ids: string;
+  why: string;
+  holds: (def: Placed) => boolean;
+}> = [
+  {
+    folder: 'dashboards',
+    ids: '<nav.section>.*',
+    why: 'the section overview dashboards (`dashboards/exchange.dashboard.yaml` is `exchange.overview`)',
+    holds: (d) => d.kind === 'dashboard' && d.nav?.section === prefixOf(d.id),
+  },
+  {
+    folder: 'schedules/probes',
+    ids: 'sweep.*',
+    why: 'the probe sweeps: schedules are filed by job, and these run probes by tag',
+    holds: (d) => d.kind === 'schedule' && prefixOf(d.id) === 'sweep',
+  },
+  {
+    folder: 'connections',
+    ids: 'integrations.*',
+    why: '`integrations.hr-sync`, filed before connections had section folders',
+    holds: (d) => d.kind === 'connection' && prefixOf(d.id) === 'integrations',
+  },
+];
+
+/**
+ * The folder rule: null when `file` (relative to the content directory, forward slashes) sits in the folder its id
+ * names or in a listed exception, else the message — which names the folder it belongs in.
+ */
+export function folderPrefixProblem(file: string, def: Placed): string | null {
+  const expected = expectedFolder(def);
+  if (expected === null) return null;
+  const folder = path.posix.dirname(file);
+  if (folder === expected) return null;
+  if (FOLDER_EXCEPTIONS.some((e) => e.folder === folder && e.holds(def))) return null;
+  return `${def.id} belongs in ${expected}/ — a definition's folder is its id prefix (portal/content/README.md). Move the file: a published id never changes.`;
+}
+
 /**
  * Schema, references, expression compilation, injection lint (OData, KQL, paths), datasource rules, script pins,
- * env keys, `$schema` paths. No network.
+ * env keys, folders, `$schema` paths. No network.
  */
 export async function checkContent(
   ctx: Pick<ContentCliContext, 'contentDir' | 'repoRoot'>,
@@ -84,6 +154,8 @@ export async function checkContent(
       );
     }
     for (const u of usersWriteProblems(d.def)) errs.push(`${at(u.segments)} ${u.path}: ${u.message}`);
+    const misplaced = folderPrefixProblem(d.file, d.def);
+    if (misplaced) errs.push(`${at(['id'])} id: ${misplaced}`);
     for (const e of collectExpressions(d.def))
       for (const m of e.source.matchAll(/\benv\.([A-Za-z0-9_]+)/g))
         if (!declaredEnv.has(m[1]!))

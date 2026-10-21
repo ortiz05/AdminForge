@@ -153,8 +153,10 @@ Every configuration key is documented in `config/example.env`.
 
 - **Does:** checks `portal/content` offline: schema, references, expressions, injection lint (OData, KQL, paths),
   datasource rules, runner script sha256 pins (every `script` reference must pin the sha256 of its file under
-  `portal/content/scripts`) and `env.X` keys. `--scopes` also compares the declared `requires.scopes` with what Entra
-  granted the Read and Write apps and the automation identity.
+  `portal/content/scripts`), `env.X` keys and folders (a definition sits in the folder its id prefix names —
+  `identity.users` in `pages/identity/` — or in one of three listed exceptions; the error names the folder; see
+  `portal/content/README.md`). `--scopes` also compares the declared `requires.scopes` with what Entra granted the
+  Read and Write apps and the automation identity.
 - **Reads:** content and `config/example.env`; with `--scopes` also `AF_TENANT_ID`, the provisioner credentials,
   `AF_READ_CLIENT_ID`, `AF_WRITE_CLIENT_ID`, `AF_AUTOMATION_CLIENT_ID` and the ceiling opt-ins.
 - **Changes:** nothing (`--scopes` reads Entra as the provisioner). **Safe:** yes. **Exit 1:** any error, or with
@@ -205,8 +207,11 @@ publish`). **Safe:** only with `--dry-run` (which may still migrate the schema).
 ### `new <kind> <section>/<name> [--template <template>] [--owner <team>] [--force]`
 
 - **Does:** scaffolds a definition that validates as written (`page`, `dashboard`, `report`, `playbook`, `runbook`,
-  `connection`, `probe`, `schedule`; page templates `list-detail`, `dashboard`, `report`, `entity`) with `$schema`
-  for editor autocomplete, plus a synthetic fixture stub.
+  `connection`, `probe`, `schedule`, `feed`; page templates `list-detail`, `dashboard`, `report`, `entity`) with
+  `$schema` for editor autocomplete, plus a synthetic fixture stub. The file is
+  `<kind folder>/<section>/<name>.<kind>.yaml` with the id `<section>.<name>` — or `<kind folder>/<name>.<kind>.yaml`
+  when `<section>` is the kind folder's name (`new probe probes/<name>`, `new feed feeds/<name>`), where `validate`
+  expects it.
 - **Options:** `--template`, `--owner` (default `<section>-team`), `--force` (overwrite the definition).
 - **Reads:** `CONTENT_DIR`, `ADMINFORGE_FIXTURES_DIR` (defaults `portal/content`, `tests/fixtures`).
 - **Changes:** local files only. **Safe:** yes.
@@ -295,7 +300,7 @@ src/
     azure-test.ts     provision azure-test (and its block in provision status)
   content/            content-side logic the commands share
     context.ts        ContentCliContext: directories, env, output, injectable stand-ins
-    check.ts          the offline validate check (also the publish gate)
+    check.ts          the offline validate check (also the publish gate), the folder = id prefix rule
     lint.ts           pure rules: bare datasource names, declaration order, script sha256 pins
     playbook-tests.ts runs playbook/runbook tests: blocks through the engine
     review-state.ts   git: is the content committed and on origin/main? (in the image: BUILD.json)
@@ -370,8 +375,8 @@ pnpm --filter @adminforge/tests exec vitest run --project unit unit/cli
   own tests (`entra-plan`, `identities-plan`, `test-fixtures-plan`, `azure-test-plan`, `privilege-ceilings`,
   `automation-ceiling`, …).
 - **Content commands** run against temporary content directories with injected stores, engines, git state and fetch
-  (`content.test.ts`, `publish-*.test.ts`, `news-feeds.test.ts`, `script-pins.test.ts`, `content-list.test.ts`, the
-  lint rule tests).
+  (`content.test.ts`, `publish-*.test.ts`, `news-feeds.test.ts`, `script-pins.test.ts`, `content-list.test.ts`,
+  `content-folder-prefix.test.ts`, the lint rule tests).
 - **Configuration and plumbing**: `env-check*.test.ts` (`env-check-retired-keys` for the Postgres keys),
   `env-command.test.ts` (temporary env files only — never `~/.config`), `redirect-origins.test.ts`,
   `audit-verify.test.ts`, `review-state-image.test.ts`, `describe-failure.test.ts`.

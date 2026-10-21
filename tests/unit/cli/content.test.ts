@@ -184,7 +184,8 @@ layout:
       );
       expect(text).toMatch(/env\.AF_NOT_DECLARED is not declared in config\/example\.env/);
       expect(text).toMatch(/bad\.page\.yaml:18 datasources\.users\.request\.query\.\$select: /);
-      expect(w.lines.at(-1)).toMatch(/^✗ 4 problem\(s\)/);
+      expect(text).toMatch(/✗ bad\.page\.yaml:2 id: identity\.bad belongs in pages\/identity\//);
+      expect(w.lines.at(-1)).toMatch(/^✗ 5 problem\(s\)/);
     } finally {
       w.cleanup();
     }
@@ -250,7 +251,7 @@ layout:
       expect(await validateContent(w.ctx, { scopes: true })).toBe(false);
       const text = w.lines.join('\n');
       expect(text).toContain(
-        '✗ missing  Automation identity · graph · Organization.Read.All  (probes/probes/graph-org.probe.yaml)',
+        '✗ missing  Automation identity · graph · Organization.Read.All  (probes/graph-org.probe.yaml)',
       );
       expect(text).toContain('· unused   Read app · graph · Sites.Read.All');
       expect(text).toContain('· unused   Automation identity · graph · Directory.Read.All');

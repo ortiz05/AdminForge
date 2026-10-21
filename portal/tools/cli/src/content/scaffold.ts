@@ -269,9 +269,10 @@ export function scaffold(input: ScaffoldInput): Scaffold {
   const { section, name } = parseTarget(input.target);
   const id = `${section}.${name}`;
   const kind = input.kind;
-  // Feeds keyed feeds.<name> live directly in portal/content/feeds (not feeds/feeds/).
+  // The folder is the id prefix; ids named after their kind folder (feeds.<name>, probes.<name>) live directly in it
+  // (feeds/, not feeds/feeds/) — where `adminforge validate` expects them (content/check.ts `expectedFolder`).
   const dir =
-    kind === 'feed' && section === SCAFFOLD_KINDS.feed
+    section === SCAFFOLD_KINDS[kind]
       ? path.join(input.contentDir, SCAFFOLD_KINDS[kind])
       : path.join(input.contentDir, SCAFFOLD_KINDS[kind], section);
   const file = path.join(dir, `${name}.${kind}.yaml`);

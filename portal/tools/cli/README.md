@@ -8,9 +8,11 @@ the cluster's database: `kubectl -n adminforge exec deploy/adminforge -c api -- 
 
 Configuration comes from the env files outside the repository (CLAUDE.md non-negotiable 1), read by
 `@adminforge/config` `loadEnv` in layers: `~/.config/adminforge/<env>.env` (or `$ADMINFORGE_ENV_FILE`), then
-`<env>.admin.env` (provisioner and live-test credentials — the CLI is the only reader besides the live tests), then
-`<env>.$ADMINFORGE_ENV_OVERLAY.env` if set; the process environment wins over all files (in the pod it is the only
-source: the `adminforge-env` Secret and the ConfigMap). The CLI never prints secrets,
+`<env>.admin.env` (provisioner and live-test credentials, read only by the commands that act as the provisioner —
+`provision …` and `validate --scopes` — and the live tests), then `<env>.$ADMINFORGE_ENV_OVERLAY.env` if set; the
+process environment wins over all files (in the pod it is the only source: the `adminforge-env` Secret and the
+ConfigMap). An env file other users of the machine may read (any group or world permission) is refused with the fix,
+`chmod 600 <file>`. The CLI never prints secrets,
 ids or UPNs from the configuration or the tenant: output names keys, objects and states (provisioning headers also
 show the environment label and redirect origin), and the secrets it creates go straight into the env files.
 

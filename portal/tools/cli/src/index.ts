@@ -6,8 +6,9 @@
  * Layers (each imports only from the ones below it):
  *   index.ts → commands/* (one module per command) → content/*, env/*, provision/* → shared/*.
  * Every command takes its outside world as a context object (`CliContext`, `ContentCliContext`) built here from the
- * env file (outside the repo, R2: @adminforge/config `loadEnv`, including <env>.admin.env) and `console.log`, so tests
- * can run the same functions with fakes.
+ * env file (outside the repo, R2: @adminforge/config `loadEnv`) and `console.log`, so tests can run the same functions
+ * with fakes. Only the commands that act as the provisioner — `provision …` and `validate --scopes` — also read
+ * <env>.admin.env with its credentials (`cliEnv`).
  *
  * Exit codes: 0 success; 1 when a command reports a problem (validation errors, failed tests, drift, a refused
  * publish) or throws. Thrown errors print as `✗ <message>`: ConfigError, TokenError and EnvFileModeError (an env file
@@ -39,10 +40,16 @@ import { TokenError } from './provision/auth';
 import type { CliContext } from './provision/clients';
 import { ConfigError, describeFailure } from './shared/errors';
 
-/** Real-world context: env file outside the repo (R2), stdout, global fetch. */
+/**
+ * The configuration a command reads: the runtime layers (<env>.env and the overlay), and for `provisioner` also
+ * <env>.admin.env — the provisioner's and the test accounts' credentials. Content commands, `audit` and `db` never hold
+ * them: a playbook test or a fixture recording has no business next to a Global Administrator's secret.
+ */
+const cliEnv = (scope: 'runtime' | 'provisioner') => loadEnv(process.env, { admin: scope === 'provisioner' });
+
+/** Real-world context for `provision …`: env file outside the repo (R2) with the admin file, stdout, global fetch. */
 function liveContext(): CliContext {
-  // The CLI is admin tooling: it also reads <env>.admin.env (provisioner and live-test credentials).
-  const env = loadEnv(process.env, { admin: true });
+  const env = cliEnv('provisioner');
   return {
     env,
     writeEnv: (updates) => {
@@ -177,8 +184,9 @@ provision
 const useEnv = (name?: string) => {
   if (name && !process.env.ADMINFORGE_ENV_FILE) process.env.ADMINFORGE_ENV = name;
 };
-const content = () =>
-  contentContext(loadEnv(process.env, { admin: true }), (line) => console.log(line), repoRoot);
+/** The content commands' context; `provisioner` only for `validate --scopes` (it reads the app registrations). */
+const content = (scope: 'runtime' | 'provisioner' = 'runtime') =>
+  contentContext(cliEnv(scope), (line) => console.log(line), repoRoot);
 
 program
   .command('validate')
@@ -192,7 +200,8 @@ program
   .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)')
   .action(async (opts: { scopes?: boolean; env?: string }) => {
     useEnv(opts.env);
-    if (!(await validateContent(content(), { scopes: opts.scopes }))) process.exitCode = 1;
+    const ctx = content(opts.scopes ? 'provisioner' : 'runtime');
+    if (!(await validateContent(ctx, { scopes: opts.scopes }))) process.exitCode = 1;
   });
 
 program
@@ -210,8 +219,7 @@ audit
   .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)', 'dev')
   .action(async (opts: { env?: string }) => {
     useEnv(opts.env);
-    if (!(await auditVerify(loadEnv(process.env, { admin: true }), (l) => console.log(l))))
-      process.exitCode = 1;
+    if (!(await auditVerify(cliEnv('runtime'), (l) => console.log(l)))) process.exitCode = 1;
   });
 
 const db = program.command('db').description('The database file (DATABASE_PATH)');
@@ -225,7 +233,7 @@ db.command('backup')
   .action(async (file: string, opts: { env?: string; plaintext?: boolean }) => {
     useEnv(opts.env);
     await dbBackup(
-      loadEnv(process.env),
+      cliEnv('runtime'),
       file,
       { out: (l) => console.log(l), err: (l) => console.error(l) },
       { plaintext: opts.plaintext },
@@ -240,7 +248,7 @@ db.command('sign-out-everyone')
   .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)')
   .action(async (opts: { yes?: boolean; scheduleGrants?: boolean; env?: string }) => {
     useEnv(opts.env);
-    await dbSignOutEveryone(loadEnv(process.env), (l) => console.log(l), opts);
+    await dbSignOutEveryone(cliEnv('runtime'), (l) => console.log(l), opts);
   });
 db.command('import-postgres')
   .description(
@@ -252,7 +260,7 @@ db.command('import-postgres')
   .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)')
   .action(async (opts: { to?: string; fromEnv?: string; dryRun?: boolean; env?: string }) => {
     useEnv(opts.env);
-    await importPostgres(loadEnv(process.env), (l) => console.log(l), {
+    await importPostgres(cliEnv('runtime'), (l) => console.log(l), {
       to: opts.to,
       fromEnv: opts.fromEnv,
       dryRun: opts.dryRun,

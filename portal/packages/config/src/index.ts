@@ -1,4 +1,14 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  writeFileSync,
+  type Stats,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -100,19 +110,28 @@ export class EnvFileModeError extends Error {
  * configuration arrives as environment variables (the Secret and the ConfigMap), never through an env file. Symlinks
  * are followed: the file they name is the one that must be private.
  */
-export function assertPrivateEnvFile(file: string): void {
-  if (process.platform === 'win32') return; // no POSIX modes (ACLs decide)
-  const stat = statSync(file, { throwIfNoEntry: false });
-  if (!stat?.isFile()) return;
+function checkPrivate(file: string, stat: Stats | undefined): void {
+  if (process.platform === 'win32' || !stat?.isFile()) return; // Windows: no POSIX modes (ACLs decide)
   const mode = stat.mode & 0o777;
   if (mode & 0o077) throw new EnvFileModeError(file, mode);
+}
+
+/** An env file's text, its mode checked on the descriptor that is read: no swap between the check and the read. */
+function readPrivateEnvFile(file: string): string {
+  const fd = openSync(file, 'r');
+  try {
+    checkPrivate(file, fstatSync(fd));
+    return readFileSync(fd, 'utf8');
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
  * The layered files (see envFilePath) overlaid by process.env. Missing files → process.env only. Keys from the files
  * that the caller didn't ask for are dropped: admin keys without `admin` (also from a base file that still holds
  * them — older layout). Values set in process.env itself are kept as given. A file others may read is refused
- * (assertPrivateEnvFile) — only the files read: without `admin`, the admin file's mode is not looked at.
+ * (checkPrivate) — only the files read: without `admin`, the admin file's mode is not looked at.
  */
 export function loadEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -120,10 +139,7 @@ export function loadEnv(
 ): Record<string, string | undefined> {
   const fromFiles: Record<string, string> = {};
   for (const file of envFiles(env, opts))
-    if (existsSync(file)) {
-      assertPrivateEnvFile(file);
-      Object.assign(fromFiles, parseEnv(readFileSync(file, 'utf8')));
-    }
+    if (existsSync(file)) Object.assign(fromFiles, parseEnv(readPrivateEnvFile(file)));
   if (!opts.admin) for (const key of ADMIN_ENV_KEYS) delete fromFiles[key];
   return { ...fromFiles, ...env };
 }

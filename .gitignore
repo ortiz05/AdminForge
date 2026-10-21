@@ -34,6 +34,8 @@ id_ed25519
 portal/apps/web/src/routeTree.gen.ts
 portal/packages/schemas/generated/
 portal/apps/runner/modules/
+# TanStack Router's working files (the component tests write tmp/ there)
+portal/apps/web/.tanstack/
 .claude/worktrees/
 
 # Local test-runner reports

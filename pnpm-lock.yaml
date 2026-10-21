@@ -253,6 +253,9 @@ importers:
 
   portal/packages/expressions:
     dependencies:
+      '@adminforge/schemas':
+        specifier: workspace:*
+        version: link:../schemas
       jsonata:
         specifier: ^2.2.2
         version: 2.2.2

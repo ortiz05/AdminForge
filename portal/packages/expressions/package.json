@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@adminforge/schemas": "workspace:*",
     "jsonata": "^2.2.2"
   }
 }

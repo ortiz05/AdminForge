@@ -1,3 +1,4 @@
+import { patternProblem } from '@adminforge/schemas';
 import { compile, ExpressionError } from './evaluate';
 import {
   analyse,
@@ -113,6 +114,33 @@ function misplacedBind(node: unknown, statement = true): boolean {
   );
 }
 
+/**
+ * Why each regular expression handed to `$match` can't be used, by the content `pattern:` rules (`patternProblem` in
+ * @adminforge/schemas, S-14): a regex runs synchronously, so no evaluation budget stops one that backtracks without
+ * bound (`$match(s, /(a+)+$/)` on 25 characters took 609 ms). Reads calls, `~>` and partial application.
+ */
+function matchPatternProblems(node: unknown, out: string[] = []): string[] {
+  if (!node || typeof node !== 'object') return out;
+  if (Array.isArray(node)) {
+    for (const x of node) matchPatternProblems(x, out);
+    return out;
+  }
+  const n = node as { type?: string; procedure?: { type?: string; value?: unknown }; arguments?: unknown };
+  if (
+    (n.type === 'function' || n.type === 'partial') &&
+    n.procedure?.type === 'variable' &&
+    n.procedure.value === 'match' &&
+    Array.isArray(n.arguments)
+  )
+    for (const arg of n.arguments as Array<{ type?: string; value?: unknown }>) {
+      const problem =
+        arg?.type === 'regex' && arg.value instanceof RegExp ? patternProblem(arg.value.source) : undefined;
+      if (problem) out.push(`$match: ${problem}`);
+    }
+  for (const v of Object.values(node)) if (v && typeof v === 'object') matchPatternProblems(v, out);
+  return out;
+}
+
 /** Compiles every `${ … }` in a definition and reports the ones that are malformed. Empty array = all good. */
 export function validateExpressions(def: unknown, opts: WalkOptions = {}): ExpressionIssue[] {
   const issues: ExpressionIssue[] = [];
@@ -145,6 +173,8 @@ export function validateExpressions(def: unknown, opts: WalkOptions = {}): Expre
                 message:
                   'Assign variables ($x := …) only as a statement of a block ( … ; … ), the whole expression or a function body — not inside a condition, an operand or an argument.',
               });
+            for (const message of matchPatternProblems(ast))
+              issues.push({ ...at, expression: seg.source, message });
           } catch (err) {
             const e = err as ExpressionError;
             issues.push({

@@ -205,6 +205,10 @@ describe('scheduler', () => {
     await h.store.updateSchedule(row.id, { nextRunAt: new Date(h.clock.t - 2 * 60 * MIN) });
     await h.scheduler.tick();
     expect(h.jobs.calls).toHaveLength(0);
+    // Not run late, but recorded: a skipped run saying it was missed (tests/unit/scheduler/missed-tick.test.ts).
+    expect((await runsOf(h, 'sweep.a')).map((r) => [r.status, r.error?.code])).toEqual([
+      ['skipped', 'schedule_missed'],
+    ]);
     expect((await h.store.getSchedule('sweep.a'))!.nextRunAt?.toISOString()).toBe('2026-10-15T12:15:00.000Z');
     // A tick missed by less than the grace period runs once, late.
     await h.store.updateSchedule(row.id, { nextRunAt: new Date(h.clock.t - 10 * MIN) });

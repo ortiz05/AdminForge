@@ -116,6 +116,35 @@ export function retryDelayMs(retry: NonNullable<Schedule['retry']>, attempt: num
   return Math.min(retry.backoff === 'fixed' ? base : base * 2 ** (attempt - 1), MAX_RETRY_DELAY_MS);
 }
 
+/** "07:00 on 12 Oct 2026" in the schedule's own time zone (UTC when the zone isn't known here). */
+function formatDue(at: Date, timezone: string): { text: string; zone: string } {
+  for (const zone of [timezone, 'UTC'])
+    try {
+      const part = (o: Intl.DateTimeFormatOptions) =>
+        new Intl.DateTimeFormat('en-GB', { timeZone: zone, ...o }).format(at);
+      return {
+        text: `${part({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })} on ${part({ day: 'numeric', month: 'short', year: 'numeric' })}`,
+        zone,
+      };
+    } catch {
+      // An unknown zone: say it in UTC.
+    }
+  return { text: at.toISOString(), zone: 'UTC' };
+}
+
+/**
+ * A tick due more than the grace period ago (F-09): the scheduler wasn't running then. Recorded as `skipped` with
+ * this error (the status list has no `missed`; changing its CHECK means a table rebuild).
+ */
+export function missedError(due: Date, timezone: string): RunErrorInfo {
+  const { text, zone } = formatDue(due, timezone);
+  return {
+    code: 'schedule_missed',
+    message: `AdminForge wasn’t running at ${text} (${zone}), so this run was skipped.`,
+    hint: 'If you still need this run’s result, run the schedule now. It runs again at its next time as usual.',
+  };
+}
+
 export class Scheduler {
   private readonly active = new Map<string, Active>();
   private readonly timers: Timers;
@@ -258,10 +287,17 @@ export class Scheduler {
       );
       if (!claimed) continue;
       if (now.getTime() - s.nextRunAt.getTime() > (this.o.misfireGraceMs ?? 3_600_000)) {
+        // Not run late (a report from Monday 07:00 sent on Monday afternoon would mislead): recorded, so the
+        // Schedules page shows it was missed and when.
         this.o.log?.warn(
           { schedule: s.key, due: s.nextRunAt.toISOString() },
           'scheduler: missed run skipped (scheduler was not running)',
         );
+        await this.recordSkipped(claimed, 'cron', now, missedError(s.nextRunAt, s.definition.timezone), {
+          startedAt: s.nextRunAt,
+          extra: { missedAt: s.nextRunAt.toISOString() },
+          last: true,
+        });
         continue;
       }
       if (paused) {
@@ -369,18 +405,38 @@ export class Scheduler {
   }
 
   /** Automation is paused: the occurrence (a due tick, or a queued run) is recorded as skipped with why, and audited. */
-  private async skipPaused(
+  private skipPaused(
     s: ScheduleRow,
     trigger: ScheduleTrigger,
     now: Date,
     queued?: ScheduleRunRow,
     extra: Record<string, unknown> = {},
   ) {
-    const error = { ...AUTOMATION_PAUSED };
+    return this.recordSkipped(s, trigger, now, { ...AUTOMATION_PAUSED }, { queued, extra });
+  }
+
+  /**
+   * An occurrence that didn't run (automation paused, a missed tick): a `skipped` row whose `error` says why and what
+   * to do, audited (`schedule.run`) and announced (`schedule.updated`). `queued` turns a waiting run into it;
+   * `startedAt` dates the row (a missed tick: when it was due); `last` makes it the schedule's last run in the lists.
+   */
+  private async recordSkipped(
+    s: ScheduleRow,
+    trigger: ScheduleTrigger,
+    now: Date,
+    error: RunErrorInfo,
+    opts: {
+      queued?: ScheduleRunRow;
+      extra?: Record<string, unknown>;
+      startedAt?: Date;
+      last?: boolean;
+    } = {},
+  ) {
+    const { queued } = opts;
     const fields = {
       status: 'skipped' as const,
       endedAt: now,
-      result: { ...queued?.result, ...extra, reason: AUTOMATION_PAUSED.message },
+      result: { ...queued?.result, ...opts.extra, reason: error.message },
       error,
     };
     const run = queued
@@ -389,10 +445,12 @@ export class Scheduler {
           scheduleId: s.id,
           scheduleKey: s.key,
           trigger,
-          startedAt: now,
+          startedAt: opts.startedAt ?? now,
           ...fields,
         });
     if (!run) return null;
+    if (opts.last)
+      await this.o.store.updateSchedule(s.id, { lastRunAt: run.startedAt, lastStatus: 'skipped' });
     await this.auditRun(s, run, 'skipped', 0, error, null);
     this.o.events.publish({
       type: 'schedule.updated',

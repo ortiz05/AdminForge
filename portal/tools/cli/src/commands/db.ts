@@ -12,8 +12,9 @@
  * encrypted on the operator's machine: `kubectl exec deploy/adminforge -c api -- adminforge db backup - | gpg -e -r
  * <key> > adminforge.db.gpg`. The copy is the whole history, so it is itself recorded in it: before the copy leaves
  * the process, a `database.backup` audit event (who, stdout or file — never the path —, plaintext, bytes, the copy's
- * audit tail) goes to the live database; if that can't be written, the copy doesn't leave (a file is removed). A
- * failed copy is recorded too. Copies from a read-only connection; writes the new file and that one event.
+ * audit tail) goes to the live database; if that can't be written, the copy doesn't leave. A file copy is written under
+ * a hidden name next to its destination and takes the operator's name only once it is recorded. A failed copy is
+ * recorded too. Copies from a read-only connection; writes the new file and that one event.
  *
  * import-postgres: the one-time move from the Postgres releases. Reads the old database (its URL from DATABASE_URL in
  * the env file — never a command-line argument, so the password stays out of shell history and the process list; or
@@ -24,7 +25,7 @@
  * token partitions; schedules' sealed grant tokens are kept (they need the same TOKEN_CACHE_KEY). Refuses a target that
  * already holds data. Nothing in the tenant; nothing is written to Postgres.
  */
-import { createReadStream, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { createReadStream, existsSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -58,6 +59,12 @@ function cliActor(): { actorOid: string; actorUpn: string } {
   return { actorOid: 'cli', actorUpn: `${user}@${hostname()}` };
 }
 
+/** DATABASE_BUSY_TIMEOUT_MS as the API reads it: how long the CLI's write waits for the running API's write lock. */
+function cliDatabaseOptions(env: Record<string, string | undefined>) {
+  const ms = Number(env.DATABASE_BUSY_TIMEOUT_MS);
+  return { name: 'cli', ...(Number.isInteger(ms) && ms >= 100 ? { busyTimeoutMs: ms } : {}) };
+}
+
 /** `adminforge db backup <file|->`. With `-`, the file goes to stdout and messages to stderr. */
 export async function dbBackup(
   env: Record<string, string | undefined>,
@@ -75,12 +82,18 @@ export async function dbBackup(
   const file = databasePath(env);
   if (!existsSync(file)) throw new ConfigError(`There is no database at ${file} (DATABASE_PATH).`);
   const say = toStdout ? io.err : io.out;
+  const final = toStdout ? null : databasePath({}, target);
+  if (final && existsSync(final)) throw new ConfigError(`${final} already exists; choose a new file name.`);
   const scratch = toStdout ? mkdtempSync(path.join(tmpdir(), 'adminforge-backup-')) : null;
-  const dest = scratch ? path.join(scratch, 'adminforge.db') : databasePath({}, target);
+  // A process stopped before the copy is recorded (Ctrl-C while the write waits for the API's lock) leaves at most an
+  // unfinished-looking leftover, never a finished-looking copy that the audit log doesn't know.
+  const dest = final
+    ? path.join(path.dirname(final), `.${path.basename(final)}.unrecorded-${randomUUID()}`)
+    : path.join(scratch!, 'adminforge.db');
   const where = { destination: toStdout ? 'stdout' : 'file', plaintext: !!opts.plaintext };
   /** The record of this copy, through the normal audit writer on a connection of its own (the copy's is read-only). */
   const record = async (result: 'success' | 'failure', details: Record<string, unknown>) => {
-    const database = createDatabase(file, { name: 'cli', pollSignals: false });
+    const database = createDatabase(file, { ...cliDatabaseOptions(env), pollSignals: false });
     try {
       await new SqliteAuditWriter(database.db, undefined, null).append({
         ...cliActor(),
@@ -95,7 +108,9 @@ export async function dbBackup(
       await database.close();
     }
   };
-  const source = createDatabase(file, { readonly: true, name: 'cli' });
+  const source = createDatabase(file, { ...cliDatabaseOptions(env), readonly: true });
+  /** The copy while it is not handed out: removed on any failure. */
+  let unrecorded: string | undefined;
   try {
     let result: Awaited<ReturnType<typeof backupDatabase>>;
     try {
@@ -107,26 +122,27 @@ export async function dbBackup(
       );
       throw err;
     }
+    unrecorded = result.file;
     // Before the copy leaves the process: no record, no copy.
-    try {
-      await record('success', {
-        ...where,
-        bytes: result.bytes,
-        auditEvents: result.audit.count,
-        ...(result.audit.tail ? { tailSeq: result.audit.tail.seq } : {}),
-      });
-    } catch (err) {
-      if (!scratch) rmSync(result.file, { force: true });
-      throw err;
-    }
-    if (scratch) await pipeline(createReadStream(result.file), io.stdout ?? process.stdout);
+    await record('success', {
+      ...where,
+      bytes: result.bytes,
+      auditEvents: result.audit.count,
+      ...(result.audit.tail ? { tailSeq: result.audit.tail.seq } : {}),
+    });
+    if (final) {
+      if (existsSync(final)) throw new ConfigError(`${final} already exists; choose a new file name.`);
+      renameSync(result.file, final);
+    } else await pipeline(createReadStream(result.file), io.stdout ?? process.stdout);
+    unrecorded = undefined;
     say(
-      `✓ Backup ${toStdout ? 'written to stdout' : result.file}: ${result.bytes} bytes, integrity ok, audit chain verified (${result.audit.count} event(s)${result.audit.tail ? `, tail seq ${result.audit.tail.seq}` : ''}); sessions, sign-ins and tokens left out; recorded in the audit log.`,
+      `✓ Backup ${final ?? 'written to stdout'}: ${result.bytes} bytes, integrity ok, audit chain verified (${result.audit.count} event(s)${result.audit.tail ? `, tail seq ${result.audit.tail.seq}` : ''}); sessions, sign-ins and tokens left out; recorded in the audit log.`,
     );
-    if (!toStdout)
+    if (final)
       say('  It is not encrypted: encrypt it before it leaves this machine (docs/operations.md → Backups).');
   } finally {
     await source.close();
+    if (unrecorded) rmSync(unrecorded, { force: true });
     if (scratch) rmSync(scratch, { recursive: true, force: true });
   }
 }
@@ -143,7 +159,7 @@ export async function dbSignOutEveryone(
     );
   const file = databasePath(env);
   if (!existsSync(file)) throw new ConfigError(`There is no database at ${file} (DATABASE_PATH).`);
-  const database = createDatabase(file, { name: 'cli', pollSignals: false });
+  const database = createDatabase(file, { ...cliDatabaseOptions(env), pollSignals: false });
   try {
     const result = signOutEveryone(database.db, { scheduleGrants: opts.scheduleGrants });
     await new SqliteAuditWriter(database.db, opts.now, null).append({

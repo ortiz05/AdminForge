@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { Writable } from 'node:stream';
@@ -12,7 +12,8 @@ import { testDatabasePath } from './db';
 // schedules. A copy of the history is itself part of it (S-41): before the copy leaves the process, the command appends
 // a `database.backup` event to the live database through the normal audit writer — who, where to (stdout or a file,
 // never the path), plaintext or not, size and the copy's audit tail. If that event can't be written, the copy doesn't
-// leave. A record, not a control: `kubectl cp` of the volume needs no CLI.
+// leave — a file copy takes the operator's name only once it is recorded. A record, not a control: copying the volume
+// needs no CLI.
 interface AuditRow {
   seq: number;
   actor_oid: string | null;
@@ -76,6 +77,8 @@ describe('adminforge db backup is in the audit log (SQLite)', () => {
     expect(event!.details).not.toContain(dir);
     expect(event!.details).not.toContain('private-name');
     expect(lines.join('\n')).toMatch(/recorded in the audit log/);
+    // It took its name only once recorded (written under a hidden name first): nothing else is left in the folder.
+    expect(readdirSync(dir)).toEqual(['private-name-adminforge.db']);
 
     // The copy is the history as it was; the live history now also says a copy was made, and still verifies.
     const copy = new BetterSqlite3(dest, { readonly: true });
@@ -143,6 +146,18 @@ describe('adminforge db backup is in the audit log (SQLite)', () => {
     const [event] = backups();
     expect(event).toMatchObject({ action: 'database.backup', result: 'failure' });
     expect(JSON.parse(event!.details!)).toEqual({ destination: 'file', plaintext: true });
+  });
+
+  it('refuses an existing destination before copying anything, and leaves it alone', async () => {
+    const dir = scratch();
+    const dest = path.join(dir, 'taken.db');
+    writeFileSync(dest, 'not a backup');
+    await expect(dbBackup({ DATABASE_PATH: file }, dest, quiet, { plaintext: true })).rejects.toThrow(
+      /already exists; choose a new file name/,
+    );
+    expect(readFileSync(dest, 'utf8')).toBe('not a backup');
+    expect(readdirSync(dir)).toEqual(['taken.db']);
+    expect(backups()).toEqual([]);
   });
 
   it('records nothing for a refused request (no --plaintext, no database)', async () => {

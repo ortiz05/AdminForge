@@ -224,7 +224,8 @@ publish`). **Safe:** only with `--dry-run` (which may still migrate the schema).
   everyone signs in again, and creators consent again to schedules that run with their access. The copy is the whole
   history, so it is recorded in it: before the copy leaves, one `database.backup` audit event (account and machine,
   stdout or file — never the path —, plaintext, bytes, the copy's audit tail) goes to the live database; if it can't be
-  written, nothing leaves. A copy that fails its checks is recorded as a failure.
+  written, nothing leaves (a file copy takes its name only then). A copy that fails its checks is recorded as a
+  failure.
 - **Reads:** `DATABASE_PATH`.
 - **Changes:** writes the new file and that audit event. **Safe:** yes. **Exit 1:** a file without `--plaintext`, no
   database, the copy failed its checks, or the audit event could not be written (the database must be writable for

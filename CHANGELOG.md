@@ -155,6 +155,10 @@ organization). There was no critical or high security finding; the fixes are bel
   `docs/troubleshooting.md`, `docs/widgets.md`, `docs/architecture.md`, `docs/decisions.md`) describe the platform
   review as built: runs that resume after a restart and check again before writing, the keyed audit chain, audited
   backups, run visibility, a new session id at every arm, open-run and stream caps, missed and file-only schedule runs.
+- **Registers** (O-02): `docs/backlog.md` is a register by area — nine tables of item · status · since · owner type ·
+  link, one row per open item, no dated sections — and `docs/licensing-review.md` is the current feature → licence
+  map (licence features, a table per area, previews), with each dated finding in
+  `docs/licensing/findings/<date>-<topic>.md`; `tests/unit/docs/registers.test.ts` keeps both that way.
 
 #### Fixed
 

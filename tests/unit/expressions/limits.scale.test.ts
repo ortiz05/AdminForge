@@ -102,6 +102,8 @@ describe('lint: user data in a request path or url needs $encode()', () => {
     [{ request: { path: "${ '/users/' & params.id }" } }],
     [{ steps: [{ path: '/groups/${ inputs.groupId }/members' }] }],
     [{ request: { body: { requests: [{ url: '/users/${ row.id }' }] } } }],
+    // A whole path from row data too (S-13: only a guid or entity param may be a whole path).
+    [{ request: { path: '${ row.id }' } }],
   ])('warns for %j', (def) =>
     expect(lint(def)).toEqual([
       expect.stringMatching(/User data is placed in the (path|url) without \$encode\(\)/),
@@ -113,7 +115,6 @@ describe('lint: user data in a request path or url needs $encode()', () => {
     [{ request: { path: '/users/${ $encode($guid(params.id)) }' } }],
     [{ request: { path: "/groups/x/${ params.scope = 'Transitive' ? 'transitiveMembers' : 'members' }" } }],
     [{ request: { path: "/users/${ params.kind in ['a', 'b'] ? params.kind : 'c' }" } }],
-    [{ request: { path: '${ row.id }' } }],
     [{ check: { url: "${ env.PUBLIC_BASE_URL & '/readyz' }" } }],
   ])('accepts %j', (def) => expect(lint(def)).toEqual([]));
 });

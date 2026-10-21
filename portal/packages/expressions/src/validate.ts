@@ -1,5 +1,6 @@
 import { compile, ExpressionError } from './evaluate';
-import { hasTemplate, splitTemplate, TemplateError } from './template';
+import { analyse, CLEAN, join, level, pathKey, RAW, TEXT, type Shape, type Taint } from './taint';
+import { hasTemplate, splitTemplate, TemplateError, wholeExpression } from './template';
 
 export type PathSegment = string | number;
 
@@ -133,138 +134,127 @@ export function collectExpressions(
   return out;
 }
 
-const USER_DATA_ROOTS = new Set(['params', 'inputs', 'row', 'rows', 'item', 'value']);
-type AstNode = { type?: string; value?: unknown; steps?: AstNode[] } & Record<string, unknown>;
+/**
+ * Scope roots whose values come from the person or the tenant: page params, playbook and runbook inputs, rows, items,
+ * a transform's `value` (and the name a `forEach` gives its item). `ds` is worked out per datasource.
+ */
+const USER_DATA_ROOTS = ['params', 'inputs', 'row', 'rows', 'item', 'value'];
 
-/** `params.q` → "params.q"; undefined for anything that is not a plain name/path. */
-function pathKey(n: AstNode | undefined): string | undefined {
-  if (!n) return undefined;
-  if (n.type === 'name') return String(n.value);
-  if (n.type === 'path' && n.steps?.every((s) => s.type === 'name'))
-    return n.steps.map((s) => String(s.value)).join('.');
-  return undefined;
+/** `forEach.as` names anywhere in a definition: user data inside the loop, like `item`. */
+function forEachNames(def: unknown): string[] {
+  const out = new Set<string>();
+  const visit = (v: unknown): void => {
+    if (Array.isArray(v)) v.forEach(visit);
+    else if (v && typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      if (o.type === 'forEach' && typeof o.as === 'string') out.add(o.as);
+      Object.values(o).forEach(visit);
+    }
+  };
+  visit(def);
+  return [...out];
 }
 
-/** The encoders that make user data safe in a query (their result is never user data). */
-const ENCODERS = new Set(['odata', 'odataSearch', 'kql', 'encode', 'guid']);
+/** What an expression yields in `scope`; an expression that does not compile counts as user data. */
+function expressionTaint(source: string, scope: Taint): Taint {
+  try {
+    return analyse(compile(source).ast(), scope).taint;
+  } catch {
+    return RAW;
+  }
+}
+
+/** A template's value: a whole `${ … }` keeps its type (and its fields), mixed text is text. */
+function templateTaint(str: string, scope: Taint): Taint {
+  if (!hasTemplate(str)) return CLEAN;
+  try {
+    const parts = splitTemplate(str);
+    const whole = wholeExpression(parts);
+    if (whole !== undefined) return expressionTaint(whole, scope);
+    return parts.reduce<Taint>(
+      (acc, p) => (p.type === 'expr' ? join(acc, level(expressionTaint(p.source, scope))) : acc),
+      CLEAN,
+    );
+  } catch {
+    return RAW;
+  }
+}
+
+/** A static datasource's `data`, rendered like any template (objects keep their fields). */
+function dataTaint(value: unknown, scope: Taint): Taint {
+  if (typeof value === 'string') return templateTaint(value, scope);
+  if (Array.isArray(value)) return value.reduce<Taint>((acc, v) => join(acc, dataTaint(v, scope)), CLEAN);
+  if (value && typeof value === 'object') {
+    const fields = new Map<string, Taint>();
+    for (const [k, v] of Object.entries(value)) fields.set(k, dataTaint(v, scope));
+    return { fields, rest: CLEAN };
+  }
+  return CLEAN;
+}
 
 /**
- * The root scope (`$`, `$$`) or a wildcard / descendant (`*`, `**`) — or a path starting with one: it reaches
- * `params`, `inputs`, `row` and the rest without naming them (`$.*.q`, `**.q`, `$.params.q`).
+ * The scope an expression of `def` sees, as taint: the user-data roots, and `ds` — per datasource (S-13), what its
+ * result can carry: a Microsoft response is tenant data (like `value` in its transform); a static datasource is its
+ * rendered `data`; a transform is what it makes of either. Worked out on demand; a datasource that depends on itself
+ * counts as user data.
  */
-function reachesScope(n: AstNode | undefined, aliases: ReadonlySet<string> = new Set()): boolean {
-  if (!n) return false;
-  if (n.type === 'variable' && (n.value === '' || n.value === '$' || aliases.has(String(n.value))))
-    return true;
-  if (n.type === 'wildcard' || n.type === 'descendant') return true;
-  // A path starting with anything built from the scope: `$lookup($$, 'params').q`, `$sift($, …).params.q`.
-  if (n.type === 'path') return !!n.steps?.length && fromScope(n.steps[0], aliases);
-  // A block is what its last expression is, with the variables it binds from the scope: `($).params.q`,
-  // `($p := $; $p.params.q)`.
-  if (n.type === 'block' && Array.isArray(n.expressions) && n.expressions.length) {
-    const exprs = n.expressions as AstNode[];
-    const inner = new Set(aliases);
-    for (const e of exprs.slice(0, -1))
-      if (
-        e.type === 'bind' &&
-        (e.lhs as AstNode | undefined)?.type === 'variable' &&
-        fromScope(e.rhs as AstNode, inner)
-      )
-        inner.add(String((e.lhs as AstNode).value));
-    return fromScope(exprs[exprs.length - 1], inner);
-  }
-  return false;
+function scopeTaint(def: unknown): Shape {
+  const roots = new Map<string, Taint>();
+  for (const name of [...USER_DATA_ROOTS, ...forEachNames(def)]) roots.set(name, RAW);
+  const declared = (def as { datasources?: unknown } | null)?.datasources;
+  const datasources =
+    declared && typeof declared === 'object' && !Array.isArray(declared)
+      ? (declared as Record<string, unknown>)
+      : {};
+  const done = new Map<string, Taint>();
+  const busy = new Set<string>();
+  const ds: Shape = {
+    fields: done,
+    rest: CLEAN,
+    keys: () => Object.keys(datasources),
+    resolve: (name) => {
+      if (!Object.hasOwn(datasources, name)) return undefined;
+      if (busy.has(name)) return RAW;
+      busy.add(name);
+      try {
+        const d = (datasources[name] ?? {}) as { source?: unknown; data?: unknown; transform?: unknown };
+        let result: Taint = d.source === 'static' ? dataTaint(d.data, scope) : RAW;
+        if (typeof d.transform === 'string' && hasTemplate(d.transform))
+          result = templateTaint(d.transform, {
+            fields: new Map([...scope.fields, ['value', result]]),
+            rest: CLEAN,
+          });
+        done.set(name, result);
+        return result;
+      } finally {
+        busy.delete(name);
+      }
+    },
+  };
+  const scope: Shape = { fields: new Map([...roots, ['ds', ds]]), rest: CLEAN };
+  return scope;
 }
 
-/** `$each($, …)`, `$join($sift($, …))`, `$lookup($$, 'params')`: built from the scope, through any non-encoder. */
-function fromScope(n: AstNode | undefined, aliases: ReadonlySet<string> = new Set()): boolean {
-  if (!n) return false;
-  if (reachesScope(n, aliases)) return true;
-  if (n.type !== 'function' || !Array.isArray(n.arguments)) return false;
-  const name = (n.procedure as AstNode | undefined)?.value;
-  return (
-    typeof name === 'string' &&
-    !ENCODERS.has(name) &&
-    (n.arguments as AstNode[]).some((a) => fromScope(a, aliases))
-  );
+/** Param types whose value is an object id or a resource id the server checked (S-13: a whole path may be one). */
+const ID_PARAM_TYPES = new Set(['guid', 'user', 'group', 'device', 'app', 'resource', 'subscription']);
+
+/** `params.x` / `inputs.x` declared as a single guid or entity id (or a string with `format: guid`). */
+function idParam(def: unknown, ast: unknown): boolean {
+  const [root, name, ...rest] = pathKey(ast)?.split('.') ?? [];
+  if (!name || rest.length || (root !== 'params' && root !== 'inputs')) return false;
+  const declared = (def as Record<string, unknown> | null)?.[root] as Record<string, unknown> | undefined;
+  const p =
+    declared && Object.hasOwn(declared, name) ? (declared[name] as Record<string, unknown> | null) : null;
+  if (!p || typeof p !== 'object' || typeof p.type !== 'string') return false;
+  return (ID_PARAM_TYPES.has(p.type) && p.multiple !== true) || (p.type === 'string' && p.format === 'guid');
 }
 
-const isUserData = (n: AstNode | undefined, trusted: ReadonlySet<string>): boolean => {
-  if (!n) return false;
-  if (fromScope(n)) return true;
-  const root =
-    n.type === 'name'
-      ? String(n.value)
-      : n.type === 'path' && n.steps?.[0]?.type === 'name'
-        ? String(n.steps[0].value)
-        : undefined;
-  if (!root || !USER_DATA_ROOTS.has(root)) return false;
-  const key = pathKey(n);
-  return !(key && trusted.has(key));
-};
+/** A user-data path (`params.kql`) and nothing else. */
+const userDataPath = (ast: unknown) => USER_DATA_ROOTS.includes(pathKey(ast)?.split('.')[0] ?? '');
 
-/** `params.x in ['a', 'b']` (a literal allowlist) → "params.x": inside the `then` branch the value is one of the literals. */
-function allowlisted(cond: unknown): string[] {
-  const n = cond as AstNode | undefined;
-  if (!n || n.type !== 'binary') return [];
-  if (n.value === 'and') return [...allowlisted(n.lhs), ...allowlisted(n.rhs)];
-  if (n.value !== 'in') return [];
-  const list = n.rhs as AstNode | undefined;
-  const literal =
-    list?.type === 'unary' &&
-    list.value === '[' &&
-    Array.isArray(list.expressions) &&
-    (list.expressions as AstNode[]).every((e) => e.type === 'string' || e.type === 'number');
-  const key = literal ? pathKey(n.lhs as AstNode) : undefined;
-  return key ? [key] : [];
-}
-
-/** Walks an AST, extending `trusted` with allowlist guards for the `then` branch of conditionals. */
-function someNode(
-  node: unknown,
-  trusted: ReadonlySet<string>,
-  test: (n: AstNode, trusted: ReadonlySet<string>) => boolean,
-): boolean {
-  if (!node || typeof node !== 'object') return false;
-  if (Array.isArray(node)) return node.some((v) => someNode(v, trusted, test));
-  const n = node as AstNode;
-  if (test(n, trusted)) return true;
-  if (n.type === 'condition') {
-    const guarded = new Set([...trusted, ...allowlisted(n.condition)]);
-    return (
-      someNode(n.condition, trusted, test) ||
-      someNode(n.then, guarded, test) ||
-      someNode(n.else, trusted, test)
-    );
-  }
-  return Object.values(n).some((v) => typeof v === 'object' && someNode(v, trusted, test));
-}
-
-/** `… & params.q & …` — user data concatenated as-is. */
-const rawConcat = (ast: unknown, trusted: ReadonlySet<string>) =>
-  someNode(
-    ast,
-    trusted,
-    (n, t) =>
-      n.type === 'binary' &&
-      n.value === '&' &&
-      (isUserData(n.lhs as AstNode, t) || isUserData(n.rhs as AstNode, t)),
-  );
-
-/** User data as the value itself: `params.q`, or a conditional / block whose result can be such a path. */
-function yieldsUserData(node: unknown, trusted: ReadonlySet<string>): boolean {
-  if (!node || typeof node !== 'object') return false;
-  const n = node as AstNode;
-  if (isUserData(n, trusted)) return true;
-  if (n.type === 'condition')
-    return (
-      yieldsUserData(n.then, new Set([...trusted, ...allowlisted(n.condition)])) ||
-      yieldsUserData(n.else, trusted)
-    );
-  if (n.type === 'block' && Array.isArray(n.expressions))
-    return yieldsUserData(n.expressions.at(-1), trusted);
-  return false;
-}
+/** The explicit opt-in for a KQL query the person types whole (S-13). */
+export const USER_QUERY_OPT_IN = '/* adminforge: user-query */';
+const optedIn = (source: string) => /^\/\*\s*adminforge:\s*user-query\s*\*\//.test(source);
 
 /**
  * KQL text: a string at key `query` (resourceGraph / logAnalytics datasources and steps, `kql` probe checks), or the
@@ -275,11 +265,15 @@ const isKqlQuery = (segments: readonly PathSegment[]) => {
   return key === 'query' || (key === 'Query' && segments[segments.length - 2] === 'body');
 };
 
-/** OData system query options whose text Microsoft parses as an expression (`$filter`, `$search`, `$orderby`). */
+/**
+ * OData system query options whose text Microsoft parses as an expression (`$filter`, `$search`, `$orderby`, and
+ * `$expand`, which nests its own `$filter` / `$search`).
+ */
 const ODATA_OPTIONS: Record<string, string> = {
   $filter: '$filter',
   $search: '$search',
   $orderby: '$orderby',
+  $expand: '$expand',
 };
 /** Their unprefixed spellings inside a request body (Intune report exports, `getXxxReport` actions, …). */
 const ODATA_BODY_OPTIONS: Record<string, string> = {
@@ -309,6 +303,7 @@ const ODATA_HELPER: Record<string, string> = {
   $filter: '$odata() (or another quoting helper such as $guid() or $number())',
   $search: '$odataSearch()',
   $orderby: "a literal allowlist (params.x in ['a', 'b'] ? … : …)",
+  $expand: "$odata() (or a literal allowlist: params.x in ['a', 'b'] ? … : …)",
 };
 
 /** Params compiled server-side into safe KQL by the advanced filter builder (`filters.advanced` with `dialect: kql`). */
@@ -319,19 +314,29 @@ function compiledKqlParams(def: unknown): string[] {
 }
 
 /**
- * Lint (§5.10, §7.9, R12): user data (`params`, `inputs`, `row`, …) reaching OData `$filter` / `$search` /
- * `$orderby` text (query or request body) without `$odata()` / `$odataSearch()` — either concatenated with `&` or
- * interpolated straight into the text (`startswith(displayName,'${ params.q }')`) —, user data reaching a KQL `query`
- * without `$kql()` (the same two forms), and user data placed inside a request `path` / `url`
- * (`/users/${ params.id }`) without `$encode()`. Wrapping the value in a helper (`$odata`, `$kql`, `$guid`, `$number`,
- * …), guarding it with a literal allowlist (`params.x in ['a', 'b'] ? … : …`), or a param the advanced KQL filter
- * builder compiles clears the warning. Returns warnings; expressions that do not compile are skipped
- * (validateExpressions reports them).
+ * Lint (§5.10, §7.9, R12): user data reaching a query without an encoder. User data is what the person or the tenant
+ * controls — `params`, `inputs`, `row`, `rows`, `item`, a transform's `value`, a `forEach` item, and a datasource's
+ * result (`ds.<name>`, per field) — followed through functions, lambdas, `$map`, block variables and the rest
+ * (taint.ts). Flagged:
+ *   - OData `$filter` / `$search` / `$orderby` / `$expand` text (query or request body) with user data in it, without
+ *     `$odata()` / `$odataSearch()` — concatenated with `&`, interpolated (`startswith(displayName,'${ params.q }')`)
+ *     or as the whole value (a raw filter param; advanced filters are compiled server-side instead);
+ *   - a KQL `query` with user data in it without `$kql()`; a whole query taken from a param needs the explicit opt-in
+ *     comment `adminforge: user-query` at the start of the expression (USER_QUERY_OPT_IN — the person then runs the
+ *     KQL they typed, with their own access);
+ *   - a request `path` / `url` with user data in it without `$encode()` (`/users/${ params.id }`); a whole path or url
+ *     may come straight from a param only when it is a single guid or entity id (`type: guid`, `resource`, …).
+ * The encoders (`$odata`, `$odataSearch`, `$kql`, `$encode`, `$guid`), functions returning a number, a boolean or a
+ * date (`$number`, `$count`, `$daysAgo`, …), a literal allowlist (`params.x in ['a', 'b'] ? … : …`), a param the
+ * advanced KQL filter builder compiles, and — inside a quoted OData or KQL literal, not in a path — a character
+ * allowlist without quotes (`$replace(params.q, /[^A-Za-z0-9 ._-]/, '')`) clear it. Returns warnings; expressions that
+ * do not compile are skipped (validateExpressions reports them).
  */
 export function lintExpressions(def: unknown, opts: WalkOptions = {}): ExpressionIssue[] {
   const issues: ExpressionIssue[] = [];
   const trustedKql: ReadonlySet<string> = new Set(compiledKqlParams(def));
   const none: ReadonlySet<string> = new Set();
+  let scope: Shape | undefined;
   walkStrings(
     def,
     (str, segments) => {
@@ -340,44 +345,52 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
       const kql = isKqlQuery(segments);
       const pathLike = key === 'path' || key === 'url';
       if (!hasTemplate(str) || (!odata && !kql && !pathLike)) return;
+      let parts;
       try {
-        const parts = splitTemplate(str);
-        const mixed = parts.some((p) => p.type === 'text' && p.value.trim() !== '');
-        for (const seg of parts) {
-          if (seg.type !== 'expr') continue;
-          let ast: unknown;
-          try {
-            ast = compile(seg.source).ast();
-          } catch {
-            continue;
-          }
-          const at = { path: formatPath(segments), segments, expression: seg.source };
-          if (odata && rawConcat(ast, none))
-            issues.push({
-              ...at,
-              message: `User data is concatenated into ${odata.key} without ${ODATA_HELPER[odata.option]}.`,
-            });
+        parts = splitTemplate(str);
+      } catch {
+        return; // malformed templates are reported by validateExpressions
+      }
+      const whole = wholeExpression(parts) !== undefined;
+      for (const seg of parts) {
+        if (seg.type !== 'expr') continue;
+        let ast: unknown;
+        try {
+          ast = compile(seg.source).ast();
+        } catch {
+          continue;
+        }
+        scope ??= scopeTaint(def);
+        const found = analyse(ast, scope, kql ? trustedKql : none);
+        const carries = level(found.taint);
+        const at = { path: formatPath(segments), segments, expression: seg.source };
+        if (odata) {
           // Unlike a path or KQL text, an OData option is never user data as a whole either: that would be a raw
           // filter param (advanced filters are compiled server-side instead).
-          else if (odata && yieldsUserData(ast, none))
+          if (carries >= RAW)
             issues.push({
               ...at,
-              message: `User data is placed in ${odata.key} without ${ODATA_HELPER[odata.option]}.`,
+              message: `User data is ${found.concat >= RAW ? 'concatenated into' : 'placed in'} ${odata.key} without ${ODATA_HELPER[odata.option]}.`,
             });
-          else if (kql && (rawConcat(ast, trustedKql) || (mixed && yieldsUserData(ast, trustedKql))))
+        } else if (kql) {
+          if (carries >= RAW && !(whole && optedIn(seg.source) && userDataPath(ast)))
             issues.push({
               ...at,
-              message:
-                'User data reaches the KQL query without $kql() (or another quoting helper such as $guid()).',
+              message: `User data reaches the KQL query without $kql() (or another quoting helper such as $guid()).${
+                whole && userDataPath(ast)
+                  ? ` A query the person types whole needs the explicit opt-in ${USER_QUERY_OPT_IN} at the start of the expression.`
+                  : ''
+              }`,
             });
-          else if (pathLike && (rawConcat(ast, none) || (mixed && yieldsUserData(ast, none))))
-            issues.push({
-              ...at,
-              message: `User data is placed in the ${key} without $encode() (or another helper such as $guid()).`,
-            });
-        }
-      } catch {
-        // malformed templates are reported by validateExpressions
+        } else if (carries >= TEXT && !(whole && idParam(def, ast)))
+          issues.push({
+            ...at,
+            message: `User data is placed in the ${key} without $encode() (or another helper such as $guid()).${
+              whole
+                ? ` A whole ${key} may come straight from a param only when it is a guid or an entity id (type: guid, resource, subscription, …).`
+                : ''
+            }`,
+          });
       }
     },
     opts,

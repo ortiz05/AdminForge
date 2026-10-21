@@ -550,7 +550,9 @@ README.md` → Backups). Every `db backup` is itself in the audit log: a `databa
   `PUBLIC_BASE_URL` on localhost and no credentials configured; a session left without any AdminForge role ends, as
   with Entra sign-in. Only then does the fixture fetch accept a write no fixture describes (204: there is no tenant).
   A POST the request policy lists as a read is never accepted that way, and with Entra sign-in on fixtures an
-  unfixtured write stays a 404.
+  unfixtured write stays a 404. With fixture data (either sign-in) a playbook's PowerShell steps answer from the runner
+  fixtures, as PowerShell datasources do, and never reach the runner — a write script still through the emergency
+  stop and the protected-object guard, and accepted without a fixture only with mock sign-in.
 
 ## Threats and mitigations
 

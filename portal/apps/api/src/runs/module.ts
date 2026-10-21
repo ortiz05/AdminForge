@@ -11,6 +11,7 @@ import type { OutboundExecutor } from '../execution/types';
 import { RunChildRunner } from './children';
 import { RunEventBus } from './events';
 import { SessionIdentityResolver } from './identity';
+import { createFixtureRunnerPort } from './fixture-runner';
 import { MemoryRunRepository } from './memory-repository';
 import { SqliteRunRepository } from './sqlite-repository';
 import { createOutboundPort, createRunnerPort } from './ports';
@@ -40,7 +41,7 @@ export interface RunsOptions {
   queue?: RunQueue;
   definitions?: DefinitionResolver;
   outbound?: OutboundExecutor;
-  /** null disables runner steps; default: RUNNER_URL + RUNNER_SHARED_KEY from configuration. */
+  /** null disables runner steps; default: the fixtures (DATA_MODE=fixtures), else RUNNER_URL + RUNNER_SHARED_KEY. */
   runner?: RunnerPort | null;
   /** Consume jobs in this process. Default: yes outside tests (the API is the worker, ADR-016), and always in memory. */
   inProcessWorker?: boolean;
@@ -114,6 +115,14 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
 
   let runner: RunnerPort | undefined;
   if (opts.runner !== undefined) runner = opts.runner ?? undefined;
+  // DATA_MODE=fixtures: PowerShell steps answer from the runner fixtures, as PowerShell datasources do — never the real
+  // runner, whose tokens would change the tenant while every other step reads fixtures (M2).
+  else if (ctx.config.DATA_MODE === 'fixtures')
+    runner = createFixtureRunnerPort({
+      dir: ctx.config.ADMINFORGE_FIXTURES_DIR,
+      acceptUnfixturedWrites: ctx.config.AUTH_MODE === 'mock',
+      outbound: outbound(),
+    });
   else if (!testing && ctx.config.RUNNER_URL && ctx.config.RUNNER_SHARED_KEY) {
     try {
       runner = createRunnerPort({

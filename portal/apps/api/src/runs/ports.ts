@@ -13,6 +13,8 @@ import {
   IdentityUnavailable,
   StepError,
   type OutboundPort,
+  type ResolvedIdentity,
+  type RunnerJob,
   type RunnerPort,
   type RunnerResult,
 } from '@adminforge/engine';
@@ -35,7 +37,7 @@ function identityError(err: unknown): IdentityUnavailable | undefined {
 }
 
 /** API errors (policy denials, configuration) become non-retryable step errors with their code and hint. */
-function stepError(err: AppError): StepError {
+export function stepError(err: AppError): StepError {
   return new StepError(err.code, err.message, {
     status: err.status,
     ...(err.extras.hint ? { hint: err.extras.hint } : {}),
@@ -102,6 +104,43 @@ function unverified(reason: string): StepError {
   );
 }
 
+/** The step's identity for a PowerShell job: a person's (delegated) — scheduled runs can't run scripts yet. */
+export function delegatedHandle(
+  identity: ResolvedIdentity,
+): Extract<ExecutionIdentity, { kind: 'delegated' }> {
+  const exec = identity.handle as ExecutionIdentity;
+  if (exec.kind !== 'delegated')
+    throw new StepError(
+      'runner_unsupported',
+      'Scheduled (automation) runs cannot run PowerShell scripts yet.',
+    );
+  return exec;
+}
+
+/**
+ * A write script passes the emergency stop and the protected-object guard like a REST write, its inputs checked like
+ * a REST write's body (object ids; names and UPNs aren't matched). Reads pass.
+ */
+export async function assertWritableJob(
+  outbound: OutboundExecutor | null | undefined,
+  exec: ExecutionIdentity,
+  job: RunnerJob,
+): Promise<void> {
+  if (job.mode !== 'write' || !outbound?.assertWritable) return;
+  const targets = job.services.map((service) => ({
+    service: service as ServiceId,
+    method: 'POST',
+    path: job.script,
+    body: job.parameters,
+  }));
+  try {
+    await outbound.assertWritable(exec, targets);
+  } catch (err) {
+    if (err instanceof AppError) throw stepError(err);
+    throw err;
+  }
+}
+
 /**
  * RunnerPort for the PowerShell runner (apps/runner, `POST /v1/jobs` → NDJSON events), implemented against its
  * protocol with the runner's own helpers: the request is HMAC-signed (timestamp, method, path, body hash), the
@@ -116,12 +155,7 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
   const now = opts.now ?? (() => new Date());
   return {
     async run(identity, job, { signal, onEvent }): Promise<RunnerResult> {
-      const exec = identity.handle as ExecutionIdentity;
-      if (exec.kind !== 'delegated')
-        throw new StepError(
-          'runner_unsupported',
-          'Scheduled (automation) runs cannot run PowerShell scripts yet.',
-        );
+      const exec = delegatedHandle(identity);
       if (!opts.tenant.id || !opts.tenant.domain)
         throw new StepError(
           'runner_unavailable',
@@ -132,21 +166,7 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
           'runner_unavailable',
           'PowerShell steps need Entra sign-in (not available with mock sign-in).',
         );
-      // A write script's inputs are checked like a REST write's body (object ids; names and UPNs aren't matched).
-      if (job.mode === 'write' && opts.outbound?.assertWritable) {
-        const targets = job.services.map((service) => ({
-          service: service as ServiceId,
-          method: 'POST',
-          path: job.script,
-          body: job.parameters,
-        }));
-        try {
-          await opts.outbound.assertWritable(exec, targets);
-        } catch (err) {
-          if (err instanceof AppError) throw stepError(err);
-          throw err;
-        }
-      }
+      await assertWritableJob(opts.outbound, exec, job);
       const tokens: RunnerTokens = {};
       for (const service of job.services) {
         if (!RUNNER_SERVICES.has(service))

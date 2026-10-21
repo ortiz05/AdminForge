@@ -9,6 +9,17 @@ allowBuilds:
   # from source, which we never want (no toolchain in the images; the prebuilt binary is the one we reviewed).
   better-sqlite3: false
   esbuild: true
+# Supply chain (S-04, tests/unit/tooling/supply-chain-release-age.test.ts): a version must be seven days old (minutes)
+# before pnpm resolves it, and every install re-checks the lockfile against that. Strict: a too-young version fails
+# the install (in CI) or asks first, instead of being added to the excludes below on its own.
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+# An urgent fix that can't wait seven days: one exact version per entry (`name@1.2.3`), with a comment saying
+# why and when it can go; remove it once the version has aged past the cutoff. Never a bare package name or pattern.
+minimumReleaseAgeExclude:
+  # Locked (and required by the api, ^8.12.1) before the floor existed; past the cutoff from 2026-10-21 09:24 UTC —
+  # remove this entry then.
+  - undici@8.12.1
 overrides:
   # exceljs pins uuid 8 (GHSA moderate, fixed in 11.1.1); 11 keeps the CommonJS build exceljs requires.
   exceljs>uuid: ^11.1.1

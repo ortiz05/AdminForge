@@ -1,10 +1,14 @@
 # Dependency updates (supply chain, plan §8.3). Grouped weekly so each week is one reviewable PR per ecosystem;
 # CI (audit, guards, tests, e2e, bundle budget) must pass before merging.
+# Every entry waits seven days after a release before proposing it (`cooldown`, S-04), the same floor pnpm applies
+# (`minimumReleaseAge` in pnpm-workspace.yaml). Security updates are exempt from the cooldown, as GitHub designs it.
+# tests/unit/tooling/supply-chain-release-age.test.ts: a cooldown on every entry, a docker entry per Dockerfile.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly, day: monday }
+    cooldown: { default-days: 7 }
     open-pull-requests-limit: 5
     # PR titles must be Conventional Commits headers (docs/onboarding/10-git-and-pull-requests.md).
     commit-message: { prefix: 'chore(deps)' }
@@ -18,11 +22,19 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly, day: monday }
+    cooldown: { default-days: 7 }
     commit-message: { prefix: 'ci(deps)' }
     groups:
       actions:
         patterns: ['*']
+  # Base images of the runner and app images (a digest-pinned `FROM` gets tag and digest bumped together).
   - package-ecosystem: docker
     directory: /portal/apps/runner
     schedule: { interval: weekly, day: monday }
+    cooldown: { default-days: 7 }
     commit-message: { prefix: 'chore(runner)' }
+  - package-ecosystem: docker
+    directory: /portal/deploy/kubernetes
+    schedule: { interval: weekly, day: monday }
+    cooldown: { default-days: 7 }
+    commit-message: { prefix: 'chore(deploy)' }

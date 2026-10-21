@@ -274,6 +274,8 @@ export class RunWorker {
       // A run that stopped (approval, input, arming, sign-in) continues only on the current version and only for
       // someone still allowed to run it (IAM-02) — and so does one found `running`: interrupted by a restart or a lost
       // lock (D-01), or waking from a `wait` step. A new run (`queued`) was checked when it was started.
+      // Continuing, the engine reads and checks again what the run read and checked before it paused, right before its
+      // next write (engine.ts › recheck), so a check such as "the session is still theirs" holds now.
       if ((isParked(row.status) || row.status === 'running') && !(await this.mayContinue(row, def))) return;
       this.deps.store.bind(runId, def);
       // `user.roles` for the initiator's first steps.

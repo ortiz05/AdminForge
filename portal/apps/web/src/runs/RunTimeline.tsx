@@ -246,7 +246,10 @@ export function RunTimeline({
               </div>
               {e.describe && e.describe !== e.label && <p className={c.description()}>{e.describe}</p>}
               {e.status === 'waiting' && (
-                <p className="text-sm font-medium text-warn">{WAITING_TEXT[e.type] ?? 'Waiting.'}</p>
+                <p className="flex items-start gap-1.5 text-sm font-medium text-warn">
+                  <StatusGlyph status="waiting" tone="warn" className="mt-0.5" />
+                  <span>{WAITING_TEXT[e.type] ?? 'Waiting.'}</span>
+                </p>
               )}
               {r?.error && (
                 <div

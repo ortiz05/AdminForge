@@ -153,8 +153,12 @@ function StepRow({
         </p>
         <TemplatedMarkdown source={step.instructions} scope={scope} hidden={!full} />
         {!full && status === 'waiting' && (
-          <p className="text-sm font-medium text-warn">
-            Waiting for {waitingFor ?? 'the person who started it'} to work through this checklist.
+          <p className="flex items-start gap-1.5 text-sm font-medium text-warn">
+            {/* Never colour alone: the waiting glyph says it too. */}
+            <StatusGlyph status="waiting" tone="warn" className="mt-0.5" />
+            <span>
+              Waiting for {waitingFor ?? 'the person who started it'} to work through this checklist.
+            </span>
           </p>
         )}
         {(step.checklist ?? []).length > 0 && (

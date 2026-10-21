@@ -24,8 +24,33 @@ describe('content patterns', () => {
     ['([a-z]+[.a-z])+'],
     ['((x+))*'],
     ['(a+){1,100}'],
+    // Ways around a naive check (security review of S-14): escapes read as one character, a quantifier longer than a
+    // short look-ahead, a small fixed count of a repeating group.
+    ['(a*\\x61)*'],
+    ['(a*\\u0061)*'],
+    ['(a+){1,9999999999999999999999}'],
+    ['(a+){16}'],
+    ['(a+){2}'],
   ])('refuses nested repetition: %s', (p) => {
     expect(patternProblem(p)).toMatch(/repeats a group that itself repeats/);
+  });
+
+  it.each([['(a|a)*'], ['(.|\\s)*x'], ['(?:ab|ac)+'], ['(a|b+)*']])(
+    'refuses a repeated choice whose alternatives can start alike: %s',
+    (p) => {
+      expect(patternProblem(p)).toMatch(/repeats (a choice|a group)/);
+    },
+  );
+
+  it.each([['\\d*\\d*\\d*\\d*'], ['[a-z]+[a-z0-9]*'], ['\\d+0?\\d+'], ['\\d+0\\d+'], ['.*.*=.*']])(
+    'refuses repetitions of the same characters side by side: %s',
+    (p) => {
+      expect(patternProblem(p)).toMatch(/side by side/);
+    },
+  );
+
+  it('refuses inline flag groups', () => {
+    expect(patternProblem('(?i:a+)+')).toMatch(/inline flags/);
   });
 
   it('refuses backreferences, invalid expressions, u-mode errors and long patterns', () => {
@@ -50,6 +75,10 @@ describe('content patterns', () => {
     ['(/[^/]+)+'],
     ['(?=.{1,253}$)[a-z0-9.-]+'],
     ['(?:Include|Exclude)+'],
+    ['[a-z][a-z0-9]*'],
+    ['\\d+-\\d+'],
+    ['^[-\\w._()]{0,89}[-\\w_()]$'],
+    ['^/.+/providers/[Mm]icrosoft\\.[Aa]uthorization/role[Aa]ssignments/[0-9a-fA-F-]{36}$'],
     ['\\p{L}+'],
     ['[^<>%&\\\\?/]+'],
   ])('accepts ordinary patterns: %s', (p) => {
@@ -70,6 +99,17 @@ describe('content patterns', () => {
     expect(testContentPattern('.*', 'x'.repeat(MAX_PATTERN_INPUT + 1))).toBe('too_long');
     expect(contentPattern('(a+)+$')).toBeNull();
     expect(testContentPattern('(a+)+$', 'aaaa')).toBe('invalid');
+  });
+
+  it.each([
+    ['(a*\\x61)*', `${'a'.repeat(24)}!`],
+    ['(a+){16}', `${'a'.repeat(40)}!`],
+    ['(.|\\s)*x', 'a'.repeat(24)],
+    ['\\d*\\d*\\d*\\d*', `${'1'.repeat(300)}!`],
+  ])('a refused pattern never runs: %s', (p, value) => {
+    const started = performance.now();
+    expect(testContentPattern(p, value)).toBe('invalid');
+    expect(performance.now() - started).toBeLessThan(100);
   });
 
   it('an accepted separated pattern stays fast on an adversarial value at the length cap', () => {

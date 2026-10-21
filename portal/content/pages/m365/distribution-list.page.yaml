@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.distribution-list
-version: 1.1.0
+version: 1.2.0
 title: Distribution list
 summary: One distribution list or mail-enabled security group — delivery settings, owners and members. Add or remove members.
 owner: m365-team
@@ -152,8 +152,8 @@ tabs:
           - { field: displayName, label: Member, kind: identity, secondary: mail }
           - field: kind
             label: Type
-            kind: status
-            map: { User: [neutral, User], Guest: [info, Guest], Contact: [info, Mail contact], Group: [neutral, Nested group], Other: [neutral, Other] }
+            kind: enum
+            map: { User: User, Guest: Guest, Contact: Mail contact, Group: Nested group, Other: Other }
             filter: facet
           - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] }, filter: facet }
           - { field: userPrincipalName, label: Sign-in name, hidden: true }

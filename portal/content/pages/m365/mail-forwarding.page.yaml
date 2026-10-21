@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mail-forwarding
-version: 1.2.0
+version: 1.3.0
 title: Mail forwarding
 summary: Mailboxes that forward mail — mailbox-level forwarding and, optionally, inbox rules — with forwarding to outside domains flagged. Clear mailbox forwarding from the list.
 owner: m365-team
@@ -143,8 +143,8 @@ layout:
       - { field: targetDomain, label: Domain, filter: facet }
       - field: source
         label: Configured by
-        kind: status
-        map: { mailbox: [neutral, Mailbox setting], inboxRule: [info, Inbox rule] }
+        kind: enum
+        map: { mailbox: Mailbox setting, inboxRule: Inbox rule }
         filter: { type: facet, param: source }
       - { field: ruleName, label: Rule }
       - { field: ruleEnabled, label: Rule enabled, kind: boolean, filter: facet }

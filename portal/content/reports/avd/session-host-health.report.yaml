@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: avd.session-host-health
-version: 1.0.0
+version: 1.1.0
 title: AVD session host health
 summary: >-
   Azure Virtual Desktop session hosts that can't take connections or need assistance, across every host pool — status
@@ -109,7 +109,7 @@ layout:
       - { field: statusSince, label: Since, kind: relativeTime, sortable: true }
       - { field: failedChecks, label: Failing checks, kind: tags }
       - { field: failureMessages, label: Check messages, kind: tags, hidden: true }
-      - { field: drainMode, label: Drain mode, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] }, filter: facet }
+      - { field: drainMode, label: Drain mode, kind: enum, map: { "true": "On", "false": "Off" }, filter: facet }
       - { field: sessions, label: Sessions, kind: number, sortable: true }
       - { field: updateState, label: Agent update, filter: facet }
       - { field: updateError, label: Update error, hidden: true }

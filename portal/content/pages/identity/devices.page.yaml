@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.devices
-version: 1.0.0
+version: 1.1.0
 title: Devices
 summary: >-
   Microsoft Entra device objects — joined, hybrid joined and registered — with OS, compliance, management and last
@@ -156,8 +156,8 @@ layout:
       - { field: operatingSystemVersion, label: OS version }
       - field: trustType
         label: Join type
-        kind: status
-        map: { AzureAd: [info, Entra joined], ServerAd: [info, Hybrid joined], Workplace: [neutral, Registered] }
+        kind: enum
+        map: { AzureAd: Entra joined, ServerAd: Hybrid joined, Workplace: Registered }
         filter: { type: facet, param: joinType }
       - field: isCompliant
         label: Compliance

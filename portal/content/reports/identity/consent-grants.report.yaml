@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.consent-grants
-version: 2.0.0
+version: 2.1.0
 title: Delegated permission grants
 summary: >-
   OAuth delegated permission grants — admin consent on behalf of all users and consent individual users gave
@@ -267,8 +267,8 @@ layout:
         filter: facet
       - field: consentType
         label: Consent
-        kind: status
-        map: { AllPrincipals: [info, Admin (all users)], Principal: [neutral, User] }
+        kind: enum
+        map: { AllPrincipals: Admin (all users), Principal: User }
         filter: { type: facet, param: consent }
       - { field: who.displayName, label: Consented for, kind: identity, secondary: who.userPrincipalName }
       - { field: resource.displayName, label: API, filter: facet }

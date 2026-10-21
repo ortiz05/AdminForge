@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.arc-patching
-version: 1.0.0
+version: 1.1.0
 title: Azure Arc patching
 summary: >-
   Azure Update Manager across every Azure Arc server — pending critical and security updates, the result of each
@@ -245,7 +245,7 @@ layout:
         kind: status
         map: { Succeeded: [ok, Succeeded], Failed: [crit, Failed], Other: [info, In progress or with warnings], None in 30 days: [neutral, None in 30 days] }
       - { field: lastSucceeded, label: Last successful installation, kind: relativeTime, sortable: true }
-      - { field: rebootPending, label: Restart, kind: status, map: { "true": [info, Restart pending], "false": [neutral, "No"] } }
+      - { field: rebootPending, label: Restart, kind: enum, map: { "true": Restart pending, "false": "No" } }
       - { field: osType, label: OS, filter: { type: facet, param: osType } }
       - { field: assessmentStatus, label: Assessment result, hidden: true }
       - { field: runs, label: Installation runs (30 days), kind: number, hidden: true }

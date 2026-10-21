@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.privileged-rbac-assignments
-version: 1.0.0
+version: 1.1.0
 title: Privileged Azure role assignments
 summary: Owner, User Access Administrator and Role Based Access Control Administrator assignments at the root, management group and subscription scopes, with who holds them — flagging guests and external (#EXT#) accounts, identities that no longer exist, direct user assignments and elevated access at the root scope.
 owner: azure-team
@@ -140,7 +140,7 @@ layout:
       - { field: userType, label: User type, hidden: true }
       - { field: accountEnabled, label: Account enabled, kind: boolean, hidden: true }
       - { field: principalState, label: Principal state, hidden: true }
-      - { field: hasCondition, label: Condition, kind: status, map: { "true": [info, Conditional], "false": [neutral, None] }, hidden: true }
+      - { field: hasCondition, label: Condition, kind: enum, map: { "true": Conditional, "false": None }, hidden: true }
       - { field: roleType, label: Role type, hidden: true }
       - { field: createdBy, label: Assigned by, kind: guid, hidden: true }
       - { field: principalId, label: Principal id, kind: guid, hidden: true }

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.arc-server
-version: 1.1.0
+version: 1.2.0
 title: Azure Arc server
 summary: One Arc-enabled server — connectivity, agent and automatic upgrade, operating system, ESU licence, extensions, Azure Update Manager updates and installations, Defender for Servers coverage and agent errors.
 owner: azure-team
@@ -271,7 +271,7 @@ tabs:
           - { field: patchName, label: Update, kind: identity, secondary: kbId, sortable: true }
           - { field: classifications, label: Classification, kind: tags }
           - { field: published, label: Published, kind: date, sortable: true }
-          - { field: rebootRequired, label: Restart, kind: status, map: { "true": [info, Needs a restart], "false": [neutral, "No"] }, filter: facet }
+          - { field: rebootRequired, label: Restart, kind: enum, map: { "true": Needs a restart, "false": "No" }, filter: facet }
           - { field: version, label: Version, hidden: true }
         empty:
           title: No pending updates

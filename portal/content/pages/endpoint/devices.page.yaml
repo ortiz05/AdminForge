@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: endpoint.devices
-version: 1.1.0
+version: 1.2.0
 title: Managed devices
 summary: >-
   Devices enrolled in Microsoft Intune — compliance, OS, ownership, management agent, encryption and last check-in.
@@ -217,7 +217,7 @@ layout:
         filter: { type: facet, param: compliance }
       - { field: operatingSystem, label: OS, filter: { type: facet, param: os } }
       - { field: osVersion, label: OS version }
-      - { field: managedDeviceOwnerType, label: Ownership, kind: status, map: { company: [info, Corporate], personal: [neutral, Personal], unknown: [neutral, Unknown] }, filter: { type: facet, param: ownership } }
+      - { field: managedDeviceOwnerType, label: Ownership, kind: enum, map: { company: Corporate, personal: Personal, unknown: Unknown }, filter: { type: facet, param: ownership } }
       - { field: managementAgent, label: Managed by, filter: { type: facet, param: agent } }
       - { field: lastSyncDateTime, label: Last check-in, kind: relativeTime, filter: date }
       - { field: isEncrypted, label: Encrypted, kind: status, map: { "true": [ok, Encrypted], "false": [warn, Not encrypted] }, filter: facet }

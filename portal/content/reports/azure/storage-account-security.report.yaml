@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.storage-account-security
-version: 1.0.0
+version: 1.1.0
 title: Storage account security settings
 summary: Storage accounts that allow shared key (account key and SAS) access, are reachable from all networks, allow anonymous blob access, accept plain HTTP or TLS below 1.2 — each setting per account, so you can move to Entra ID authorization and private access.
 owner: azure-team
@@ -110,7 +110,7 @@ layout:
       - { field: minimumTls, label: Minimum TLS, filter: facet }
       - { field: privateEndpoints, label: Private endpoints, kind: number, filter: range }
       - { field: crossTenantReplication, label: Cross-tenant replication, kind: status, map: { "true": [warn, Allowed], "false": [ok, Blocked] }, hidden: true }
-      - { field: sftp, label: SFTP, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] }, hidden: true }
+      - { field: sftp, label: SFTP, kind: enum, map: { "true": "On", "false": "Off" }, hidden: true }
       - { field: kind, label: Kind, filter: facet, hidden: true }
       - { field: resourceGroup, label: Resource group, filter: facet }
       - { field: subscriptionName, label: Subscription, filter: facet }

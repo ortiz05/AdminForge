@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.groups
-version: 1.1.0
+version: 1.2.0
 title: Groups
 summary: >-
   Security groups, Microsoft 365 groups, mail-enabled security groups and distribution lists — filter by type,
@@ -171,18 +171,18 @@ layout:
       - { field: displayName, label: Group, kind: identity, secondary: mail, sortable: true }
       - field: kind
         label: Type
-        kind: status
-        map: { Microsoft 365: [info, Microsoft 365], Security: [neutral, Security], Mail-enabled security: [neutral, Mail-enabled security], Distribution: [neutral, Distribution] }
+        kind: enum
+        map: { Microsoft 365: Microsoft 365, Security: Security, Mail-enabled security: Mail-enabled security, Distribution: Distribution }
         filter: { type: facet, param: kind }
       - field: membership
         label: Membership
-        kind: status
-        map: { Assigned: [neutral, Assigned], Dynamic: [info, Dynamic] }
+        kind: enum
+        map: { Assigned: Assigned, Dynamic: Dynamic }
         filter: { type: facet, param: membership }
       - field: sourceLabel
         label: Source
-        kind: status
-        map: { Cloud: [neutral, Cloud], Synced: [info, Synced from AD] }
+        kind: enum
+        map: { Cloud: Cloud, Synced: Synced from AD }
         filter: { type: facet, param: source }
       - { field: isAssignableToRole, label: Role-assignable, kind: boolean, filter: { type: facet, param: roleAssignable } }
       - field: membershipRuleProcessingState
@@ -190,7 +190,7 @@ layout:
         kind: status
         map: { On: [ok, On], Paused: [warn, Paused] }
         hidden: true
-      - { field: description, label: Description }
+      - { field: description, label: Description, wrap: true }
       - { field: visibility, label: Visibility, hidden: true }
       - { field: createdDateTime, label: Created, kind: date, filter: date }
       - { field: onPremisesLastSyncDateTime, label: Last directory sync, kind: relativeTime, hidden: true }

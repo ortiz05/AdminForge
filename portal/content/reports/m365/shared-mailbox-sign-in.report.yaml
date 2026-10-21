@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.shared-mailbox-sign-in
-version: 1.2.0
+version: 1.3.0
 title: Shared mailboxes with sign-in allowed
 summary: >-
   Shared mailboxes whose account can still sign in. Nobody should sign in to a shared mailbox directly — people open it
@@ -281,8 +281,8 @@ layout:
         filter: facet
       - field: signInFrom
         label: Sign-in state from
-        kind: status
-        map: { entra: [neutral, Microsoft Entra ID], exchange: [info, Exchange Online (can lag)] }
+        kind: enum
+        map: { entra: Microsoft Entra ID, exchange: Exchange Online (can lag) }
         filter: facet
         hidden: true
       - { field: whenCreated, label: Created, kind: date, filter: date, sortable: true }

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.function-apps
-version: 1.1.0
+version: 1.2.0
 title: Function Apps
 summary: Retired — AdminForge doesn't manage Azure Functions at this time. Azure Function Apps across subscriptions — state, hosting plan, OS, HTTPS and identity settings — with restart, start, stop and trigger sync.
 # Retired 2026-10-17: Azure Functions aren't managed in AdminForge at this time. To bring it back, set
@@ -140,8 +140,8 @@ layout:
         filter: facet
       - { field: publicNetworkAccess, label: Public access, filter: facet }
       - { field: identityType, label: Managed identity, filter: facet }
-      - { field: vnetIntegrated, label: VNet integrated, kind: status, map: { "true": [info, "Yes"], "false": [neutral, "No"] }, filter: facet, hidden: true }
-      - { field: clientCertEnabled, label: Client certificates, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] }, filter: facet, hidden: true }
+      - { field: vnetIntegrated, label: VNet integrated, kind: enum, map: { "true": "Yes", "false": "No" }, filter: facet, hidden: true }
+      - { field: clientCertEnabled, label: Client certificates, kind: enum, map: { "true": "On", "false": "Off" }, filter: facet, hidden: true }
       - { field: planName, label: App Service plan, hidden: true }
       - { field: resourceGroup, label: Resource group, filter: { type: text, param: resourceGroup } }
       - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }

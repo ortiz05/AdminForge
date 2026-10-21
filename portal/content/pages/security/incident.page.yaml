@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.incident
-version: 1.2.0
+version: 1.3.0
 title: Incident
 summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. One Microsoft Defender XDR incident — status, correlated alerts, impacted assets and analyst comments.
 # Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
@@ -209,19 +209,19 @@ tabs:
             filter: facet
           - field: serviceSource
             label: Detected by
-            kind: status
+            kind: enum
             filter: facet
             map:
-              microsoftDefenderForEndpoint: [neutral, Defender for Endpoint]
-              microsoftDefenderForIdentity: [neutral, Defender for Identity]
-              microsoftDefenderForCloudApps: [neutral, Defender for Cloud Apps]
-              microsoftDefenderForOffice365: [neutral, Defender for Office 365]
-              microsoft365Defender: [neutral, Defender XDR]
-              azureAdIdentityProtection: [neutral, Entra ID Protection]
-              microsoftDefenderForCloud: [neutral, Defender for Cloud]
-              dataLossPrevention: [neutral, Data loss prevention]
-              microsoftInsiderRiskManagement: [neutral, Insider risk management]
-              microsoftSentinel: [neutral, Microsoft Sentinel]
+              microsoftDefenderForEndpoint: Defender for Endpoint
+              microsoftDefenderForIdentity: Defender for Identity
+              microsoftDefenderForCloudApps: Defender for Cloud Apps
+              microsoftDefenderForOffice365: Defender for Office 365
+              microsoft365Defender: Defender XDR
+              azureAdIdentityProtection: Entra ID Protection
+              microsoftDefenderForCloud: Defender for Cloud
+              dataLossPrevention: Data loss prevention
+              microsoftInsiderRiskManagement: Insider risk management
+              microsoftSentinel: Microsoft Sentinel
           - { field: mitreTechniques, label: MITRE techniques, kind: tags }
           - { field: assignedTo, label: Assigned to, hidden: true }
           - { field: createdDateTime, label: Created, kind: relativeTime }

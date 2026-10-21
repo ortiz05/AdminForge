@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: avd.session-hosts
-version: 1.0.0
+version: 1.1.0
 title: Session hosts
 summary: >-
   Every Azure Virtual Desktop session host across subscriptions and host pools, from Azure Resource Graph — health,
@@ -162,7 +162,7 @@ layout:
           Unknown: [neutral, Unknown]
         filter: { type: facet, param: health }
       - { field: status, label: Status, filter: facet }
-      - { field: drainMode, label: Drain mode, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] }, filter: { type: facet, param: drain } }
+      - { field: drainMode, label: Drain mode, kind: enum, map: { "true": "On", "false": "Off" }, filter: { type: facet, param: drain } }
       - { field: sessions, label: Sessions, kind: number, sortable: true, filter: range }
       - { field: hostPool, label: Host pool, filter: { type: text, param: hostPool } }
       - { field: statusSince, label: Status since, kind: relativeTime, sortable: true }
@@ -174,8 +174,8 @@ layout:
       - { field: lastHeartBeat, label: Last heartbeat, kind: relativeTime, hidden: true }
       - field: hosting
         label: Runs on
-        kind: status
-        map: { azure: [neutral, Azure VM], arc: [info, Azure Arc] }
+        kind: enum
+        map: { azure: Azure VM, arc: Azure Arc }
         filter: { type: facet, param: hosting }
         hidden: true
       - { field: resourceGroup, label: Resource group, filter: { type: text, param: resourceGroup } }

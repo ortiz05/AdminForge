@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.privileged-role-assignments
-version: 2.0.0
+version: 2.1.0
 title: Privileged role assignments
 summary: >-
   Every active and eligible assignment of a privileged Microsoft Entra role — who, which role, standing or eligible,
@@ -227,7 +227,7 @@ layout:
       - { field: findings, label: Account findings, kind: tags }
       - { field: source, label: Source, filter: facet, hidden: true }
       - { field: principal.accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [warn, Blocked] }, hidden: true }
-      - { field: directoryScopeId, label: Scope, kind: status, map: { "/": [neutral, Directory] } }
+      - { field: directoryScopeId, label: Scope, kind: enum, map: { "/": Directory } }
       - { field: startDateTime, label: Start, kind: date }
       - { field: endDateTime, label: End, kind: date }
       - { field: permanent, label: Permanent, kind: boolean, hidden: true }

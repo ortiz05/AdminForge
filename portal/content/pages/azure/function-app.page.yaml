@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.function-app
-version: 1.1.0
+version: 1.2.0
 title: Function App
 summary: Retired — AdminForge doesn't manage Azure Functions at this time. One Function App — state, functions and their triggers, invocations and HTTP errors, app setting names, configuration, authentication and access.
 # Retired 2026-10-17: Azure Functions aren't managed in AdminForge at this time. To bring it back, set
@@ -394,8 +394,8 @@ tabs:
           - { field: principalType, label: Principal type, filter: facet }
           - field: inherited
             label: Assigned at
-            kind: status
-            map: { "true": [neutral, Inherited], "false": [info, This app] }
+            kind: enum
+            map: { "true": Inherited, "false": This app }
             filter: facet
           - { field: scope, label: Scope, kind: code, hidden: true }
           - { field: createdOn, label: Assigned, kind: date }

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.named-locations
-version: 1.0.0
+version: 1.1.0
 title: Named locations
 summary: IP ranges and countries used by Conditional Access — which are trusted, what they contain, and when they changed.
 owner: identity-team
@@ -88,8 +88,8 @@ layout:
       - { field: type, label: Type, filter: { type: facet, param: type } }
       - field: trusted
         label: Trust
-        kind: status
-        map: { "true": [info, Trusted], "false": [neutral, Not trusted] }
+        kind: enum
+        map: { "true": Trusted, "false": Not trusted }
         filter: { type: facet, param: trusted }
       - { field: count, label: Entries, kind: number }
       - { field: entries, label: Ranges or countries, kind: tags }

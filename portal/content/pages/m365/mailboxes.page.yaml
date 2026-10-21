@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mailboxes
-version: 1.3.0
+version: 1.4.0
 title: Mailboxes
 summary: Exchange Online mailboxes by type with hold, archive and address-list flags. Filter with the query builder, open a mailbox to see who has access, convert leavers' mailboxes to shared in bulk, and create shared and room mailboxes.
 owner: m365-team
@@ -166,18 +166,18 @@ layout:
       - { field: displayName, label: Mailbox, kind: identity, secondary: primarySmtpAddress }
       - field: recipientTypeDetails
         label: Type
-        kind: status
+        kind: enum
         map:
-          UserMailbox: [neutral, User]
-          SharedMailbox: [info, Shared]
-          RoomMailbox: [neutral, Room]
-          EquipmentMailbox: [neutral, Equipment]
-          SchedulingMailbox: [neutral, Scheduling]
+          UserMailbox: User
+          SharedMailbox: Shared
+          RoomMailbox: Room
+          EquipmentMailbox: Equipment
+          SchedulingMailbox: Scheduling
         filter: { type: facet, param: type }
       - field: litigationHoldEnabled
         label: Litigation hold
-        kind: status
-        map: { "true": [info, "On"], "false": [neutral, "Off"] }
+        kind: enum
+        map: { "true": "On", "false": "Off" }
         filter: { type: facet, param: hold }
       - field: archiveStatus
         label: Archive

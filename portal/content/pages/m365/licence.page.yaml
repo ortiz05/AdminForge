@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.licence
-version: 2.0.0
+version: 2.1.0
 title: Licence
 summary: One subscription — who holds a seat, whether it was assigned directly or through a group, assignment errors, and the service plans it includes.
 owner: m365-team
@@ -178,8 +178,8 @@ tabs:
             filter: { type: facet, param: enabled }
           - field: assignment
             label: Assigned
-            kind: status
-            map: { Direct: [neutral, Directly], Group: [info, Through a group], Both: [info, Directly and by group] }
+            kind: enum
+            map: { Direct: Directly, Group: Through a group, Both: Directly and by group }
             filter: facet
           - field: state
             label: Assignment state

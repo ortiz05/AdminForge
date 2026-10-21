@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.users
-version: 1.1.0
+version: 1.2.0
 title: Users
 summary: >-
   Member and guest accounts — filter by type, sign-in status, licensing, source, department and MFA registration,
@@ -181,8 +181,8 @@ layout:
         filter: { type: facet, param: enabled }
       - field: userType
         label: Type
-        kind: status
-        map: { Member: [neutral, Member], Guest: [info, Guest] }
+        kind: enum
+        map: { Member: Member, Guest: Guest }
         filter: { type: facet, param: userType }
       - { field: department, label: Department, filter: { type: text, param: department } }
       - { field: jobTitle, label: Job title }
@@ -193,8 +193,8 @@ layout:
         filter: { type: facet, param: licensed }
       - field: sourceLabel
         label: Source
-        kind: status
-        map: { Cloud: [neutral, Cloud], Synced: [info, Synced from AD] }
+        kind: enum
+        map: { Cloud: Cloud, Synced: Synced from AD }
         filter: { type: facet, param: source }
       - { field: signInActivity.lastSignInDateTime, label: Last interactive sign-in, kind: relativeTime, filter: date }
       - { field: signInActivity.lastNonInteractiveSignInDateTime, label: Last non-interactive sign-in, kind: relativeTime, hidden: true }

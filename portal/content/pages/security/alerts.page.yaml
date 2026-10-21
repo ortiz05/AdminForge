@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.alerts
-version: 1.1.0
+version: 1.2.0
 title: Alerts
 summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. Alerts from every Microsoft Defender product and Entra ID Protection (alerts_v2), with the incident each one belongs to.
 # Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
@@ -185,19 +185,19 @@ layout:
         filter: { type: facet, param: status }
       - field: serviceSource
         label: Detected by
-        kind: status
+        kind: enum
         filter: { type: facet, param: serviceSource }
         map:
-          microsoftDefenderForEndpoint: [neutral, Defender for Endpoint]
-          microsoftDefenderForIdentity: [neutral, Defender for Identity]
-          microsoftDefenderForCloudApps: [neutral, Defender for Cloud Apps]
-          microsoftDefenderForOffice365: [neutral, Defender for Office 365]
-          microsoft365Defender: [neutral, Defender XDR]
-          azureAdIdentityProtection: [neutral, Entra ID Protection]
-          microsoftDefenderForCloud: [neutral, Defender for Cloud]
-          dataLossPrevention: [neutral, Data loss prevention]
-          microsoftInsiderRiskManagement: [neutral, Insider risk management]
-          microsoftSentinel: [neutral, Microsoft Sentinel]
+          microsoftDefenderForEndpoint: Defender for Endpoint
+          microsoftDefenderForIdentity: Defender for Identity
+          microsoftDefenderForCloudApps: Defender for Cloud Apps
+          microsoftDefenderForOffice365: Defender for Office 365
+          microsoft365Defender: Defender XDR
+          azureAdIdentityProtection: Entra ID Protection
+          microsoftDefenderForCloud: Defender for Cloud
+          dataLossPrevention: Data loss prevention
+          microsoftInsiderRiskManagement: Insider risk management
+          microsoftSentinel: Microsoft Sentinel
       - field: incidentId
         label: Incident
         kind: code

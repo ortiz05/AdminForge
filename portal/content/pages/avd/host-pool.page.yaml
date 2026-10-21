@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: avd.host-pool
-version: 1.0.0
+version: 1.1.0
 title: Host pool
 summary: >-
   One Azure Virtual Desktop host pool — configuration, capacity (hosts taking new sessions, slots in use), its session
@@ -202,7 +202,7 @@ tabs:
               Unknown: [neutral, Unknown]
             filter: facet
           - { field: status, label: Status, filter: facet }
-          - { field: drainMode, label: Drain mode, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] }, filter: facet }
+          - { field: drainMode, label: Drain mode, kind: enum, map: { "true": "On", "false": "Off" }, filter: facet }
           - { field: sessions, label: Sessions, kind: number, sortable: true }
           - { field: statusSince, label: Status since, kind: relativeTime, sortable: true }
           - { field: agentVersion, label: Agent version, filter: facet, hidden: true }

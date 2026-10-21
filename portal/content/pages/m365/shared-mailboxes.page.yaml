@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.shared-mailboxes
-version: 1.5.0
+version: 1.6.0
 title: Shared mailboxes
 summary: >-
   Shared mailboxes, which of them people can still sign in to (block it), and which need a licence because they have
@@ -245,8 +245,8 @@ layout:
         filter: facet
       - field: signInFrom
         label: Sign-in state from
-        kind: status
-        map: { entra: [neutral, Microsoft Entra ID], exchange: [info, Exchange Online (can lag)] }
+        kind: enum
+        map: { entra: Microsoft Entra ID, exchange: Exchange Online (can lag) }
         filter: facet
         hidden: true
       - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean, filter: facet }

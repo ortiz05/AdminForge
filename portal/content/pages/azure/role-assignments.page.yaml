@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.role-assignments
-version: 1.0.1
+version: 1.1.0
 title: Role assignments
 summary: Azure RBAC role assignments across management groups, subscriptions, resource groups and resources — filter by scope, role and principal; remove or add assignments with approval.
 owner: azure-team
@@ -132,7 +132,7 @@ layout:
       - { field: scopeLevel, label: Scope level, filter: facet }
       - { field: scope, label: Scope, kind: code }
       - { field: createdOn, label: Assigned, kind: date, sortable: true, filter: date }
-      - { field: hasCondition, label: Condition, kind: status, map: { "true": [info, Conditional], "false": [neutral, None] }, filter: facet, hidden: true }
+      - { field: hasCondition, label: Condition, kind: enum, map: { "true": Conditional, "false": None }, filter: facet, hidden: true }
       - { field: createdBy, label: Assigned by, kind: guid, hidden: true }
       - { field: updatedOn, label: Updated, kind: date, hidden: true }
       - { field: description, label: Description, hidden: true }

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: avd.host-pools
-version: 1.0.0
+version: 1.1.0
 title: Host pools
 summary: >-
   Every Azure Virtual Desktop host pool across subscriptions — type, load balancing, session limit, how many hosts take
@@ -126,7 +126,7 @@ layout:
       - { field: autoscale, label: Autoscale, kind: status, map: { "true": [ok, "On"], "false": [neutral, "Off"] }, filter: facet }
       - { field: startVMOnConnect, label: Start VM on Connect, kind: status, map: { "true": [ok, "On"], "false": [neutral, "Off"] }, filter: facet, hidden: true }
       - { field: scalingPlan, label: Scaling plan, hidden: true }
-      - { field: validationEnvironment, label: Validation pool, kind: status, map: { "true": [info, "Yes"], "false": [neutral, "No"] }, filter: facet, hidden: true }
+      - { field: validationEnvironment, label: Validation pool, kind: enum, map: { "true": "Yes", "false": "No" }, filter: facet, hidden: true }
       - { field: preferredAppGroupType, label: Preferred app group type, hidden: true }
       - { field: appGroups, label: Application groups, kind: number, hidden: true }
       - { field: location, label: Location, filter: facet, hidden: true }

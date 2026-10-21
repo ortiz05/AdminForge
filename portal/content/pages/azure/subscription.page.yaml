@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.subscription
-version: 1.0.1
+version: 1.1.0
 title: Subscription
 summary: One Azure subscription — state, resource groups, what it contains, who has access and which Defender for Cloud plans are on.
 owner: azure-team
@@ -209,7 +209,7 @@ tabs:
             filter: facet
           - { field: principalId, label: Principal, kind: guid }
           - { field: principalType, label: Principal type, filter: facet }
-          - { field: hasCondition, label: Condition, kind: status, map: { "true": [info, Conditional], "false": [neutral, None] }, filter: facet }
+          - { field: hasCondition, label: Condition, kind: enum, map: { "true": Conditional, "false": None }, filter: facet }
           - { field: createdOn, label: Assigned, kind: date, filter: date }
         rowActions:
           - playbook: azure.remove-role-assignment

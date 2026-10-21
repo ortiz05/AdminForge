@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.groups
-version: 1.0.0
+version: 1.1.0
 title: Microsoft 365 groups
 summary: Microsoft 365 (Unified) groups — the collaboration groups behind Teams, shared mailboxes, Planner and SharePoint team sites.
 owner: m365-team
@@ -120,8 +120,8 @@ layout:
       - { field: resourceProvisioningOptions, label: Provisioned as, kind: tags, filter: { type: facet, param: teams } }
       - field: visibility
         label: Visibility
-        kind: status
-        map: { Public: [info, Public], Private: [neutral, Private], HiddenMembership: [neutral, Hidden membership] }
+        kind: enum
+        map: { Public: Public, Private: Private, HiddenMembership: Hidden membership }
         filter: { type: facet, param: visibility }
       - { field: groupTypes, label: Group types, kind: tags, filter: { type: facet, param: membership } }
       - { field: createdDateTime, label: Created, kind: date, filter: date, sortable: true }

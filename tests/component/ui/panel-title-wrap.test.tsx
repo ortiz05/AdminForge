@@ -16,6 +16,8 @@ describe('Panel title', () => {
     expect(title).toHaveTextContent('Top home domains (inactive guests) over the last ninety days');
     expect(title).toHaveClass('line-clamp-2', 'break-words');
     expect(title).not.toHaveClass('truncate');
+    // Cut after two lines, the whole title is still there on hover.
+    expect(title).toHaveAttribute('title', 'Top home domains (inactive guests) over the last ninety days');
     expect(screen.getByRole('region', { name: /Top home domains/ })).toBeInTheDocument();
     expect(await axeViolations(container)).toEqual([]);
   });

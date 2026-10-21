@@ -34,7 +34,7 @@ export function Panel({
           <div className={s.heading()}>
             {eyebrow && <p className={s.eyebrow()}>{eyebrow}</p>}
             {title && (
-              <h2 id={titleId} className={s.title()}>
+              <h2 id={titleId} className={s.title()} title={typeof title === 'string' ? title : undefined}>
                 {title}
               </h2>
             )}

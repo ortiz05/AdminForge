@@ -296,6 +296,22 @@ organization). There was no critical or high security finding; the fixes are bel
   (S-18): content commands, `audit verify` and `db` no longer hold the provisioner's credentials.
 - `provision test-identities` re-reads the registration campaign after each write and stops with what differs
   (S-22).
+- **Keyed audit chain** (S-10, optional until set): `AUDIT_CHAIN_KEY` (32 random bytes, base64, in the installation's
+  Secret — never on the volume) makes the audit log an HMAC-SHA256 chain from a cut-over event the API appends at its
+  next start (`audit.chain_keyed`, logged with its seq, hash and previous hash); earlier events keep their SHA-256
+  links and the cut-over seals them. With `AUDIT_CHAIN_KEYED_SINCE` pinning the first cut-over, whoever holds only the
+  volume can no longer change an event and re-hash the rest; without the pin they can still strip the cut-over and
+  re-hash the whole log unkeyed, which only the shipped checkpoints show. Rotation: a new key with the old one in
+  `AUDIT_CHAIN_PREVIOUS_KEYS`; a lost key is declared by id (`AUDIT_CHAIN_LOST_KEY_IDS`). Without a key nothing
+  changes, and `/readyz` (`checks.auditChain`), Admin → Settings and `adminforge env check` say the chain is unkeyed;
+  once keyed, the API doesn't start without the key, and `publish`, `db backup` and `db sign-out-everyone` refuse
+  before changing anything. A malformed key, one equal to `TOKEN_CACHE_KEY`, or the other three settings without a key
+  are refused at start.
+- `adminforge audit verify --checkpoint <seq>:<hash>` checks a checkpoint from the shipped api container log (a
+  rewritten, re-hashed unkeyed chain passes the walk but not this). Every verification handles both parts of the
+  chain; events keyed with a key that isn't configured are reported as "can't be verified" (`audit_chain_key_missing`;
+  the Audit page says "Can't verify from #N"), not as broken. Copies from `db backup` of a keyed log verify only with
+  the key, which is never in the copy.
 - **`adminforge db backup` is audited** (S-41): a `database.backup` event (account and machine, stdout or file,
   plaintext, bytes, the copy's audit tail) is written before the copy leaves — no event, no copy; a file copy takes
   its name only then; failed copies are recorded too. It now needs write access to the database.

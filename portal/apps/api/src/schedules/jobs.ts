@@ -386,8 +386,11 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       ? `Incomplete: ${missing.map((m) => `${m.label} couldn’t be read (${m.code})`).join('; ')}.`
       : '';
     // Email and Teams: the report goes out after the file is safely written (the file stays with the run either way).
+    // Never once the run was told to stop: it is already recorded as timed out or interrupted, and a retry would
+    // send the report a second time.
     for (const d of job.delivery) {
       if (d.type === 'file') continue;
+      if (ctx.signal.aborted) throw ctx.signal.reason;
       if (ctx.fileOnly) {
         notes.push({ type: d.type, status: 'skipped', message: FILE_ONLY_NOTE });
         continue;

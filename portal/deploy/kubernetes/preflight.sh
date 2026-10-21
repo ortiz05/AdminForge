@@ -245,7 +245,7 @@ if run get nodes -o 'jsonpath={range .items[*]}{.metadata.name}{"\t"}{.status.no
     total++
     if ($2 != "amd64" || $6 == "true") next
     amd++
-    if (millicores($3) >= 1000 && bytes($4) >= 5 * 1073741824 && bytes($5) >= 4 * 1073741824) roomy++
+    if (millicores($3) >= 1000 && bytes($4) >= 5 * 1073741824 && bytes($5) >= 8 * 1073741824) roomy++
     else if (bytes($4) >= 2 * 1073741824) fits++
   }
   END { printf "%d %d %d %d\n", total, amd, roomy, fits }')"
@@ -257,9 +257,9 @@ if run get nodes -o 'jsonpath={range .items[*]}{.metadata.name}{"\t"}{.status.no
   elif [ "$AMD" -eq 0 ]; then
     bad "no schedulable amd64 node — the runner image is built for linux/amd64 only (README.md → Requirements › CPU architecture)"
   elif [ "$ROOMY" -gt 0 ]; then
-    ok "$ROOMY of $AMD schedulable amd64 node(s) have ≥ 1 CPU, 5 GiB memory and 4 GiB ephemeral storage allocatable (the pod's limits; what is free depends on what else runs there)$OTHERS"
+    ok "$ROOMY of $AMD schedulable amd64 node(s) have ≥ 1 CPU, 5 GiB memory and 8 GiB ephemeral storage allocatable (the pod's limits and emptyDirs; what is free depends on what else runs there)$OTHERS"
   elif [ "$FITS" -gt 0 ]; then
-    warn "no schedulable amd64 node has 1 CPU, 5 GiB memory (the pod's limits: api 2 GiB + runner 3 GiB) and 4 GiB ephemeral storage allocatable — the requests (2 GiB) fit, but under load the pod may be OOM-killed or evicted: use larger nodes (README.md → Requirements › Node size)"
+    warn "no schedulable amd64 node has 1 CPU, 5 GiB memory (the pod's limits: api 2 GiB + runner 3 GiB) and 8 GiB ephemeral storage (its emptyDirs, logs) allocatable — the requests (2 GiB) fit, but under load the pod may be OOM-killed or evicted: use larger nodes (README.md → Requirements › Node size)"
   else
     bad "no schedulable amd64 node has the 2 GiB of allocatable memory the pod requests (README.md → Requirements › Node size)"
   fi

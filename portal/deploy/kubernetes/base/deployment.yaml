@@ -152,9 +152,11 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: adminforge-data
+        # Also where `adminforge db backup -` stages its copy of the database before streaming it out
+        # (portal/tools/cli/src/commands/db.ts): room for one copy. Past its sizeLimit the kubelet evicts the pod.
         - name: tmp
           emptyDir:
-            sizeLimit: 1Gi
+            sizeLimit: 4Gi
         - name: runner-tmp
           emptyDir:
             sizeLimit: 2Gi

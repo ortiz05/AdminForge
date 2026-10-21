@@ -38,6 +38,28 @@ export function rememberCsrf(token: string | undefined): void {
 
 const SIGN_IN_PATH = '/auth/login';
 
+const unauthenticatedListeners = new Set<() => void>();
+
+/**
+ * Runs `listener` on every 401 from the BFF — the session ended (idle or absolute expiry, perhaps in a tab left open)
+ * or Microsoft wants a fresh sign-in — so what this browser keeps for the signed-in person (Query Studio history)
+ * leaves with the session, not only at Sign out. Returns the unsubscribe.
+ */
+export function onUnauthenticated(listener: () => void): () => void {
+  unauthenticatedListeners.add(listener);
+  return () => void unauthenticatedListeners.delete(listener);
+}
+
+function notifyUnauthenticated(): void {
+  for (const listener of unauthenticatedListeners) {
+    try {
+      listener();
+    } catch {
+      // Clean-up is best effort; the request's own error still reaches the caller.
+    }
+  }
+}
+
 /**
  * Keeps the user's place: the sign-in round trip comes back to the page they were on. Only this site's own
  * /auth/login is ever followed (with its `claims`, nothing else), whatever an error body says — a `login` that points
@@ -118,6 +140,7 @@ export async function api<T = unknown>(path: string, options: RequestOptions<T> 
   const data = text ? parseJson(text) : undefined;
 
   if (!res.ok) {
+    if (res.status === 401) notifyUnauthenticated();
     const parsed = parseApiError(data);
     const correlation = res.headers.get('x-correlation-id') ?? undefined;
     if (!parsed) {

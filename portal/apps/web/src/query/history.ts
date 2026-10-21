@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from 'react';
+import { onUnauthenticated } from '../lib/api';
 import { isSource, type QuerySource } from './contracts';
 
 /**
  * Query history, per signed-in user in this browser (localStorage, keyed by the user's oid). Queries can name tenant
  * objects, so the next person on a shared browser never sees them: the shell sets the owner when it loads the session,
- * and sign-out (here or in another tab) removes every user's history. Without an owner nothing is stored.
+ * and sign-out (here or in another tab) or any 401 — the session ended, perhaps in a tab left open — removes every
+ * user's history. Without an owner nothing is stored.
  * A convenience only: storage can be full, blocked or disabled (private windows, policy), so every access is wrapped
  * and failure simply means no history.
  */
@@ -142,6 +144,10 @@ export function forgetAllHistory(): void {
   cache = [];
   emit();
 }
+
+// A 401 means the session ended (or needs a fresh sign-in): the history goes with it, as at sign-out, and nothing is
+// stored again until a signed-in session names its owner.
+onUnauthenticated(forgetAllHistory);
 
 function subscribe(listener: () => void) {
   listeners.add(listener);

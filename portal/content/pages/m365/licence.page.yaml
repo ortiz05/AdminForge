@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.licence
-version: 2.1.0
+version: 2.1.1
 title: Licence
 summary: One subscription — who holds a seat, whether it was assigned directly or through a group, assignment errors, and the service plans it includes.
 owner: m365-team
@@ -67,6 +67,10 @@ datasources:
   # searches it; the transform only labels the rows of one page; the counts come from $count.
   users:
     source: graph
+    # signInActivity (Last sign-in) needs Microsoft Entra ID P1 and AuditLog.Read.All: without P1 Graph refuses the
+    # whole list, so it says which licence it needs ($select can't depend on licences yet: docs/backlog.md, as on
+    # identity.users).
+    requires: { licences: [signInLogs] }
     request:
       path: /users
       headers: { ConsistencyLevel: eventual }

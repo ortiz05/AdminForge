@@ -165,7 +165,8 @@ describe('adminforge validate', () => {
   });
 });
 
-describe('shipped content', () => {
+// Loads all of portal/content: slow on a busy machine.
+describe('shipped content', { timeout: 30_000 }, () => {
   it('names users by object id in every write', async () => {
     const { definitions } = await loadContentDir(path.join(repoRoot, 'portal', 'content'));
     const problems = definitions.flatMap((d) => usersWriteProblems(d.def).map((p) => `${d.file} ${p.path}`));

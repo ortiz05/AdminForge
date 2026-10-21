@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { IDS, runbookRunDetail } from '../../support/web/fixtures/automation';
 import { FIXED_NOW } from '../../support/web/fixtures/session';
+import { axeViolations } from '../axe';
 import { renderApp } from './automation/render';
 
 // L14 (design review): "Waiting for … to work through this checklist" was warn-coloured text alone. State is never
@@ -48,5 +49,6 @@ describe('runbook: a checklist waiting for someone else', () => {
     const line = text.closest('p')!;
     expect(line).toHaveClass('text-warn');
     expect(line.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(await axeViolations()).toEqual([]);
   });
 });

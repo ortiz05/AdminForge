@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { me } from '../../../support/web/fixtures/session';
+import { axeViolations } from '../../axe';
 import { renderApp } from './render';
 
 // M8 (design review): two page-header layouts. Content list pages put the actions on the title row and the description
@@ -31,5 +32,6 @@ describe('coded list pages use the list page header', () => {
       expect(actions.parentElement).toBe(h1.parentElement!.parentElement);
       const description = within(header).getByText(/./, { selector: 'p.truncate' });
       expect(actions.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(await axeViolations()).toEqual([]);
     });
 });

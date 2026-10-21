@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
+import { axeViolations } from '../axe';
 import { DASHBOARD, RESULTS, USERS_PAGE } from './renderer-fixtures';
 import { renderPage } from './render-page';
 
@@ -44,5 +45,6 @@ describe('disclosure carets', { timeout: 20_000 }, () => {
 
     // The same glyph in both places.
     expect(pathOf(caretOf(show))).toBe(pathOf(caretOf(open)));
+    expect(await axeViolations()).toEqual([]);
   });
 });

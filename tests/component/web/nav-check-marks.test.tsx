@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { STATUS_ICON, type StatusTone } from '@adminforge/ui';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import type { MockHandler } from '../../support/web/mock-handler';
+import { axeViolations } from '../axe';
 import { renderApp } from './automation/render';
 
 // M5: a section's mark in the navigation rail is Synthetic monitoring's status icon at 12 px (so the rail and the page
@@ -18,10 +19,16 @@ const probe = (key: string, group: string, status: string | null) => ({
   series: [],
   thresholds: { warn: 1000, crit: 3000, unit: 'ms' },
 });
+const GROUPS = [
+  { key: 'identity', label: 'Identity', icon: 'identification-card' },
+  { key: 'm365', label: 'Microsoft 365', icon: 'squares-four' },
+  { key: 'endpoint', label: 'Endpoint', icon: 'devices' },
+  { key: 'azure', label: 'Azure', icon: 'cloud' },
+];
 const answer =
   (items: unknown[]): MockHandler =>
   ({ method, path }) =>
-    method === 'GET' && path === '/api/probes' ? { body: { items, groups: [] } } : undefined;
+    method === 'GET' && path === '/api/probes' ? { body: { items, groups: GROUPS } } : undefined;
 
 const nav = () => screen.getByRole('navigation', { name: 'Primary' });
 
@@ -61,6 +68,7 @@ describe('navigation: section check marks', () => {
       expect(svg).toHaveClass(colour);
       expect(pathsOf(svg)).toEqual(iconPaths(tone));
     }
+    expect(await axeViolations()).toEqual([]);
   });
 
   it('hides a closed section’s page count while its mark shows, and keeps it where there is none', async () => {
@@ -93,6 +101,7 @@ describe('navigation: section check marks', () => {
     await waitFor(() => expect(identity).toHaveTextContent('Identity6'));
     expect(within(nav()).queryAllByRole('link', { name: /service checks/ })).toHaveLength(0);
     expect(nav().querySelector('a[href^="/monitoring?group="]')).toBeNull();
+    expect(await axeViolations()).toEqual([]);
   });
 
   it('marks a section once one of its probes has a result, by the results there are', async () => {

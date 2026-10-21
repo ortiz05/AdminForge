@@ -1,5 +1,26 @@
 import { compile, ExpressionError } from './evaluate';
-import { analyse, CLEAN, join, level, pathKey, RAW, TEXT, type Shape, type Taint } from './taint';
+import {
+  analyse,
+  ANYWHERE,
+  CLEAN,
+  ENC_KQL,
+  ENC_ODATA,
+  ENC_PATH,
+  ENC_SEARCH,
+  insideQuotes,
+  join,
+  level,
+  MAY_QUOTE,
+  NEEDS_QUOTES,
+  NOT_IN_PATH,
+  pathKey,
+  RAW,
+  type Dialect,
+  type Level,
+  type QuoteItem,
+  type Shape,
+  type Taint,
+} from './taint';
 import { hasTemplate, splitTemplate, TemplateError, wholeExpression } from './template';
 
 export type PathSegment = string | number;
@@ -71,6 +92,22 @@ function usesInternal(node: unknown): boolean {
   return Object.values(node).some((v) => typeof v === 'object' && usesInternal(v));
 }
 
+/**
+ * `$x := …` anywhere but as a statement of a block, the whole expression or a function's body — in a condition, an
+ * operand, a function argument, a predicate — binds a variable the lint can't follow (it doesn't read those parts).
+ */
+function misplacedBind(node: unknown, statement = true): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if (Array.isArray(node)) return node.some((x) => misplacedBind(x, false));
+  const n = node as { type?: string } & Record<string, unknown>;
+  if (n.type === 'bind' && !statement) return true;
+  return Object.entries(n).some(([k, v]) =>
+    n.type === 'block' && k === 'expressions' && Array.isArray(v)
+      ? v.some((x) => misplacedBind(x, true))
+      : typeof v === 'object' && misplacedBind(v, n.type === 'lambda' && k === 'body'),
+  );
+}
+
 /** Compiles every `${ … }` in a definition and reports the ones that are malformed. Empty array = all good. */
 export function validateExpressions(def: unknown, opts: WalkOptions = {}): ExpressionIssue[] {
   const issues: ExpressionIssue[] = [];
@@ -95,6 +132,13 @@ export function validateExpressions(def: unknown, opts: WalkOptions = {}): Expre
                 ...at,
                 expression: seg.source,
                 message: 'Variables starting with $__af are reserved for AdminForge itself.',
+              });
+            if (misplacedBind(ast))
+              issues.push({
+                ...at,
+                expression: seg.source,
+                message:
+                  'Assign variables ($x := …) only as a statement of a block ( … ; … ), the whole expression or a function body — not inside a condition, an operand or an argument.',
               });
           } catch (err) {
             const e = err as ExpressionError;
@@ -159,6 +203,53 @@ function forEachNames(def: unknown): string[] {
   return [...out];
 }
 
+/** Steps anywhere in a playbook or runbook (branches, loops, sections), by id. */
+function stepsById(def: unknown): Map<string, Record<string, unknown>> {
+  const out = new Map<string, Record<string, unknown>>();
+  const visit = (v: unknown, key?: string): void => {
+    if (Array.isArray(v))
+      v.forEach((x) => {
+        if (key === 'steps' && x && typeof x === 'object' && typeof (x as { id?: unknown }).id === 'string')
+          out.set((x as { id: string }).id, x as Record<string, unknown>);
+        visit(x);
+      });
+    else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) visit(x, k);
+  };
+  visit(def);
+  return out;
+}
+
+/**
+ * Results worked out on demand (datasources, steps): `taintOf` per entry, cached; one that depends on itself
+ * counts as user data.
+ */
+function lazyShape(
+  entries: Record<string, unknown> | Map<string, unknown>,
+  taintOf: (entry: unknown) => Taint,
+  rest: Taint & number,
+): Shape {
+  const map = entries instanceof Map ? entries : new Map(Object.entries(entries));
+  const done = new Map<string, Taint>();
+  const busy = new Set<string>();
+  return {
+    fields: done,
+    rest,
+    keys: () => [...map.keys()],
+    resolve: (name) => {
+      if (!map.has(name)) return undefined;
+      if (busy.has(name)) return RAW;
+      busy.add(name);
+      try {
+        const t = taintOf(map.get(name));
+        done.set(name, t);
+        return t;
+      } finally {
+        busy.delete(name);
+      }
+    },
+  };
+}
+
 /** What an expression yields in `scope`; an expression that does not compile counts as user data. */
 function expressionTaint(source: string, scope: Taint): Taint {
   try {
@@ -197,45 +288,45 @@ function dataTaint(value: unknown, scope: Taint): Taint {
 }
 
 /**
- * The scope an expression of `def` sees, as taint: the user-data roots, and `ds` — per datasource (S-13), what its
- * result can carry: a Microsoft response is tenant data (like `value` in its transform); a static datasource is its
- * rendered `data`; a transform is what it makes of either. Worked out on demand; a datasource that depends on itself
- * counts as user data.
+ * The scope an expression of `def` sees, as taint: the user-data roots (and a `forEach` item's own name, whatever it
+ * shadows); `advanced` on a `dialect: rows` page (the person's filter values as data, not compiled); `ds` — per
+ * datasource (S-13), what its result can carry: a Microsoft response is tenant data (like `value` in its
+ * transform), a static datasource its rendered `data`, a transform what it makes of either; and `steps` — a
+ * transform step's output is its expression's value, any other step's output is a response or a person's input.
  */
 function scopeTaint(def: unknown): Shape {
-  const roots = new Map<string, Taint>();
-  for (const name of [...USER_DATA_ROOTS, ...forEachNames(def)]) roots.set(name, RAW);
-  const declared = (def as { datasources?: unknown } | null)?.datasources;
-  const datasources =
-    declared && typeof declared === 'object' && !Array.isArray(declared)
-      ? (declared as Record<string, unknown>)
+  const d = (def ?? {}) as { datasources?: unknown; filters?: { advanced?: { dialect?: unknown } } };
+  const declared =
+    d.datasources && typeof d.datasources === 'object' && !Array.isArray(d.datasources)
+      ? (d.datasources as Record<string, unknown>)
       : {};
-  const done = new Map<string, Taint>();
-  const busy = new Set<string>();
-  const ds: Shape = {
-    fields: done,
-    rest: CLEAN,
-    keys: () => Object.keys(datasources),
-    resolve: (name) => {
-      if (!Object.hasOwn(datasources, name)) return undefined;
-      if (busy.has(name)) return RAW;
-      busy.add(name);
-      try {
-        const d = (datasources[name] ?? {}) as { source?: unknown; data?: unknown; transform?: unknown };
-        let result: Taint = d.source === 'static' ? dataTaint(d.data, scope) : RAW;
-        if (typeof d.transform === 'string' && hasTemplate(d.transform))
-          result = templateTaint(d.transform, {
-            fields: new Map([...scope.fields, ['value', result]]),
-            rest: CLEAN,
-          });
-        done.set(name, result);
-        return result;
-      } finally {
-        busy.delete(name);
-      }
+  const fields = new Map<string, Taint>();
+  const scope: Shape = { fields, rest: CLEAN };
+  const ds = lazyShape(
+    declared,
+    (entry) => {
+      const x = (entry ?? {}) as { source?: unknown; data?: unknown; transform?: unknown };
+      const result: Taint = x.source === 'static' ? dataTaint(x.data, scope) : RAW;
+      return typeof x.transform === 'string' && hasTemplate(x.transform)
+        ? templateTaint(x.transform, { fields: new Map([...fields, ['value', result]]), rest: CLEAN })
+        : result;
     },
-  };
-  const scope: Shape = { fields: new Map([...roots, ['ds', ds]]), rest: CLEAN };
+    CLEAN,
+  );
+  const steps = lazyShape(
+    stepsById(def),
+    (step) => {
+      const x = step as { type?: unknown; expression?: unknown };
+      return x.type === 'transform' && typeof x.expression === 'string'
+        ? { fields: new Map([['output', templateTaint(x.expression, scope)]]), rest: RAW }
+        : RAW;
+    },
+    RAW,
+  );
+  fields.set('ds', ds);
+  fields.set('steps', steps);
+  if (d.filters?.advanced?.dialect === 'rows') fields.set('advanced', RAW);
+  for (const name of [...USER_DATA_ROOTS, ...forEachNames(def)]) fields.set(name, RAW);
   return scope;
 }
 
@@ -310,6 +401,28 @@ const ODATA_HELPER: Record<string, string> = {
   $expand: "$odata() (or a literal allowlist: params.x in ['a', 'b'] ? … : …)",
 };
 
+/** What each kind of text can't take: user data as it came, and what another kind's encoder made of it. */
+const UNSAFE_IN: Record<'odata' | 'search' | 'kql' | 'path', Level> = {
+  odata: ANYWHERE | ENC_SEARCH | ENC_KQL | ENC_PATH,
+  search: ANYWHERE | ENC_ODATA | ENC_KQL | ENC_PATH,
+  kql: ANYWHERE | ENC_ODATA | ENC_SEARCH | ENC_PATH,
+  path: ANYWHERE | NOT_IN_PATH | ENC_ODATA | ENC_SEARCH | ENC_KQL,
+};
+
+/** OData options named in a URL's query string (`/users?$filter=…` in a `$batch` request's `url`). */
+const URL_OPTION = /[?&](\$?(?:filter|search|orderby|expand))=/gi;
+
+/** String literals of an expression (a query string built inside it). */
+function literals(node: unknown, out: string[] = []): string[] {
+  if (Array.isArray(node)) node.forEach((x) => literals(x, out));
+  else if (node && typeof node === 'object') {
+    const n = node as { type?: string; value?: unknown };
+    if (n.type === 'string' && typeof n.value === 'string') out.push(n.value);
+    Object.values(node).forEach((x) => literals(x, out));
+  }
+  return out;
+}
+
 /** Params compiled server-side into safe KQL by the advanced filter builder (`filters.advanced` with `dialect: kql`). */
 function compiledKqlParams(def: unknown): string[] {
   const adv = (def as { filters?: { advanced?: { dialect?: unknown; param?: unknown } } } | null)?.filters
@@ -356,46 +469,97 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
         return; // malformed templates are reported by validateExpressions
       }
       const whole = wholeExpression(parts) !== undefined;
-      for (const seg of parts) {
-        if (seg.type !== 'expr') continue;
+      scope ??= scopeTaint(def);
+      const sinkScope = scope;
+      // A `url` can carry a query string: what follows `?$filter=` is OData text.
+      const queryOption = (i: number) => {
+        if (key !== 'url') return undefined;
+        const before = parts
+          .slice(0, i)
+          .map((p) => (p.type === 'text' ? p.value : ''))
+          .join('');
+        if (!before.includes('?')) return undefined;
+        const option = [...before.matchAll(URL_OPTION)].at(-1)?.[1];
+        return option ? `$${option.replace(/^\$/, '').toLowerCase()}` : 'query';
+      };
+      const analysed = parts.map((seg, i) => {
+        if (seg.type !== 'expr') return undefined;
         let ast: unknown;
         try {
           ast = compile(seg.source).ast();
         } catch {
-          continue;
+          return null;
         }
-        scope ??= scopeTaint(def);
-        const found = analyse(ast, scope, kql ? trustedKql : none);
-        const carries = level(found.taint);
+        const option = odata?.option ?? queryOption(i);
+        // An OData option of its own, a URL query string, a URL that builds one inside the expression, KQL, a path.
+        const kinds: Array<'odata' | 'search' | 'kql' | 'path'> =
+          option === '$search'
+            ? ['search']
+            : option && option !== 'query'
+              ? ['odata']
+              : kql
+                ? ['kql']
+                : key === 'url' && literals(ast).some((t) => t.includes('?'))
+                  ? ['path', 'odata']
+                  : ['path'];
+        const dialect: Dialect = kinds.length > 1 ? 'any' : kinds[0] === 'path' ? 'any' : kinds[0]!;
+        const found = analyse(ast, sinkScope, { trusted: kql ? trustedKql : none, dialect });
+        return { ast, option, kinds, dialect, found, carries: level(found.taint) };
+      });
+      parts.forEach((seg, i) => {
+        const a = analysed[i];
+        if (seg.type !== 'expr' || !a) return;
+        const { ast, option, kinds, dialect, found, carries } = a;
+        // A character allowlist interpolated inside a quoted literal of the text: `name eq '${ $replace(…) }'`.
+        const item = (j: number): QuoteItem => {
+          const p = parts[j]!;
+          if (p.type === 'text') return p.value;
+          const other = analysed[j];
+          return other && !(other.carries & MAY_QUOTE) ? '' : null;
+        };
+        const indexes = parts.map((_, j) => j);
+        const quoted = insideQuotes(indexes.slice(0, i).map(item), indexes.slice(i + 1).map(item), dialect);
+        const unquoted = !!(carries & NEEDS_QUOTES) && !quoted && !kinds.every((k) => k === 'path');
+        const unsafe = kinds.some((k) => carries & UNSAFE_IN[k]) || unquoted;
+        const allowlistHint =
+          unquoted && !kinds.some((k) => carries & UNSAFE_IN[k])
+            ? " A character allowlist ($replace(x, /[^…]/, '')) is safe only inside a quoted literal."
+            : '';
         const at = { path: formatPath(segments), segments, expression: seg.source };
-        if (odata) {
+        if (odata || (option && option !== 'query')) {
           // Unlike a path or KQL text, an OData option is never user data as a whole either: that would be a raw
           // filter param (advanced filters are compiled server-side instead).
-          if (carries >= RAW)
+          const name = odata?.key ?? option!;
+          const helper = ODATA_HELPER[odata?.option ?? option!] ?? ODATA_HELPER.$filter;
+          if (unsafe)
             issues.push({
               ...at,
-              message: `User data is ${found.concat >= RAW ? 'concatenated into' : 'placed in'} ${odata.key} without ${ODATA_HELPER[odata.option]}.`,
+              message: `User data is ${found.concat & ANYWHERE ? 'concatenated into' : 'placed in'} ${name}${odata ? '' : ` of the ${key}`} without ${helper}.${allowlistHint}`,
             });
         } else if (kql) {
-          if (carries >= RAW && !(whole && optedIn(seg.source) && userDataPath(ast)))
+          if (unsafe && !(whole && optedIn(seg.source) && userDataPath(ast)))
             issues.push({
               ...at,
-              message: `User data reaches the KQL query without $kql() (or another quoting helper such as $guid()).${
+              message: `User data reaches the KQL query without $kql() (or another quoting helper such as $guid()).${allowlistHint}${
                 whole && userDataPath(ast)
                   ? ` A query the person types whole needs the explicit opt-in ${USER_QUERY_OPT_IN} at the start of the expression.`
                   : ''
               }`,
             });
-        } else if (carries >= TEXT && !(whole && idParam(def, ast)))
+        } else if (unsafe && !(whole && idParam(def, ast)))
           issues.push({
             ...at,
             message: `User data is placed in the ${key} without $encode() (or another helper such as $guid()).${
+              kinds.includes('odata')
+                ? ` Its query string takes only $guid(), numbers or a literal allowlist.`
+                : ''
+            }${
               whole
                 ? ` A whole ${key} may come straight from a param only when it is a guid or an entity id (type: guid, resource, subscription, …).`
                 : ''
             }`,
           });
-      }
+      });
     },
     opts,
   );

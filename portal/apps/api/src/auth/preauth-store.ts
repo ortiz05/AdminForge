@@ -1,7 +1,8 @@
 import { and, asc, count, eq, gt, inArray, isNull, lt } from 'drizzle-orm';
-import { writeTx, type Db } from '../db/client';
+import { writeTx, type Db, type Tx } from '../db/client';
 import { preauth } from '../db/schema';
 import { AppError } from '../errors';
+import { withTx } from './session-store';
 import type { AppKind } from './types';
 
 /** Extra data carried through an arm round trip (audited at the callback), or the schedule a grant is for. */
@@ -91,6 +92,8 @@ export interface PreauthStore {
   /** Removes and returns the record (single use). Expiry is checked by the caller. */
   take(state: string): Promise<PreauthRecord | null>;
   purge(now: Date): Promise<number>;
+  /** S-08: round trips a session started (arming, a schedule's consent) follow it when its id is rotated. */
+  moveSessionTx(from: string, to: string, tx: Tx | null): void;
 }
 
 export class SqlitePreauthStore implements PreauthStore {
@@ -160,6 +163,12 @@ export class SqlitePreauthStore implements PreauthStore {
       .returning({ state: preauth.state });
     return removed.length;
   }
+
+  moveSessionTx(from: string, to: string, tx: Tx | null): void {
+    withTx(this.db, tx, (t) =>
+      t.update(preauth).set({ sessionIdHash: to }).where(eq(preauth.sessionIdHash, from)).run(),
+    );
+  }
 }
 
 export class MemoryPreauthStore implements PreauthStore {
@@ -193,6 +202,11 @@ export class MemoryPreauthStore implements PreauthStore {
     const row = this.rows.get(state) ?? null;
     this.rows.delete(state);
     return row;
+  }
+
+  moveSessionTx(from: string, to: string): void {
+    for (const [state, r] of this.rows)
+      if (r.sessionIdHash === from) this.rows.set(state, { ...r, sessionIdHash: to });
   }
 
   async purge(now: Date): Promise<number> {

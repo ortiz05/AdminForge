@@ -3,7 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { writeAppConfigured } from '../config';
 import { auditActor, type AppContext } from '../context';
-import { AppError, parseBody } from '../errors';
+import { AppError, parseBody, unauthenticated } from '../errors';
+import { randomToken, sha256Hex } from '../security/tokens';
 import {
   acrsOf,
   authContextClaims,
@@ -17,7 +18,7 @@ import {
 } from './flow';
 import { requireRole, requireSession, requireSessionWithCsrf } from './guards';
 import { safeReturnTo } from './return-to';
-import { dropWriteAccess } from './session-plugin';
+import { dropWriteAccess, rotateSession } from './session-plugin';
 import { isArmed, type SessionRecord } from './session-store';
 import { accountStatusMissing, guestAccount } from './routes';
 import { hasAccountStatus, isGuestAccount, partitionKey } from './types';
@@ -48,7 +49,12 @@ export const armMinutes = (ctx: AppContext, requested: number) =>
 const notArmed = () =>
   new AppError(409, 'not_armed', 'Write access is off.', { hint: 'Arm write access first.' });
 
-/** Extend (once per armed session) and disarm — identical in mock and Entra modes. */
+/**
+ * Extend (once per armed session) and disarm — identical in mock and Entra modes. Neither rotates the session id
+ * (S-08 rotates it on arming): the id was already renewed at the step-up, extending proves nothing new and grants no
+ * more than the step-up did (the same window, once), and disarming — like expiry and losing Operator, which happen in
+ * whatever request comes next — only takes write access away and drops the Write tokens.
+ */
 export function armLifecycleRoutes(app: FastifyInstance, ctx: AppContext) {
   app.post('/auth/arm/extend', { config: { rateLimit: ARM_RATE_LIMIT } }, async (request) => {
     const session = requireSessionWithCsrf(request);
@@ -204,7 +210,10 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
           }),
         );
 
-      const writePartition = partitionKey('write', session.idHash);
+      // S-08: arming gives the session a new id. The Write app redeems straight into the new id's partition, so write
+      // tokens never exist under the old one; rotateSession below moves everything else.
+      const sid = randomToken();
+      const writePartition = partitionKey('write', sha256Hex(sid));
       let redeemed: Awaited<ReturnType<typeof auth.redeem>>;
       try {
         redeemed = await auth.redeem({
@@ -300,12 +309,15 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
 
       const minutes = armMinutes(ctx, requested);
       const until = new Date(now.getTime() + minutes * 60_000);
-      const updated = (await ctx.sessions.update(session.idHash, {
+      const patch = {
         writeAccountId: homeAccountId,
         writeExpiresAt: until,
         writeExtended: false,
         writeReason: reason,
-      }))!;
+      };
+      const updated = await rotateSession(ctx, request, reply, session, patch, sid);
+      // Signed out (in another tab) while verifying: nothing to arm.
+      if (!updated) throw await reject(unauthenticated());
       await ctx.audit.append({
         ...auditActor(ctx, request, updated),
         action: 'session.armed',
@@ -317,6 +329,7 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
           armedUntil: until.toISOString(),
           stepUp: stepUpStrength(cfg),
           ...(acrs.length ? { acrs } : {}),
+          sessionRotated: true,
         },
       });
       return reply.redirect(pending.returnTo);

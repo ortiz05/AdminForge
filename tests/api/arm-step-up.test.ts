@@ -60,7 +60,8 @@ describe('arm step-up freshness (no auth context)', () => {
     const { cookie, armState } = await signInAndStartArm(t);
     const res = await callback(t, cookie, armState);
     expect(res.statusCode).toBe(302);
-    const { me } = await getMe(t.app, cookie);
+    // Arming gives the session a new id (S-08): the browser follows the new cookie.
+    const { me } = await getMe(t.app, cookieFrom(res)!);
     expect(me!.mode).toBe('armed');
   });
 

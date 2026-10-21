@@ -2,12 +2,18 @@ import { PortalRole } from '@adminforge/schemas';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { auditActor, type AppContext } from '../context';
-import { noPortalRole, parseBody } from '../errors';
+import { noPortalRole, parseBody, unauthenticated } from '../errors';
 import { buildMe } from '../routes/me';
 import { ARM_RATE_LIMIT, armMinutes, armPreconditions } from './arm-routes';
 import { requireSessionWithCsrf } from './guards';
 import { safeReturnTo } from './return-to';
-import { clearSessionCookie, dropWriteAccess, endSession, startSession } from './session-plugin';
+import {
+  clearSessionCookie,
+  dropWriteAccess,
+  endSession,
+  rotateSession,
+  startSession,
+} from './session-plugin';
 
 /** The synthetic identity used by mock sign-in (never a real tenant). */
 export const MOCK_USER = {
@@ -79,20 +85,21 @@ export function mockAuthRoutes(app: FastifyInstance, ctx: AppContext) {
     return buildMe(ctx, session);
   });
 
-  /** Arms immediately (no step-up in mock mode). */
+  /** Arms immediately (no step-up in mock mode), with a new session id as in Entra mode (S-08). */
   app.post<{ Querystring: { returnTo?: string } }>(
     '/auth/arm',
     { config: { rateLimit: ARM_RATE_LIMIT } },
-    async (request) => {
+    async (request, reply) => {
       const { session, body } = armPreconditions(request);
       const minutes = armMinutes(ctx, body.minutes);
       const until = new Date(ctx.now().getTime() + minutes * 60_000);
-      const updated = (await ctx.sessions.update(session.idHash, {
+      const updated = await rotateSession(ctx, request, reply, session, {
         writeAccountId: 'mock-write',
         writeExpiresAt: until,
         writeExtended: false,
         writeReason: body.reason,
-      }))!;
+      });
+      if (!updated) throw unauthenticated();
       await ctx.audit.append({
         ...auditActor(ctx, request, updated),
         action: 'session.armed',
@@ -103,6 +110,7 @@ export function mockAuthRoutes(app: FastifyInstance, ctx: AppContext) {
           reason: body.reason,
           armedUntil: until.toISOString(),
           stepUp: 'none',
+          sessionRotated: true,
           mock: true,
         },
       });

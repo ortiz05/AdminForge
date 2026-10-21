@@ -1,5 +1,5 @@
 import { and, eq, lt, or, sql } from 'drizzle-orm';
-import { writeTx, type Db } from '../db/client';
+import { writeTx, type Db, type Tx } from '../db/client';
 import { sessions } from '../db/schema';
 
 /** A signed-in session as stored (the cookie's id is never stored, only its sha256). */
@@ -33,6 +33,34 @@ export interface SessionRecord {
 
 export type SessionPatch = Partial<Omit<SessionRecord, 'idHash' | 'createdAt'>>;
 
+/**
+ * Something else kept under a session's id hash that moves with the session when its id is rotated (S-08: arming).
+ * `moveSessionTx` runs inside the rotation's immediate transaction — on SQLite `tx` is that transaction (synchronous:
+ * never `await` in it; `withTx`), for the memory stores null — so the move commits with the new session row or not at
+ * all. `sessionMoved` runs once the rotation committed, for what is kept in memory (held show-once secrets, open
+ * streams, back-offs).
+ */
+export interface SessionMover {
+  moveSessionTx?(from: string, to: string, tx: Tx | null): void;
+  sessionMoved?(from: string, to: string): void;
+}
+
+/** A session id rotation (SessionStore.rotate). */
+export interface SessionRotation {
+  /** The current id hash. */
+  from: string;
+  /** The new id's hash. */
+  to: string;
+  /** Applied to the row as it moves (arming: the write window and a new CSRF token). */
+  patch: SessionPatch;
+  now: Date;
+  /** Where a mover that failed after the commit is reported (the rotation stands). */
+  log?: { warn(obj: object, msg: string): void };
+}
+
+/** How long an old id is remembered after a rotation: a request still carrying it is refused, its cookie kept. */
+export const ROTATED_GRACE_MS = 60_000;
+
 export interface SessionStore {
   create(session: SessionRecord): Promise<void>;
   get(idHash: string): Promise<SessionRecord | null>;
@@ -45,6 +73,65 @@ export interface SessionStore {
    * row exists and goes once it doesn't (the schedule was deleted, or its creator lost access).
    */
   purge(input: { now: Date; idleMinutes: number; retainDays?: number }): Promise<number>;
+  /**
+   * S-08: moves the session to a new id hash — the row (with `patch` applied) and everything the registered movers keep
+   * under the old hash, in one immediate transaction — so the old id stops working at once. Null, with nothing moved,
+   * when the session is gone (signed out meanwhile).
+   */
+  rotate(rotation: SessionRotation): Promise<SessionRecord | null>;
+  /** Registers what moves with a session when its id is rotated; returns the function that unregisters it. */
+  onRotate(mover: SessionMover): () => void;
+  /**
+   * Whether `idHash` was rotated away within ROTATED_GRACE_MS. A request still carrying it (in flight while the arm
+   * completed) is refused like any unknown id, but its cookie is not cleared: the browser already holds the new one,
+   * under the same name.
+   */
+  rotatedAway(idHash: string, now: Date): boolean;
+}
+
+/** Runs `fn` in the rotation's transaction, or in one of its own when the session store isn't on this database. */
+export function withTx(db: Db, tx: Tx | null, fn: (tx: Tx) => void): void {
+  if (tx) fn(tx);
+  else writeTx(db, fn);
+}
+
+/** The patch without its `undefined` fields (they would overwrite the row's values as it moves). */
+const defined = (patch: SessionPatch): SessionPatch =>
+  Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as SessionPatch;
+
+/** The movers and the recently rotated ids of one session store (per process). */
+class Rotations {
+  private readonly movers = new Set<SessionMover>();
+  /** Old id hash → until when a request carrying it keeps its cookie. */
+  private readonly away = new Map<string, number>();
+
+  add(mover: SessionMover): () => void {
+    this.movers.add(mover);
+    return () => void this.movers.delete(mover);
+  }
+
+  /** Inside the transaction: a mover that throws rolls the whole rotation back. */
+  moveTx(from: string, to: string, tx: Tx | null) {
+    for (const m of this.movers) m.moveSessionTx?.(from, to, tx);
+  }
+
+  /** After the commit: in-memory state follows. A mover that fails is logged; the rotation already happened. */
+  moved({ from, to, now, log }: SessionRotation) {
+    const t = now.getTime();
+    if (this.away.size > 10_000) for (const [h, until] of this.away) if (until <= t) this.away.delete(h);
+    this.away.set(from, t + ROTATED_GRACE_MS);
+    for (const m of this.movers) {
+      try {
+        m.sessionMoved?.(from, to);
+      } catch (err) {
+        log?.warn({ err: { name: (err as Error).name } }, 'in-memory state did not follow a rotated session');
+      }
+    }
+  }
+
+  isAway(idHash: string, now: Date): boolean {
+    return (this.away.get(idHash) ?? 0) > now.getTime();
+  }
 }
 
 /** Whether the session is armed at `now` (write account held and window still open). */
@@ -54,7 +141,36 @@ export const isArmed = (s: Pick<SessionRecord, 'writeAccountId' | 'writeExpiresA
 const DAY_MS = 86_400_000;
 
 export class SqliteSessionStore implements SessionStore {
+  private readonly rotations = new Rotations();
+
   constructor(private readonly db: Db) {}
+
+  async rotate(rotation: SessionRotation): Promise<SessionRecord | null> {
+    const { from, to, patch } = rotation;
+    // BEGIN IMMEDIATE: the row and everything keyed by its hash move together, or nothing does.
+    const next = writeTx(this.db, (tx) => {
+      const row = tx.select().from(sessions).where(eq(sessions.idHash, from)).get();
+      if (!row) return null;
+      tx.delete(sessions).where(eq(sessions.idHash, from)).run();
+      const moved = tx
+        .insert(sessions)
+        .values({ ...row, ...defined(patch), idHash: to })
+        .returning()
+        .get();
+      this.rotations.moveTx(from, to, tx);
+      return moved;
+    });
+    if (next) this.rotations.moved(rotation);
+    return next;
+  }
+
+  onRotate(mover: SessionMover): () => void {
+    return this.rotations.add(mover);
+  }
+
+  rotatedAway(idHash: string, now: Date): boolean {
+    return this.rotations.isAway(idHash, now);
+  }
 
   async create(session: SessionRecord): Promise<void> {
     await this.db.insert(sessions).values(session);
@@ -155,6 +271,35 @@ export function signOutEveryone(
 /** In-memory store for tests and DB-less mock mode. */
 export class MemorySessionStore implements SessionStore {
   readonly rows = new Map<string, SessionRecord>();
+  private readonly rotations = new Rotations();
+
+  async rotate(rotation: SessionRotation): Promise<SessionRecord | null> {
+    const { from, to, patch } = rotation;
+    const row = this.rows.get(from);
+    if (!row) return null;
+    if (this.rows.has(to)) throw new Error('duplicate session');
+    const next: SessionRecord = { ...row, ...structuredClone(defined(patch)), idHash: to };
+    this.rows.delete(from);
+    this.rows.set(to, next);
+    try {
+      this.rotations.moveTx(from, to, null);
+    } catch (err) {
+      // As the database's rollback would: the session stays under its old id.
+      this.rows.delete(to);
+      this.rows.set(from, row);
+      throw err;
+    }
+    this.rotations.moved(rotation);
+    return structuredClone(next);
+  }
+
+  onRotate(mover: SessionMover): () => void {
+    return this.rotations.add(mover);
+  }
+
+  rotatedAway(idHash: string, now: Date): boolean {
+    return this.rotations.isAway(idHash, now);
+  }
 
   async create(session: SessionRecord): Promise<void> {
     if (this.rows.has(session.idHash)) throw new Error('duplicate session');

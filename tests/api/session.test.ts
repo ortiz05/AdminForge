@@ -167,7 +167,8 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
       const res = await arm({ minutes: 30, reason: 'Disable a test user' });
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ redirect: '/' });
-      const { me } = await getMe(t.app, cookie);
+      // Arming gives the session a new id (S-08): the browser follows the new cookie.
+      const { me } = await getMe(t.app, cookieFrom(res)!);
       expect(me!.mode).toBe('armed');
       expect(Date.parse(me!.armedUntil!)).toBe(t.clock.t + 30 * MINUTE);
       const armed = t.audit.rows.find((r) => r.action === 'session.armed')!;
@@ -176,13 +177,13 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
 
     it('caps the armed window at WRITE_SESSION_MAX_MINUTES', async () => {
       const { cookie, csrf } = await mockLogin(t.app);
-      await t.app.inject({
+      const res = await t.app.inject({
         method: 'POST',
         url: '/auth/arm',
         headers: { cookie, 'x-adminforge-csrf': csrf },
         payload: { minutes: 240, reason: 'Long maintenance' },
       });
-      const { me } = await getMe(t.app, cookie);
+      const { me } = await getMe(t.app, cookieFrom(res)!);
       expect(Date.parse(me!.armedUntil!)).toBe(t.clock.t + 60 * MINUTE);
     });
 
@@ -205,14 +206,16 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
     });
 
     it('extends once, then refuses; disarm ends write access', async () => {
-      const { cookie, csrf } = await mockLogin(t.app);
-      const h = { cookie, 'x-adminforge-csrf': csrf };
-      await t.app.inject({
+      const login = await mockLogin(t.app);
+      const armed = await t.app.inject({
         method: 'POST',
         url: '/auth/arm',
-        headers: h,
+        headers: { cookie: login.cookie, 'x-adminforge-csrf': login.csrf },
         payload: { minutes: 15, reason: 'Group cleanup' },
       });
+      // Arming gives the session a new id and CSRF token (S-08): the browser follows them.
+      const cookie = cookieFrom(armed)!;
+      const h = { cookie, 'x-adminforge-csrf': (await getMe(t.app, cookie)).me!.csrf };
       t.clock.advance(10 * MINUTE);
 
       const ext = await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: {} });
@@ -260,14 +263,14 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
 
     it('write access ends at its expiry and the expiry is audited', async () => {
       const { cookie, csrf } = await mockLogin(t.app);
-      await t.app.inject({
+      const armed = await t.app.inject({
         method: 'POST',
         url: '/auth/arm',
         headers: { cookie, 'x-adminforge-csrf': csrf },
         payload: { minutes: 5, reason: 'Quick change' },
       });
       t.clock.advance(6 * MINUTE);
-      expect((await getMe(t.app, cookie)).me).toMatchObject({ mode: 'read', armedUntil: null });
+      expect((await getMe(t.app, cookieFrom(armed)!)).me).toMatchObject({ mode: 'read', armedUntil: null });
       expect(t.audit.rows.at(-1)!.action).toBe('session.arm_expired');
       expect(await t.audit.verify()).toMatchObject({ ok: true, count: 3 });
     });

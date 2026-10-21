@@ -8,6 +8,7 @@ import type {
   RunStatus,
   StepRecord,
 } from '@adminforge/engine';
+import type { Tx } from '../db/client';
 import type { ConfirmView } from './confirm';
 
 /**
@@ -179,6 +180,13 @@ export interface RunRepository {
    * stalled past its lease, and another process took the run over): the worker then stops at the next checkpoint.
    */
   tryLock(runId: string): Promise<{ release(): Promise<void>; lost?: AbortSignal } | null>;
+
+  /**
+   * S-08 (a SessionMover): the session's id was rotated (arming). Its unfinished runs and its decisions on their tasks
+   * move to the new hash inside the rotation's transaction (`tx`; null for the memory repository), so the steps still
+   * to come act through the new id (identity.ts). Finished runs keep the hash they ran under: they never act again.
+   */
+  moveSessionTx(from: string, to: string, tx: Tx | null): void;
 }
 
 /**

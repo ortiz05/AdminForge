@@ -40,21 +40,29 @@ export interface PortalSession {
 
 /**
  * An `ApiCall` over a Playwright request context that holds the session cookie. `origin` prefixes every path (''
- * when the context has a baseURL). The CSRF token is read from `/api/me` before the first non-GET call.
+ * when the context has a baseURL). The CSRF token is read from `/api/me` before the first non-GET call, and again
+ * (one retry) when the API says it's stale — arming gives the session a new id and CSRF token, as the SPA handles.
  */
 export function createApiCall(request: APIRequestContext, origin = ''): ApiCall {
   let csrf: string | undefined;
-  return async <T>(method: string, path: string, body?: unknown) => {
-    if (!csrf && method !== 'GET')
-      csrf = ((await (await request.get(`${origin}/api/me`)).json()) as { csrf: string }).csrf;
+  const readCsrf = async () =>
+    ((await (await request.get(`${origin}/api/me`)).json()) as { csrf: string }).csrf;
+  const call = async <T>(method: string, path: string, body?: unknown, retried = false) => {
+    if (!csrf && method !== 'GET') csrf = await readCsrf();
     const res = await request.fetch(`${origin}${path}`, {
       method,
       headers: method === 'GET' ? {} : { 'x-adminforge-csrf': csrf!, 'content-type': 'application/json' },
       data: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await res.text();
-    return { status: res.status(), json: (text ? JSON.parse(text) : undefined) as T };
+    const json = (text ? JSON.parse(text) : undefined) as T;
+    if (res.status() === 403 && !retried && (json as { error?: { code?: string } })?.error?.code === 'csrf') {
+      csrf = await readCsrf();
+      return call<T>(method, path, body, true);
+    }
+    return { status: res.status(), json };
   };
+  return (method, path, body) => call(method, path, body);
 }
 
 /**

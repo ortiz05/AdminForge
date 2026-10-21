@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Config } from '../config';
 import { auditActor, type AppContext } from '../context';
 import { randomToken, sha256Hex } from '../security/tokens';
-import { isArmed, type SessionRecord } from './session-store';
+import { isArmed, type SessionPatch, type SessionRecord } from './session-store';
 import { portalRoles } from './roles';
 import { isGuestAccount, partitionKey, ReauthRequired } from './types';
 
@@ -88,6 +88,38 @@ export async function startSession(
   return record;
 }
 
+/**
+ * S-08: a new session id when the session gains write access (arming), so an id that existed before the step-up — one
+ * copied or planted while the session was read-only — never carries write access. The row moves to the new id's hash
+ * with `patch` applied and a new CSRF token, and what is kept under the old hash moves with it in one immediate
+ * transaction (SessionStore.rotate: the token partitions and pending round trips, registered by registerSessions; runs,
+ * approval decisions, held secrets and open streams, by the runs module and the event stream). The new cookie is set
+ * on `reply` (it ends with the session) and the old id stops working at once. `sid` is the new id when the caller used
+ * it first (the Write app redeems straight into the new id's partition). Null when the session ended meanwhile.
+ */
+export async function rotateSession(
+  ctx: AppContext,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  session: SessionRecord,
+  patch: SessionPatch,
+  sid: string = randomToken(),
+): Promise<SessionRecord | null> {
+  const now = ctx.now();
+  const next = await ctx.sessions.rotate({
+    from: session.idHash,
+    to: sha256Hex(sid),
+    patch: { ...patch, csrf: randomToken() },
+    now,
+    log: request.log,
+  });
+  if (!next) return null;
+  const left = Math.max(0, Math.floor((next.expiresAt.getTime() - now.getTime()) / 1000));
+  reply.setCookie(sessionCookieName(ctx.config), sid, { ...sessionCookieOptions(ctx.config), maxAge: left });
+  request.session = next;
+  return next;
+}
+
 /** Deletes the session and both token-cache partitions. */
 export async function endSession(ctx: AppContext, session: SessionRecord) {
   await ctx.sessions.delete(session.idHash);
@@ -140,6 +172,15 @@ export function registerSessions(app: FastifyInstance, ctx: AppContext) {
   const idleMs = ctx.config.SESSION_IDLE_MINUTES * 60_000;
   const roleCheck = new RoleCheck(ctx);
   app.decorateRequest('session', null);
+  // S-08: a session's Microsoft token partitions (sealed again: the partition key is the AAD) and the round trips it
+  // started move with it when its id is rotated.
+  ctx.sessions.onRotate({
+    moveSessionTx: (from, to, tx) => {
+      for (const kind of ['read', 'write'] as const)
+        ctx.tokenCache.movePartitionTx(partitionKey(kind, from), partitionKey(kind, to), tx);
+      ctx.preauth.moveSessionTx(from, to, tx);
+    },
+  });
 
   // preHandler (not onRequest) so route rate limits reject floods before any session lookup.
   app.addHook('preHandler', async (request, reply) => {
@@ -148,11 +189,13 @@ export function registerSessions(app: FastifyInstance, ctx: AppContext) {
     const sid = request.cookies[cookieName];
     if (!sid) return;
     const idHash = sha256Hex(sid);
+    // No session for this id. A rotated one (S-08) keeps its cookie: the browser already holds the new id's, by the
+    // same name, and clearing it would sign the person out.
+    const unknown = () => {
+      if (!ctx.sessions.rotatedAway(idHash, ctx.now())) clearSessionCookie(ctx, reply);
+    };
     let session = await ctx.sessions.get(idHash);
-    if (!session) {
-      clearSessionCookie(ctx, reply);
-      return;
-    }
+    if (!session) return unknown();
     const now = ctx.now();
     if (
       now.getTime() >= session.expiresAt.getTime() ||
@@ -173,17 +216,17 @@ export function registerSessions(app: FastifyInstance, ctx: AppContext) {
       });
     }
     if (!isBackgroundRequest(request) && now.getTime() - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
-      session = (await ctx.sessions.update(idHash, { lastSeenAt: now })) ?? session;
+      // Gone since it was read (signed out elsewhere, or its id rotated): the id stops working at once.
+      const touched = await ctx.sessions.update(idHash, { lastSeenAt: now });
+      if (!touched) return unknown();
+      session = touched;
     }
     const current = await roleCheck.check(session, now, {
       correlationId: request.id,
       ip: request.ip,
       log: request.log,
     });
-    if (!current) {
-      clearSessionCookie(ctx, reply);
-      return;
-    }
+    if (!current) return unknown();
     request.session = current;
     // Every later log line of this request says who: the object id, never the UPN.
     request.log = reply.log = request.log.child({ oid: current.userOid });
@@ -226,6 +269,15 @@ export class RoleCheck {
 
   constructor(private readonly ctx: AppContext) {
     this.startedAt = ctx.now().getTime();
+    // S-08: a session whose id was rotated keeps its back-off (a check in progress for the old id ends with it).
+    ctx.sessions.onRotate({
+      sessionMoved: (from, to) => {
+        const at = this.retryAt.get(from);
+        if (at === undefined) return;
+        this.retryAt.delete(from);
+        this.retryAt.set(to, at);
+      },
+    });
   }
 
   /** When the session's roles were last confirmed with Entra. */

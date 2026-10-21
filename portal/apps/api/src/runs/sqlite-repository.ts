@@ -1,10 +1,12 @@
 import type { HumanTask, RunEventInput, RunStatus, StepRecord } from '@adminforge/engine';
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
-import { writeTx, type Database } from '../db/client';
+import { withTx } from '../auth/session-store';
+import { writeTx, type Database, type Tx } from '../db/client';
 import { Leases } from '../db/leases';
 import { approvals, runs, runStepEvents, runSteps } from '../db/schema';
 import {
+  RUN_STATUS_ACTIVE,
   RUN_STATUS_OPEN,
   type EventRow,
   type NewRun,
@@ -401,6 +403,36 @@ export class SqliteRunRepository implements RunRepository {
       .orderBy(asc(approvals.createdAt))
       .limit(500);
     return rows.map(toTask);
+  }
+
+  moveSessionTx(from: string, to: string, tx: Tx | null): void {
+    withTx(this.db, tx, (t) => {
+      // By status first (runs_status_idx): only unfinished runs act again, and the table keeps months of history.
+      const unfinished = inArray(runs.status, RUN_STATUS_ACTIVE);
+      t.update(runs)
+        .set({ sessionHash: to })
+        .where(and(unfinished, eq(runs.sessionHash, from)))
+        .run();
+      const tasks = t
+        .select({ id: approvals.id, decisions: approvals.decisions })
+        .from(approvals)
+        .where(
+          and(
+            eq(approvals.subjectType, 'run'),
+            inArray(approvals.subjectId, t.select({ id: runs.id }).from(runs).where(unfinished)),
+            sql`instr(${approvals.decisions}, ${from}) > 0`,
+          ),
+        )
+        .all();
+      for (const task of tasks) {
+        const decisions = (task.decisions ?? []) as TaskRow['decisions'];
+        if (!decisions.some((d) => d.sessionHash === from)) continue;
+        t.update(approvals)
+          .set({ decisions: decisions.map((d) => (d.sessionHash === from ? { ...d, sessionHash: to } : d)) })
+          .where(eq(approvals.id, task.id))
+          .run();
+      }
+    });
   }
 
   async tryLock(runId: string) {

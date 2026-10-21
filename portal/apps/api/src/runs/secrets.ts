@@ -1,5 +1,6 @@
 import type { SecretDelivery, SecretSink } from '@adminforge/engine';
 import type { AuditWriter } from '../audit/writer';
+import type { SessionMover } from '../auth/session-store';
 import { rootOf } from './run-worker';
 import type { RunRepository } from './types';
 
@@ -45,6 +46,8 @@ export interface SecretStream {
   runId: string;
   sessionHash: string;
   send(message: SecretMessage): void;
+  /** Ends the stream (its session's id was rotated); it detaches itself. */
+  close?(): void;
 }
 
 type Log = { warn(obj: object, msg: string): void };
@@ -60,7 +63,7 @@ const message = (h: Held): SecretMessage => ({
   producedAt: h.producedAt,
 });
 
-export class SecretBroker {
+export class SecretBroker implements SessionMover {
   private readonly held = new Map<string, { secret: Held; timer: NodeJS.Timeout }>();
   private readonly streams = new Set<SecretStream>();
 
@@ -116,6 +119,20 @@ export class SecretBroker {
         return { status: await this.handoff(held) };
       },
     };
+  }
+
+  /**
+   * S-08: the session's id was rotated (arming). What is held for it moves to the new id — only the new cookie can
+   * fetch it — and the run streams opened with the old id end without a word: the browser reconnects with the new
+   * cookie (resuming from Last-Event-ID), while a stream on the old id would otherwise keep watching for 10 seconds.
+   */
+  sessionMoved(from: string, to: string): void {
+    for (const { secret } of this.held.values()) if (secret.sessionHash === from) secret.sessionHash = to;
+    for (const stream of [...this.streams]) {
+      if (stream.sessionHash !== from) continue;
+      this.streams.delete(stream);
+      stream.close?.();
+    }
   }
 
   /** Registers a live stream (SSE) of a session watching a run; returns the detach function. */

@@ -30,12 +30,19 @@ export function eventRoutes(
   ctx: AppContext,
   opts: { pollMs?: number; maxStreams?: number } = {},
 ) {
-  // Open streams would keep server.close() waiting; end them first.
-  const open = new Set<() => void>();
+  // Open streams (their end function → the session's id hash) would keep server.close() waiting; end them first.
+  const open = new Map<() => void, string>();
   /** idHash → streams open for that session. */
   const perSession = new Map<string, number>();
   api.addHook('preClose', async () => {
-    for (const end of [...open]) end();
+    for (const end of [...open.keys()]) end();
+  });
+  // S-08: when a session's id is rotated (arming), its streams end without `session.ended` (which would read as
+  // signed out): the browser reconnects with the new cookie, and a stream opened with the old id doesn't follow it.
+  ctx.sessions.onRotate({
+    sessionMoved: (from) => {
+      for (const [end, idHash] of [...open]) if (idHash === from) end();
+    },
   });
   api.get(
     '/events',
@@ -129,7 +136,7 @@ export function eventRoutes(
       scheduleExpiry();
       request.raw.on('close', end);
       raw.on('error', end);
-      open.add(end);
+      open.set(end, idHash);
       // Gone before the listeners were attached: release its slot now.
       if (raw.destroyed) end();
     },

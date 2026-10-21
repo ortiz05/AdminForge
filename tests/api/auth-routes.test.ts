@@ -369,7 +369,8 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     const again = await armStart(cookie, csrf);
     const ok = await armCallback(cookie, again);
     expect(ok.statusCode).toBe(302);
-    expect((await getMe(t.app, cookie)).me!.mode).toBe('armed');
+    // Arming gives the session a new id (S-08): the browser follows the new cookie.
+    expect((await getMe(t.app, cookieFrom(ok)!)).me!.mode).toBe('armed');
     const armed = t.audit.rows.filter((r) => r.action === 'session.armed');
     expect(armed.map((r) => r.result)).toEqual(['failure', 'success']);
     expect(armed[1]!.details).toMatchObject({ acrs: ['c1'], reason: 'Disable test user' });
@@ -387,7 +388,7 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     expect(session!.writeAccountId).toBe(`${USER_OID}.${TENANT_ID}`);
     expect(session!.writeExpiresAt!.getTime()).toBe(t.clock.t + 45 * MINUTE);
     expect(session!.writeReason).toBe('Maintenance window');
-    const { me } = await getMe(t.app, cookie);
+    const { me } = await getMe(t.app, cookieFrom(cb)!);
     expect(me).toMatchObject({ mode: 'armed', armedUntil: new Date(t.clock.t + 45 * MINUTE).toISOString() });
   });
 
@@ -400,8 +401,13 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     expect(cb.statusCode).toBe(403);
     expect(cb.json().error.code).toBe('user_mismatch');
     expect((await getMe(t.app, cookie)).me!.mode).toBe('read');
+    // The Write app redeemed into the partition of the id arming would have given (S-08); it is dropped, and the
+    // session keeps its id.
     const [session] = [...t.sessions.rows.values()];
-    expect(t.auth.forgets).toContainEqual({ kind: 'write', partitionKey: `write:${session!.idHash}` });
+    const redeemed = t.auth.redeems.at(-1)!.partitionKey;
+    expect(redeemed).not.toBe(`write:${session!.idHash}`);
+    expect(t.auth.forgets).toContainEqual({ kind: 'write', partitionKey: redeemed });
+    expect([...t.tokenBlobs.rows.keys()].filter((k) => k.startsWith('write:'))).toEqual([]);
     expect(t.audit.rows.at(-1)).toMatchObject({
       action: 'session.armed',
       result: 'failure',
@@ -452,8 +458,9 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     t = await setup();
     const { cookie, csrf } = await signIn(t);
     const res = await armStart(cookie, csrf);
-    await armCallback(cookie, res);
-    const h = { cookie, 'x-adminforge-csrf': csrf };
+    // Arming gives the session a new id and CSRF token (S-08): the browser follows them.
+    const armed = cookieFrom(await armCallback(cookie, res))!;
+    const h = { cookie: armed, 'x-adminforge-csrf': (await getMe(t.app, armed)).me!.csrf };
     expect(
       (await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: { minutes: 30 } }))
         .statusCode,

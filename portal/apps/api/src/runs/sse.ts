@@ -184,6 +184,7 @@ export async function streamRunEvents(
       runId,
       sessionHash: request.session.idHash,
       send: (m) => void (!closed && raw.write(`data: ${JSON.stringify(m)}\n\n`)),
+      close,
     });
   await pump();
 }

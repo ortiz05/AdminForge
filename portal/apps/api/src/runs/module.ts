@@ -164,6 +164,9 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     sessionLive: async (hash) =>
       sessionLive(await ctx.sessions.get(hash), ctx.now(), ctx.config.SESSION_IDLE_MINUTES),
   });
+  // S-08: a session whose id is rotated (arming) takes its unfinished runs, approval decisions and held secrets along.
+  ctx.sessions.onRotate(repo);
+  ctx.sessions.onRotate(secrets);
   // Delegated steps re-confirm the session's roles with Entra like browser requests do (RoleCheck).
   const identity = new SessionIdentityResolver(repo, ctx.sessions, ctx.config, ctx.now, {
     roleCheck: new RoleCheck(ctx),

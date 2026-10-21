@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { HumanTask, RunEventInput, RunStatus, StepRecord } from '@adminforge/engine';
+import {
+  isTerminal,
+  type HumanTask,
+  type RunEventInput,
+  type RunStatus,
+  type StepRecord,
+} from '@adminforge/engine';
 import {
   RUN_STATUS_OPEN,
   type EventRow,
@@ -223,6 +229,20 @@ export class MemoryRunRepository implements RunRepository {
       )
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
       .map(clone);
+  }
+
+  moveSessionTx(from: string, to: string): void {
+    const unfinished = new Set<string>();
+    for (const [id, r] of this.runs) {
+      if (isTerminal(r.status)) continue;
+      unfinished.add(id);
+      if (r.sessionHash === from) this.runs.set(id, { ...r, sessionHash: to });
+    }
+    for (const [k, t] of this.tasks) {
+      if (!unfinished.has(t.subjectId) || !t.decisions.some((d) => d.sessionHash === from)) continue;
+      const decisions = t.decisions.map((d) => (d.sessionHash === from ? { ...d, sessionHash: to } : d));
+      this.tasks.set(k, { ...t, decisions });
+    }
   }
 
   async tryLock(runId: string) {

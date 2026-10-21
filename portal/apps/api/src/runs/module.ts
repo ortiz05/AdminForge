@@ -99,8 +99,14 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
       ctx.events?.relayRun(n);
     };
   }
+  // Tells /readyz the run worker is working: it beats when a poll of the queue went through (D-09), so it exists only
+  // where this process consumes the queue, with a database (set below, once `consuming` is known).
+  let heartbeat: Heartbeat | null = null;
   const queue =
-    opts.queue ?? (ctx.database ? new SqliteRunQueue(ctx.database, log) : new InProcessRunQueue(log));
+    opts.queue ??
+    (ctx.database
+      ? new SqliteRunQueue(ctx.database, log, { onPoll: () => heartbeat?.progress() })
+      : new InProcessRunQueue(log));
   const consuming = opts.inProcessWorker ?? (queue.kind === 'memory' || !testing);
 
   let runner: RunnerPort | undefined;
@@ -215,13 +221,10 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
   });
 
   let started = false;
-  // Tells /readyz the run worker is alive (only where this process consumes the queue, with a database).
-  const heartbeat =
-    consuming && ctx.database && !testing
-      ? new Heartbeat(ctx.database.db, 'worker', ctx.now, (err) =>
-          opts.log?.warn({ err }, 'worker heartbeat failed'),
-        )
-      : null;
+  if (consuming && ctx.database && !testing)
+    heartbeat = new Heartbeat(ctx.database.db, 'worker', ctx.now, (err) =>
+      opts.log?.warn({ err }, 'worker heartbeat failed'),
+    );
   return {
     service,
     repo,
@@ -242,12 +245,10 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
         await worker.start(opts.workerConcurrency ?? ctx.config.RUN_WORKER_CONCURRENCY, {
           sweep: opts.sweep ?? !testing,
         });
-        heartbeat?.start();
       }
     },
     async stop() {
       started = false;
-      heartbeat?.stop();
       // Interrupts, never cancels (D-01): runs stop at a checkpoint and their jobs are queued again (stops the queue).
       await worker.stop();
       await bus.stop();

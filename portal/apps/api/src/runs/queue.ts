@@ -42,6 +42,8 @@ export interface SqliteQueueOptions {
   /** How long stop() waits for running jobs before aborting them (they are queued again, not lost). */
   gracefulMs?: number;
   now?: () => number;
+  /** Called after every poll that went through (the run worker's heartbeat, D-09); never when a poll fails. */
+  onPoll?: () => void;
 }
 
 interface ClaimedJob {
@@ -69,7 +71,8 @@ export class SqliteRunQueue implements RunQueue {
   private polling = false;
   private again = false;
   private readonly holder: string;
-  private readonly o: Required<Omit<SqliteQueueOptions, 'now'>> & { now: () => number };
+  private readonly o: Required<Omit<SqliteQueueOptions, 'now' | 'onPoll'>> & { now: () => number };
+  private readonly onPoll: (() => void) | undefined;
 
   constructor(
     private readonly database: Pick<Database, 'sqlite' | 'signals'>,
@@ -88,6 +91,7 @@ export class SqliteRunQueue implements RunQueue {
       gracefulMs: opts.gracefulMs ?? 10_000,
       now: opts.now ?? Date.now,
     };
+    this.onPoll = opts.onPoll;
   }
 
   private get sqlite() {
@@ -146,6 +150,7 @@ export class SqliteRunQueue implements RunQueue {
           this.run(job);
         }
       } while (this.again && !this.stopping);
+      this.onPoll?.();
     } catch (err) {
       this.log?.warn({ err: { message: (err as Error).message } }, 'run queue poll failed');
     } finally {

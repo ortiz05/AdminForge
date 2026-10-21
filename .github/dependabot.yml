@@ -1,5 +1,5 @@
-# Dependency updates (supply chain, plan §8.3). Grouped weekly so each week is one reviewable PR per ecosystem;
-# CI (audit, guards, tests, e2e, bundle budget) must pass before merging.
+# Dependency updates (supply chain: docs/onboarding/04-security.md › Dependencies). Grouped weekly so each week is
+# one reviewable PR per ecosystem; CI (audit, guards, tests, e2e, bundle budget) must pass before merging.
 # Every entry waits seven days after a release before proposing it (`cooldown`, S-04), the same floor pnpm applies
 # (`minimumReleaseAge` in pnpm-workspace.yaml). Security updates are exempt from the cooldown, as GitHub designs it.
 # tests/unit/tooling/supply-chain-release-age.test.ts: a cooldown on every entry, a docker entry per Dockerfile.

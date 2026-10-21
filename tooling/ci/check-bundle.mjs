@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Initial-load budget (plan §6.10): the JavaScript a first visit downloads before anything lazy — the entry module,
+ * Initial-load budget (docs/onboarding/07-web-guide.md): the JavaScript a first visit downloads before anything lazy — the entry module,
  * its modulepreloads and classic scripts in index.html — must stay at or under the gzip budget.
  *
  *   node tooling/ci/check-bundle.mjs [distDir] [budgetKB]    # after `pnpm build`; also `pnpm check:bundle`

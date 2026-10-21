@@ -35,8 +35,8 @@ change — `tests/unit/tooling/commit-scopes-sync.test.ts` fails otherwise.
 ## `ci/` — CI helpers
 
 `check-bundle.mjs [distDir] [budgetKB]` measures the gzip size of the scripts `index.html` loads up front (entry module,
-modulepreloads, classic scripts — not lazy chunks) and fails over the budget (plan §6.10). Defaults:
-`portal/apps/web/dist`, 250 KB.
+modulepreloads, classic scripts — not lazy chunks) and fails over the budget the web guide sets
+(`docs/onboarding/07-web-guide.md`). Defaults: `portal/apps/web/dist`, 250 KB.
 
 ## Where the rest of the automation lives
 

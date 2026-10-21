@@ -33,14 +33,20 @@ export function ProvenanceFooter({
   className,
 }: ProvenanceFooterProps) {
   const now = useNow(15_000);
-  const parts = [
-    service,
-    path,
-    ms != null ? formatDuration(ms) : null,
-    cachedAt ? `cached ${formatRelative(cachedAt, now)}` : 'live',
+  const took = ms != null ? formatDuration(ms) : null;
+  // One line that never pushes past its box (a phone, a narrow panel). The path is cut off first: it takes no room
+  // when the line is laid out (`basis-0`) and grows into what's left, up to its own width. On a phone the request time
+  // is left out (it stays in the hover text). A part that still doesn't fit moves to a second line, which the fixed
+  // height hides — whole parts drop from the end instead of being clipped mid-word or widening the page.
+  const parts: Array<{ text: string; className?: string }> = [
+    { text: service },
+    { text: path, className: 'min-w-0 max-w-max grow basis-0 truncate' },
+    ...(took ? [{ text: took, className: 'max-sm:hidden' }] : []),
+    { text: cachedAt ? `cached ${formatRelative(cachedAt, now)}` : 'live' },
   ];
   const title = [
     preview ? 'Microsoft Graph beta: a preview API that can change without notice' : null,
+    took ? `Took ${took}` : null,
     cachedAt ? `Fetched ${formatTimestamp(cachedAt)}` : null,
     requestId ? `Request ID ${requestId}` : null,
   ]
@@ -48,7 +54,10 @@ export function ProvenanceFooter({
     .join(' · ');
   return (
     <p
-      className={cn('flex min-w-0 items-center font-mono text-2xs leading-tight text-fg-3', className)}
+      className={cn(
+        'flex h-4 min-w-0 flex-wrap items-center overflow-hidden font-mono text-2xs leading-tight text-fg-3',
+        className,
+      )}
       title={title || undefined}
     >
       <span className="sr-only">Data source: </span>
@@ -58,15 +67,15 @@ export function ProvenanceFooter({
         </span>
       )}
       {parts
-        .filter((p): p is string => Boolean(p))
+        .filter((p) => Boolean(p.text))
         .map((p, i) => (
-          <span key={i} className={cn('whitespace-nowrap', i === 1 && 'min-w-0 truncate')}>
+          <span key={i} className={cn('whitespace-nowrap', p.className)}>
             {i > 0 && (
               <span aria-hidden className="mx-1.5">
                 ·
               </span>
             )}
-            {p}
+            {p.text}
           </span>
         ))}
     </p>

@@ -346,7 +346,10 @@ function KpiGroup({
             provenances.map((p) => <ProvenanceFooter key={`${p.service}${p.path}`} {...p} />)
           ) : (
             // Many sources: one line (services, endpoint count, slowest call); every endpoint in the tooltip.
-            <div title={provenances.map((p) => `${p.service} ${p.path}`).join('\n')}>
+            <div
+              className="min-w-0 max-w-full"
+              title={provenances.map((p) => `${p.service} ${p.path}`).join('\n')}
+            >
               <ProvenanceFooter
                 service={[...new Set(provenances.map((p) => p.service))].join(', ')}
                 path={`${provenances.length} endpoints`}

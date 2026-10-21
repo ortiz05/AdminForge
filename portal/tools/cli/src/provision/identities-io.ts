@@ -192,10 +192,83 @@ export async function readRegistrationCampaign(
   }
 }
 
+/** A target as a comparable string: annotations dropped, keys sorted, the id lower-cased (Graph may re-case it). */
+const targetKey = (t: Json): string =>
+  JSON.stringify(
+    Object.keys(withoutAnnotations(t))
+      .sort()
+      .map((k) => [k, k === 'id' ? String(t[k]).toLowerCase() : t[k]]),
+  );
+const sameId = (t: Json, id: string) => String(t.id).toLowerCase() === id.toLowerCase();
+
+/**
+ * What differs between the campaign provisioning wrote and the one Graph returns right after — setting names and
+ * counts, never ids. `own` is the one change provisioning made: `userId` excluded (or no longer excluded).
+ */
+export function campaignDrift(
+  written: Json,
+  read: Json | undefined,
+  own: { userId: string; excluded: boolean },
+): string[] {
+  if (!read) return ['the campaign itself (Graph returns none)'];
+  const parts: string[] = [];
+  if (targetsOf(read, 'excludeTargets').some((t) => sameId(t, own.userId)) !== own.excluded)
+    parts.push(own.excluded ? "this account's exclusion is missing" : 'this account is still excluded');
+  const settings = new Set(
+    [...Object.keys(written), ...Object.keys(read)].filter(
+      (k) => !k.startsWith('@') && k !== 'includeTargets' && k !== 'excludeTargets',
+    ),
+  );
+  for (const k of [...settings].sort())
+    if (JSON.stringify(written[k] ?? null) !== JSON.stringify(read[k] ?? null)) parts.push(k);
+  for (const [key, label] of [
+    ['includeTargets', 'targets'],
+    ['excludeTargets', 'other exclusions'],
+  ] as const) {
+    const keys = (c: Json) =>
+      new Set(
+        targetsOf(c, key)
+          .filter((t) => !sameId(t, own.userId))
+          .map(targetKey),
+      );
+    const [w, r] = [keys(written), keys(read)];
+    const added = [...r].filter((x) => !w.has(x)).length;
+    const missing = [...w].filter((x) => !r.has(x)).length;
+    if (added || missing)
+      parts.push(
+        `${label} (${[added ? `${added} added` : '', missing ? `${missing} missing` : ''].filter(Boolean).join(', ')})`,
+      );
+  }
+  return parts;
+}
+
+/**
+ * Writes the campaign back as a whole (Graph has no ETag for it) and reads it again: a change someone made in the same
+ * moment, or a write that didn't take, stops provisioning with what differs rather than passing unnoticed. A change
+ * that landed between the first read and the write is overwritten and can't be seen afterwards; Entra's
+ * audit log has it. A plain Error: nothing to wait for (an ApiError 404 would be retried as replication delay).
+ */
+async function writeCampaign(
+  graph: GraphClient,
+  campaign: Json,
+  own: { userId: string; excluded: boolean },
+): Promise<void> {
+  await graph.request({
+    method: 'PATCH',
+    path: AUTH_METHODS_POLICY,
+    body: { registrationEnforcement: { authenticationMethodsRegistrationCampaign: campaign } },
+  });
+  const drift = campaignDrift(campaign, await readCampaignJson(graph), own);
+  if (drift.length)
+    throw new Error(
+      `The registration campaign is not what provisioning just wrote: ${drift.join('; ')}. Someone may have changed it at the same moment — Graph replaces it as a whole, so one of the two changes is lost. Check it in the Entra admin centre (Authentication methods → Registration campaign), then run provisioning again.`,
+    );
+}
+
 /**
  * Adds one user to the registration campaign's `excludeTargets`. Graph replaces the campaign as a whole, so the
  * campaign is re-read and sent back exactly as it is (state, includeTargets, snooze, other exclusions) plus this
- * one user. Idempotent.
+ * one user, then read once more (writeCampaign). Idempotent.
  */
 export async function excludeFromRegistrationCampaign(
   graph: GraphClient,
@@ -205,26 +278,23 @@ export async function excludeFromRegistrationCampaign(
   // A plain Error: nothing to wait for (an ApiError 404 would be retried as replication delay).
   if (!campaign) throw new Error('The authentication methods policy has no registration campaign.');
   const excludes = targetsOf(campaign, 'excludeTargets');
-  if (excludes.some((t) => String(t.id).toLowerCase() === userId.toLowerCase())) return 'unchanged';
-  await graph.request({
-    method: 'PATCH',
-    path: AUTH_METHODS_POLICY,
-    body: {
-      registrationEnforcement: {
-        authenticationMethodsRegistrationCampaign: {
-          ...withoutAnnotations(campaign),
-          includeTargets: targetsOf(campaign, 'includeTargets').map(withoutAnnotations),
-          excludeTargets: [...excludes.map(withoutAnnotations), { id: userId, targetType: 'user' }],
-        },
-      },
+  if (excludes.some((t) => sameId(t, userId))) return 'unchanged';
+  await writeCampaign(
+    graph,
+    {
+      ...withoutAnnotations(campaign),
+      includeTargets: targetsOf(campaign, 'includeTargets').map(withoutAnnotations),
+      excludeTargets: [...excludes.map(withoutAnnotations), { id: userId, targetType: 'user' }],
     },
-  });
+    { userId, excluded: true },
+  );
   return 'added';
 }
 
 /**
  * Takes one user out of the registration campaign's `excludeTargets` (the approver fixture, before it is deleted).
- * Like `excludeFromRegistrationCampaign`, the campaign is sent back exactly as it is, minus this one user. Idempotent.
+ * Like `excludeFromRegistrationCampaign`, the campaign is sent back exactly as it is, minus this one user, and read
+ * once more. Idempotent.
  */
 export async function removeFromRegistrationCampaignExclusions(
   graph: GraphClient,
@@ -233,21 +303,17 @@ export async function removeFromRegistrationCampaignExclusions(
   const campaign = await readCampaignJson(graph);
   if (!campaign) return 'unchanged';
   const excludes = targetsOf(campaign, 'excludeTargets');
-  const rest = excludes.filter((t) => String(t.id).toLowerCase() !== userId.toLowerCase());
+  const rest = excludes.filter((t) => !sameId(t, userId));
   if (rest.length === excludes.length) return 'unchanged';
-  await graph.request({
-    method: 'PATCH',
-    path: AUTH_METHODS_POLICY,
-    body: {
-      registrationEnforcement: {
-        authenticationMethodsRegistrationCampaign: {
-          ...withoutAnnotations(campaign),
-          includeTargets: targetsOf(campaign, 'includeTargets').map(withoutAnnotations),
-          excludeTargets: rest.map(withoutAnnotations),
-        },
-      },
+  await writeCampaign(
+    graph,
+    {
+      ...withoutAnnotations(campaign),
+      includeTargets: targetsOf(campaign, 'includeTargets').map(withoutAnnotations),
+      excludeTargets: rest.map(withoutAnnotations),
     },
-  });
+    { userId, excluded: false },
+  );
   return 'removed';
 }
 

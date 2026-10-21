@@ -163,12 +163,13 @@ test.describe('identity.users (list-detail)', () => {
     await grid.getByRole('button', { name: 'Name', exact: true }).click();
     await expect(page).toHaveURL(/users\.sort=-displayName/);
     await page.getByRole('button', { name: 'Columns' }).click();
-    await page.getByRole('menuitemcheckbox', { name: 'Job title' }).click();
+    // Department is shown by default (Job title starts hidden so the list fits at 1440 px).
+    await page.getByRole('menuitemcheckbox', { name: 'Department' }).click();
     await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/users\.cols=/);
     await page.reload();
     await expect(grid.getByRole('columnheader', { name: /Name/ })).toHaveAttribute('aria-sort', 'descending');
-    await expect(grid.getByRole('columnheader', { name: /Job title/ })).toHaveCount(0);
+    await expect(grid.getByRole('columnheader', { name: /Department/ })).toHaveCount(0);
   });
 
   test('bulk selection launches the playbook drawer with one inputs object per row', async ({ page }) => {

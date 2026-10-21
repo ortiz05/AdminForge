@@ -7,7 +7,7 @@ import {
   type StepRecord,
 } from '@adminforge/engine';
 import type { Mode } from '@adminforge/connectors';
-import { APPROVER, FakeIdentity, harness, INITIATOR, playbook, read, write } from './helpers';
+import { APPROVER, deferred, FakeIdentity, harness, INITIATOR, playbook, read, write } from './helpers';
 
 // A run that pauses before a write (an approval, input, write access, a sign-in, a `wait`, a restart) runs the reads,
 // transforms and asserts since its last completed write again before it sends that write: the person a session
@@ -628,5 +628,216 @@ describe('engine: a resumed run checks again before its next write', () => {
     expect((await h.exec()).status).toBe('awaiting_arm');
     expect(deletes(h)).toEqual([]);
     expect(h.record('logOff')).toMatchObject({ status: 'waiting', error: { code: 'not_armed' } });
+  });
+});
+
+// Found by the second security review (each was reproduced against the engine before the fix).
+describe('engine: re-checks on resume, the harder cases', () => {
+  it('an approval’s excludes are worked out again: a re-read that now names the approver stops the write', async () => {
+    let target = INITIATOR.oid;
+    const def = playbook([
+      read('lookup', '/users/x@example.com'),
+      { id: 'approve', type: 'approval', excludes: '${ steps.lookup.output.id }' },
+      write('add', {
+        request: { method: 'POST', path: '/groups/g1/members', body: { id: '${ steps.lookup.output.id }' } },
+      }),
+    ]);
+    const h = harness(def, { respond: (c) => (c.method === 'GET' ? { id: target } : null) });
+    h.identity.signIn(APPROVER, true);
+    expect((await h.exec()).status).toBe('awaiting_approval');
+    target = APPROVER.oid; // the address now resolves to the approver
+    h.approve('approve');
+    expect(await h.exec()).toMatchObject({
+      status: 'failed',
+      error: { code: 'approval_excludes_approver', stepId: 'approve' },
+    });
+    expect(h.outbound.paths('POST')).toEqual([]);
+  });
+
+  for (const path of ["${ '/me' }", '/Me', '/me?$select=id']) {
+    it(`a /me read before an approval keeps its answer however it is written (${path})`, async () => {
+      const def = playbook([
+        read('whoami', '/x', { request: { method: 'GET', path } }),
+        { id: 'approve', type: 'approval' },
+        write('addMe', {
+          request: {
+            method: 'POST',
+            path: '/groups/g1/members',
+            body: { id: '${ steps.whoami.output.id }' },
+          },
+        }),
+      ]);
+      const h = harness(def);
+      h.outbound.respond = (c) =>
+        c.method === 'GET' ? { id: h.outbound.calls.at(-1)!.identity.actor.oid } : null;
+      h.identity.signIn(APPROVER, true);
+      await h.exec();
+      h.approve('approve');
+      expect((await h.exec()).status).toBe('succeeded');
+      expect(h.outbound.calls.at(-1)!.call.body).toEqual({ id: INITIATOR.oid });
+      expect(h.outbound.paths('GET')).toHaveLength(1);
+    });
+  }
+
+  it('concurrent iterations: a read that started on the old data is checked again, so its check is too', async () => {
+    let owner = 'alice';
+    let lookups = 0;
+    const gate = deferred();
+    const def = playbook([
+      read('A', '/A'),
+      { id: 'approve', type: 'approval' },
+      {
+        id: 'loop',
+        type: 'forEach',
+        items: '${ [0, 1] }',
+        concurrency: 2,
+        steps: [
+          read('F', '/probe', {
+            when: '${ item = 1 }',
+            request: {
+              method: 'GET',
+              path: '/probe/${ item }',
+              headers: { 'x-owner': '${ steps.A.output.owner }' },
+            },
+          }),
+          {
+            id: 'G',
+            type: 'assert',
+            when: '${ item = 1 }',
+            that: "${ steps.F.output.owner = 'alice' }",
+            message: 'The owner changed.',
+          },
+          write('W', { request: { method: 'PATCH', path: '/things/${ item }' } }),
+        ],
+      },
+    ]);
+    const h = harness(def, {
+      respond: async (c) => {
+        if (c.path === '/A') {
+          if (++lookups === 2) setTimeout(() => gate.resolve(), 0);
+          return { owner };
+        }
+        if (c.path === '/probe/1') {
+          if (lookups < 3) await gate.promise; // finishes after the other iteration's re-check
+          return { owner: c.headers?.['x-owner'] };
+        }
+        return null;
+      },
+    });
+    h.identity.signIn(APPROVER, true);
+    expect((await h.exec()).status).toBe('awaiting_approval');
+    owner = 'bob';
+    h.approve('approve');
+    expect(await h.exec()).toMatchObject({ status: 'failed', error: { stepId: 'G', path: 'loop[1].G' } });
+    expect(h.outbound.paths('PATCH')).not.toContain('/things/1');
+  });
+
+  it('a write retried after a stop that first waits for write access still ends needs_review', async () => {
+    const { holder, respond } = sessionHolder();
+    const h = harness(signOut(), { respond });
+    const at = new Date('2026-10-15T11:59:00.000Z');
+    const base = {
+      attempt: 1,
+      actorOid: INITIATOR.oid,
+      request: null,
+      plan: null,
+      msRequestId: null,
+      startedAt: at,
+    };
+    for (const r of [
+      {
+        ...base,
+        seq: 1,
+        stepId: 'lookup',
+        path: 'lookup',
+        type: 'graph',
+        mode: 'read',
+        status: 'succeeded',
+        output: SAME,
+        error: null,
+        endedAt: at,
+      },
+      {
+        ...base,
+        seq: 2,
+        stepId: 'sameUser',
+        path: 'sameUser',
+        type: 'assert',
+        mode: 'read',
+        status: 'succeeded',
+        output: true,
+        error: null,
+        endedAt: at,
+      },
+      {
+        ...base,
+        seq: 3,
+        stepId: 'logOff',
+        path: 'logOff',
+        type: 'graph',
+        mode: 'write',
+        status: 'running',
+        output: null,
+        error: null,
+        endedAt: null,
+      },
+    ] as StepRecord[])
+      await h.store.saveStep('run-1', r, { actor: INITIATOR, dryRun: false });
+    await h.store.updateRun('run-1', { status: 'running', startedAt: h.clock.now() });
+    h.identity.signIn(INITIATOR, false); // write access lapsed during the restart
+    expect((await h.exec()).status).toBe('awaiting_arm');
+    holder.now = OTHER;
+    h.identity.signIn(INITIATOR, true);
+    const out = await h.exec();
+    expect(out).toMatchObject({ status: 'needs_review', error: { code: 'needs_review', stepId: 'logOff' } });
+    expect(out.error!.message).toMatch(/^Step logOff was in flight when the worker stopped/);
+    expect(deletes(h)).toEqual([]);
+  });
+
+  it('the write’s own when is worked out again after the re-check', async () => {
+    let owner = 'alice';
+    const def = playbook([
+      read('lookup', '/sessions/3'),
+      { id: 'approve', type: 'approval' },
+      write('logOff', {
+        when: "${ steps.lookup.output.owner = 'alice' }",
+        request: { method: 'DELETE', path: '/sessions/3' },
+      }),
+    ]);
+    const h = harness(def, { respond: (c) => (c.method === 'GET' ? { owner } : null) });
+    h.identity.signIn(APPROVER, true);
+    await h.exec();
+    owner = 'bob';
+    h.approve('approve');
+    expect((await h.exec()).status).toBe('succeeded');
+    expect(h.status('logOff')).toBe('skipped');
+    expect(deletes(h)).toEqual([]);
+  });
+
+  it('a write that failed before it was sent doesn’t count as sent: the reads before it are still checked again', async () => {
+    let owner = 'alice';
+    const def = playbook([
+      read('lookup', '/sessions/3'),
+      write('note', {
+        onError: 'continue',
+        request: { method: 'PATCH', path: "${ $error('template broke') }" },
+      }),
+      { id: 'approve', type: 'approval' },
+      {
+        id: 'sameUser',
+        type: 'assert',
+        that: "${ steps.lookup.output.owner = 'alice' }",
+        message: 'The owner changed.',
+      },
+      write('logOff', { request: { method: 'DELETE', path: '/sessions/3' } }),
+    ]);
+    const h = harness(def, { respond: (c) => (c.method === 'GET' ? { owner } : null) });
+    h.identity.signIn(APPROVER, true);
+    expect((await h.exec()).status).toBe('awaiting_approval');
+    expect(h.status('note')).toBe('failed');
+    owner = 'bob';
+    h.approve('approve');
+    expect(await h.exec()).toMatchObject({ status: 'failed', error: { stepId: 'sameUser' } });
+    expect(deletes(h)).toEqual([]);
   });
 });

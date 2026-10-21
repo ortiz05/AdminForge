@@ -144,6 +144,8 @@ interface Frame {
   callAs?: Actor;
   /** What this frame reused from an earlier pass that must run again before the next write in its scope. */
   rechecks?: Recheck[];
+  /** Approvals decided in this frame (their `excludes` are worked out again after a re-check). */
+  approvals?: Array<{ step: ApprovalStep; asWalked: Actor; approver: string | null }>;
 }
 
 /** A stale read or check (or a finished forEach holding some), run again at most once per pass. */
@@ -153,6 +155,8 @@ interface Recheck {
   /** Runs it again, its reads going out with `callAs`'s access (who the write it guards runs as). */
   run: (callAs: Actor) => Promise<Flow>;
   done?: Promise<Flow>;
+  /** Finished running again (until then it is still pending, also for steps that start meanwhile). */
+  settled?: boolean;
 }
 
 type ApprovalStep = Extract<Step, { type: 'approval' }>;
@@ -750,6 +754,8 @@ class Execution {
   /** A write that was sent (or may have been), or a child playbook that started: what came before it stays. */
   private wasSent(rec: StepRecord): boolean {
     if (rec.mode !== 'write' || rec.path.includes('#')) return false;
+    // Failed before it went out (its `when`, building the request, or access): there is no request on the record.
+    if (rec.status === 'failed' && rec.request == null) return false;
     if (SENT.includes(rec.status)) return true;
     return this.handlers[rec.type]?.plansItself === true && !['skipped', 'cancelled'].includes(rec.status);
   }
@@ -788,7 +794,7 @@ class Execution {
 
   /** Whether a frame still holds something to run again (a write in it hasn't covered it yet). */
   private pendingRechecks(frame: Frame): boolean {
-    return (frame.rechecks ?? []).some((u) => !u.done);
+    return (frame.rechecks ?? []).some((u) => !u.settled);
   }
 
   /**
@@ -796,10 +802,11 @@ class Execution {
    * what is stale: a check after an approval on what was read before it) — to run again before the next write in its
    * scope, as who it ran as.
    */
-  private keepForRecheck(step: Step, frame: Frame, path: string, fresh = false) {
+  private keepForRecheck(step: Step, frame: Frame, path: string, fresh = false, pendingAtStart = false) {
     if (frame.recheck) return;
     if (fresh) {
-      if (this.dryRun || !this.rerunnable(step) || !this.chainPending(frame)) return;
+      // Pending when it started (concurrent iterations: a re-check may have finished while it ran) or now.
+      if (this.dryRun || !this.rerunnable(step) || !(pendingAtStart || this.chainPending(frame))) return;
       this.stale.add(path);
     } else if (!this.stale.has(path)) return;
     const asWalked = { ...frame.actor };
@@ -830,11 +837,57 @@ class Execution {
         },
       });
     for (const u of units) {
-      u.done ??= u.run(frame.actor);
+      u.done ??= u.run(frame.actor).then(
+        (flow) => ((u.settled = true), flow),
+        (err: unknown) => {
+          u.settled = true;
+          throw err;
+        },
+      );
       const flow = await u.done;
       if (flow.kind !== 'ok') return flow;
     }
-    return true;
+    return (await this.recheckExcludes(frame)) ?? true;
+  }
+
+  /** A decided approval in this pass, so its `excludes` can be worked out again after a re-check (as when it opened). */
+  private noteApproval(step: ApprovalStep, rec: StepRecord, frame: Frame) {
+    if (frame.recheck || this.dryRun || (step.excludes ?? this.def.approval?.excludes) === undefined) return;
+    const approver = (rec.output as { approver?: { oid?: string | null } } | null)?.approver?.oid ?? null;
+    (frame.approvals ??= []).push({ step, asWalked: { ...frame.actor }, approver });
+  }
+
+  /**
+   * ENG-02 after a re-check: what an approved change grants access to was worked out when its gate opened; the reads
+   * behind it were just run again, so the gate's `excludes` are worked out again — and the change stops if they now
+   * name who approved it (or can't be worked out).
+   */
+  private async recheckExcludes(frame: Frame): Promise<Flow | null> {
+    for (let f: Frame | null = frame; f; f = f.parent)
+      for (const { step, asWalked, approver } of f.approvals ?? []) {
+        const path = f.prefix + step.id;
+        const { prefix, locals, parent, vars } = f;
+        let excludes: string[];
+        try {
+          excludes = await this.approvalExcludes(step, { prefix, actor: asWalked, locals, parent, vars });
+        } catch (err) {
+          return this.policy(step, toRunError(err, { stepId: step.id, path }));
+        }
+        if (approver && excludes.includes(approver.toLowerCase()))
+          return {
+            kind: 'fail',
+            policy: 'fail',
+            error: {
+              code: 'approval_excludes_approver',
+              message:
+                'What this change gives access to was read again before it was made, and it now includes the person who approved it, so it was not made.',
+              hint: 'Start a new run and ask another approver.',
+              stepId: step.id,
+              path,
+            },
+          };
+      }
+    return null;
   }
 
   /** A stale step run again: a new attempt (its `when` isn't evaluated again — it ran). */
@@ -848,9 +901,18 @@ class Execution {
     this.stale.delete(path);
     const before = this.records.get(path);
     // `/me` read with someone else's access is someone else: what it read for the person it ran as stands.
-    if (frame.callAs && frame.callAs.oid !== frame.actor.oid && readsMe(step) && before) {
-      this.setView(frame, step.id, this.viewOf(before));
-      return OK;
+    if (frame.callAs && frame.callAs.oid !== frame.actor.oid && handler.external && before) {
+      let payload: unknown;
+      try {
+        const ctx = this.context(step.id, path, mode, frame, this.ac.signal, { seq: null });
+        payload = (await handler.prepare(step as never, ctx)).payload;
+      } catch {
+        payload = undefined; // the attempt below reports it
+      }
+      if (callsMe(payload)) {
+        this.setView(frame, step.id, this.viewOf(before));
+        return OK;
+      }
     }
     const outcome = await this.attempt({
       stepId: step.id,
@@ -1085,6 +1147,7 @@ class Execution {
     const mode = stepMode(step);
     const handler = this.handlers[step.type];
     if (frame.recheck && handler && this.stale.has(path)) return this.rerun(step, frame, handler, path, mode);
+    const pendingAtStart = !frame.recheck && !this.dryRun && this.chainPending(frame);
     const pre = await this.prelude(step, frame, mode);
     if ('done' in pre) {
       this.keepForRecheck(step, frame, path);
@@ -1156,12 +1219,12 @@ class Execution {
     });
     if (outcome.kind === 'ok') {
       this.setView(frame, step.id, this.viewOf(outcome.rec));
-      this.keepForRecheck(step, frame, path, true);
+      this.keepForRecheck(step, frame, path, true, pendingAtStart);
       return OK;
     }
     if (outcome.kind === 'failed') {
       this.setView(frame, step.id, this.viewOf(outcome.rec));
-      this.keepForRecheck(step, frame, path, true);
+      this.keepForRecheck(step, frame, path, true, pendingAtStart);
       return this.policy(step, outcome.rec.error!);
     }
     return outcome.flow;
@@ -1313,8 +1376,9 @@ class Execution {
         // Sent before the run stopped (in flight, or failed in a way that may still have taken effect), so the first
         // send may have gone through — and changed what the check read: the run doesn't claim nothing happened, someone
         // checks the target.
-        if (stop.kind === 'fail' && a.existing?.status === 'retried') {
-          const inFlight = a.existing.error?.code === 'interrupted';
+        const sent = maybeSent(a.existing);
+        if (stop.kind === 'fail' && a.existing && sent) {
+          const inFlight = sent === 'interrupted';
           const error: RunError = {
             code: 'needs_review',
             message: `Step ${a.stepId} ${inFlight ? 'was in flight when the worker stopped' : 'was sent before the run stopped and may have taken effect'}, and ${stop.error.stepId ? `the check ${stop.error.stepId}` : 'a check'} before it no longer holds, so it was not sent again — check whether it took effect.`,
@@ -1337,7 +1401,23 @@ class Execution {
         return { kind: 'flow', flow: stop };
       }
       if (checked) {
-        // Checked again: the request is built from what was read now, with access as it is now (disarmed meanwhile?).
+        // Checked again: the write's own `when` holds now, its request is built from what was read now, with access as
+        // it is now (disarmed meanwhile?).
+        if (!a.compensation) {
+          const w = await this.evalWhen(a.body as Step, frame);
+          if ('error' in w) return fail(new StepError(w.error.code, w.error.message));
+          if (w.skip) {
+            // A record that waited is closed; a retried one stays in the history, a new attempt is skipped.
+            const rec =
+              a.existing?.status === 'waiting'
+                ? a.existing
+                : this.newRecord(a.stepId, a.type, path, mode, caller, {
+                    attempt: a.existing ? a.existing.attempt + 1 : (a.firstAttempt ?? 1),
+                  });
+            await this.close(rec, caller, { status: 'skipped', error: null });
+            return { kind: 'ok', rec };
+          }
+        }
         try {
           prep = await handler.prepare(
             a.body as never,
@@ -1499,9 +1579,17 @@ class Execution {
         : this.newRecord(a.stepId, a.type, a.path, a.mode, a.frame.actor, {
             attempt: a.existing ? a.existing.attempt + 1 : 1,
           });
+    // A write retried after a stop or a failure may have gone out: say so on the record that waits (see `attempt`).
+    const sent = maybeSent(a.existing);
     await this.close(rec, a.frame.actor, {
       status: 'waiting',
-      error: { code: err.reason, message: err.message, stepId: a.stepId, path: a.path },
+      error: {
+        code: err.reason,
+        message: err.message,
+        stepId: a.stepId,
+        path: a.path,
+        ...(sent ? { details: { maybeSent: sent } } : {}),
+      },
       endedAt: null,
     });
     return { kind: 'park' as const, status: err.parkStatus };
@@ -1816,6 +1904,7 @@ class Execution {
     if ('done' in pre) return pre.done;
     const rec = pre.rec;
     if (rec?.status === 'succeeded') {
+      this.noteApproval(step, rec, frame);
       this.adoptApprover(rec, frame);
       this.setView(frame, step.id, this.viewOf(rec));
       return OK;
@@ -1876,6 +1965,7 @@ class Execution {
           decidedAt: decision.decidedAt,
         },
       });
+      this.noteApproval(step, rec, frame);
       this.adoptApprover(rec, frame);
       this.setView(frame, step.id, this.viewOf(rec));
       return OK;
@@ -2209,13 +2299,40 @@ class Execution {
   }
 }
 
-/** A Graph read of the caller's own `/me` (its answer depends on whose access it goes out with). */
-function readsMe(step: Step): boolean {
-  const me = (path: unknown) => typeof path === 'string' && /^\s*\/me(?:[/?]|$)/.test(path);
-  if (step.type === 'graph') return me((step.request as { path?: unknown }).path);
-  if (step.type === 'graphBatch')
-    return Object.values(step.requests).some((r) => me((r as { path?: unknown }).path));
-  return false;
+/**
+ * Whether a prepared Graph call reads the caller's own `/me` (its answer depends on whose access it goes out with):
+ * the rendered path, any case, percent-encoding undone; in a `$batch`, any of its requests.
+ */
+function callsMe(payload: unknown): boolean {
+  const me = (path: unknown) => {
+    if (typeof path !== 'string') return false;
+    let p = path.trim();
+    try {
+      p = decodeURIComponent(p);
+    } catch {
+      // keep it as it is
+    }
+    return /^\/+me(?:[/?#(]|$)/i.test(p);
+  };
+  const call = payload as {
+    service?: unknown;
+    path?: unknown;
+    body?: { requests?: Array<{ url?: unknown }> };
+  } | null;
+  if (!call || call.service !== 'graph') return false;
+  if (me(call.path)) return true;
+  return call.path === '/$batch' && (call.body?.requests ?? []).some((r) => me(r.url));
+}
+
+/**
+ * Whether a write's record says it may have gone out before the run stopped: retried after it was in flight
+ * (`interrupted`) or after a failure, or waiting for access after that. The value says which.
+ */
+function maybeSent(rec: StepRecord | undefined): 'interrupted' | 'failed' | null {
+  if (!rec) return null;
+  if (rec.status === 'retried') return rec.error?.code === 'interrupted' ? 'interrupted' : 'failed';
+  const carried = (rec.error?.details as { maybeSent?: unknown } | undefined)?.maybeSent;
+  return rec.status === 'waiting' && (carried === 'interrupted' || carried === 'failed') ? carried : null;
 }
 
 /** The forEach iterations a step path is inside: `outer[1].inner[0].get` → `['outer[1]', 'inner[0]']`. */

@@ -27,8 +27,9 @@ Microsoft's own public feeds. Read `docs/news.md` first.
    feed (e.g. a newly managed Azure service → add its product category to `feeds.azure-updates`).
 2. **Find the official feed and verify it live** (`curl -sS -A 'AdminForge-News/1.0' -o <scratch>/feed.xml -w '%{http_code} %{redirect_url}'`):
    RSS 2.0 or Atom, 200 without redirects off-host, and note ETag/Last-Modified support and size. Prefer the source
-   Microsoft documents (e.g. Learn search RSS for what's-new pages: `https://learn.microsoft.com/api/search/rss?search=<"quoted title">&locale=en-us`
-   - `linkPrefixes` for the page). Never a third-party aggregator, scraper or unofficial mirror.
+   Microsoft documents (e.g. Learn search RSS for what's-new pages, with `linkPrefixes` for the page:
+   `https://learn.microsoft.com/api/search/rss?search=<"quoted title">&locale=en-us`). Never a third-party
+   aggregator, scraper or unofficial mirror.
 3. **Host allow-list.** The URL's host must be in `NEWS_FEED_HOSTS` (`news.ts`). Adding a host is a **code change for
    security review** (SECURITY.md) — never a configuration or content workaround. Citation links must be on
    `NEWS_LINK_DOMAINS`.
@@ -58,6 +59,10 @@ Microsoft's own public feeds. Read `docs/news.md` first.
     deployment, after publishing, a code owner runs the same flags in the pod — `portal/apps/scheduler/README.md`),
     then check the feed's status on `/news` (counts only in anything you paste).
 
+12. **Removing a source:** retire the feed (`status: retired`, version bump, a `Retired — …` summary;
+    `docs/content-recipes.md` › Versions, previews and retiring) — the file stays, so its id stays in the exact set in
+    `tests/content/feeds.test.ts` and its fixture stays; say in `docs/news.md` that it is retired.
+
 ## Done when
 
 - [ ] The feed answered 200 live without an off-host redirect, from a host in `NEWS_FEED_HOSTS`
@@ -83,4 +88,4 @@ Microsoft's own public feeds. Read `docs/news.md` first.
 
 - `docs/news.md` (sources, classification, politeness), `portal/packages/schemas/src/news.ts` (`NEWS_FEED_HOSTS`,
   `NEWS_LINK_DOMAINS`), ADR-013 (news feed egress)
-- `docs/content-recipes.md` › Fixtures; `adding-a-schedule-or-probe`
+- `docs/content-recipes.md` › Fixtures and › Versions, previews and retiring; `adding-a-schedule-or-probe`

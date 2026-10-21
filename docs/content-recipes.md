@@ -25,9 +25,9 @@ result (`ds.<name>`, per field — a Microsoft response is tenant data), a step'
 (`portal/packages/expressions/src/taint.ts`) over every expression. It follows user data through functions
 (`$lowercase`, `$trim`, `$string`, `$join`), function values and lambdas (`$map`, `~>`), variables and object or array
 constructors, so wrapping doesn't help. An encoder counts only in its own kind of text and position, and a value taken
-apart again (`$substring`, `$replace`, `$split`) is user data again. A `$replace` character allow-list counts only
-inside a quoted literal. Never strip characters with `$replace` to make a value "safe": it changes what was searched
-for.
+apart again (`$substring`, `$replace`, `$split`) is user data again. Validate accepts a `$replace` character
+allow-list (`$replace(x, /[^a-z0-9-]/, '')`) only inside a quoted literal, but prefer the encoder: stripping
+characters changes what the person searched for.
 
 - A whole `path` may be a `guid` or entity param (`type: user|group|device|app|resource`) as it is.
 - A whole KQL query the person typed needs the explicit opt-in `${ /* adminforge: user-query */ params.kql }`.
@@ -244,7 +244,8 @@ Every datasource and KQL probe needs a synthetic fixture so mock mode, e2e and t
 - Add POST answers as `variants` rather than overwriting a shared file. The **first** matching variant wins: put a
   specific `af:<id>#<ds>` variant before the generic ones (`tests/fixtures/resourceGraph/POST.json` ends with a
   catch-all `resourcecontainers` variant). Resource Graph and Log Analytics queries start with a
-  `// af:<page id>#<datasource>` (probes: `// af:<probe id>`) line so their variant can match it (`bodyIncludes`).
+  `// af:<page id>#<name>` line, unique per query and usually the datasource name (probes: `// af:<probe id>`), so
+  their variant can match it (`bodyIncludes`).
 - Keep fixture rows exactly what the query projects (drop a column the query no longer returns; computed booleans are
   1/0).
 - Probes: a KQL probe's `af:` variant goes in `tests/fixtures/resourceGraph/POST.json` or
@@ -263,10 +264,12 @@ Every datasource and KQL probe needs a synthetic fixture so mock mode, e2e and t
 - **Every change** to a definition bumps `version`: patch for fixes and wording, minor for additions (a column, a
   filter, an optional input), major for anything an existing input, schedule or saved view relies on. Published
   versions only move forward.
-- **Preview:** content not yet confirmed to work against a live tenant (checked on fixtures only, or with a known live
-  problem) gets `preview: true` plus a version bump. Pages show a quiet "Preview" badge and `adminforge validate` lists
-  them; nothing about how it runs changes. Remove it (another version bump) once it works live, and record what is
-  unchecked in `docs/licensing-review.md` and `docs/backlog.md`. Don't use `status: preview` for this.
+- **Preview:** a new definition not yet confirmed to work against a live tenant (its requests ran on fixtures only,
+  or it has a known live problem) gets `preview: true` plus a version bump. Pages show a quiet "Preview" badge and
+  `adminforge validate` lists them; nothing about how it runs changes. Remove it (another version bump) once it works
+  live, and record what is unchecked in `docs/licensing-review.md` and `docs/backlog.md`. Don't use
+  `status: preview` for this. The Azure Billing, Arc and AVD content built on fixtures before the flag existed isn't
+  flagged yet (`docs/backlog.md`): flag it deliberately, not as part of an unrelated change.
 - **Retiring:** `status: retired` plus a version bump — never delete the file (runs and audit keep pointing at it, and
   the old version stays live in the database). Start the `summary` with `Retired — <why, or replaced by Title (id)>.`:
   that sentence is what people see when they open it (409 `definition_retired`). Retire everything that belongs

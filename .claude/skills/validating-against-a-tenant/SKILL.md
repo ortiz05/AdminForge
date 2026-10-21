@@ -95,7 +95,7 @@ Azure Billing, the Arc fleet (servers, extensions, patching, Defender coverage) 
 - [ ] Writes went dry run → run → compensate on `AF-Test-*` objects only, and `/audit` shows a verified chain
 - [ ] The validation user is disabled again and held fixture permissions are removed (`provision status` is quiet)
 - [ ] What you couldn't check (no licence, no subscription) is recorded in `docs/licensing-review.md` and
-      `docs/backlog.md`, and the content says `preview: true` until it is
+      `docs/backlog.md`, and new content says `preview: true` until it is
 - [ ] Nothing you pasted holds ids, names, tokens or env values — counts and statuses only
 
 ## Common mistakes

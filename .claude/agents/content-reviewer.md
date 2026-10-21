@@ -18,8 +18,9 @@ You review AdminForge content changes. Read `CLAUDE.md`, the skill in `.claude/s
      (`pnpm adminforge list --section <section> --search "<words>"`, `rg "^id:|^title:" portal/content`)?
      Near-duplicates are findings. `validate` already refuses a file outside the folder its id names.
    - **Write safety** (playbook skill, steps 4–8): write steps have `mode: write` + plain-language `describe`;
-     preconditions are read and `assert`ed before writes; `risk` matches impact (`high` → typed `confirm`, `critical`
-     → `approval` with `excludes` for whoever it grants access); `idempotent: false` on writes whose repeat hurts (a
+     preconditions are read and `assert`ed before writes; `risk` matches impact (`high` → a `confirm`, typed with the
+     value the person recognises — always typed on a bulk action; `critical` → `approval` with `excludes` for whoever
+     it grants access); `idempotent: false` on writes whose repeat hurts (a
      restart retries steps in flight); compensation where possible and no promised undo `compensate` can't deliver;
      secrets only via `secretOutputs`; writes on reusable ids carry an `expected…` input from the row and an `assert`.
    - **Queries:** user data placed as `docs/content-recipes.md` › Quoting user data shows (quoted literals, not
@@ -28,7 +29,8 @@ You review AdminForge content changes. Read `CLAUDE.md`, the skill in `.claude/s
      templates. Every Resource Graph / Log Analytics query starts with its `// af:` line.
    - **Scale:** lists of thousands page at the source with no per-row transform; a transform that sees many rows has
      a `tests/content/content-at-scale-*.scale.test.ts` under the real budget.
-   - **Probes** (schedule skill, step 4): `group` is a nav section key (the section's row shows its status); `remedy`
+   - **Probes** (schedule skill, step 4): `group` is a nav section key (the section's row shows its status) or
+     `platform`; a KQL probe declares exactly `azureRoles: [Reader]` (Resource Graph) or `[Log Analytics Reader]`; `remedy`
      says what the check really looks at (compare it with the query or filter: an incidents check doesn't cover
      advisories) and what to do first; `link` opens a page with the same filter (params that exist) or a Microsoft
      admin centre; details rows start with the item's name and the value that broke the rule; no item names in the
@@ -38,13 +40,14 @@ You review AdminForge content changes. Read `CLAUDE.md`, the skill in `.claude/s
    - **Tables and KPIs:** `kind: status` only for values that are fine or not, categories are `kind: enum`; `rowKey`
      unique (composite key when grouped by several columns); KPI labels fit two lines (`docs/widgets.md` › kpi), no
      hint after a status pill.
-   - **Declarations:** `requires.scopes` exact and minimal; `requires.licences` present where a licence is needed;
+   - **Declarations:** `requires.scopes` exact and minimal; `requires.licences` present where a licence is needed, with
+     keys from `portal/apps/api/src/capabilities/features.ts`;
      schedules use the automation identity and application permissions; write schedules need approval.
    - **Tenant data:** no ids/domains/UPNs/SKU literals — `${env.X}` with keys in `config/example.env`.
    - **Mock mode:** every datasource and KQL probe has a synthetic fixture (specific `af:` variants before generic
      ones; rows match what the query projects); nav/icon set; `version` bumped on every change.
-   - **Lifecycle** (`docs/content-recipes.md` › Versions, previews and retiring): content checked only against
-     fixtures says `preview: true`; retired content is `status: retired` + version bump (never deleted) with a
-     `Retired — …` summary, nothing active links to, embeds, runs or schedules it, a retired schedule is also
-     `enabled: false`, nothing active reads the Defender portal, and `docs/backlog.md` says how to bring it back.
+   - **Lifecycle** — check against `docs/content-recipes.md` › Versions, previews and retiring: a new definition whose
+     requests ran only against fixtures says `preview: true` (older fixture-only Azure content isn't flagged yet —
+     not a finding on an unrelated change); retiring follows that section, and nothing active reads the Defender
+     portal.
 4. Report findings ranked by severity (blocking / should fix / nit). Do not edit files.

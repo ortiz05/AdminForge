@@ -44,9 +44,9 @@ Markdown sections, manual steps and executable steps.
    - `compensate` runs only when a **later** step fails with `onError: compensate` (completed steps are undone in
      reverse). A playbook whose last step is its only write has nothing to undo it: don't promise an undo — say "run it
      again with the other setting" (`avd.set-drain-mode`).
-5. **Risk:** `risk: low|medium|high|critical`. `high` and `critical` need a `confirm` block — prefer `typed` with the
-   value the person recognises (the UPN, the object's name; a bulk run then asks for the item count), `click` only for
-   low-impact changes; `critical` also needs `approval: { required: true }` (two-person; the approver runs the
+5. **Risk:** `risk: low|medium|high|critical`. `high` and `critical` need a `confirm` block (the schema enforces it) — `typed`
+   with the value the person recognises (the UPN, the object's name; a bulk run then asks for the item count); `click`
+   only for low-impact changes, never on a bulk action; `critical` also needs `approval: { required: true }` (two-person; the approver runs the
    remaining steps as themselves). A change that **grants access** (a directory or Azure role, membership of a
    role-assignable group, app ownership) names who it benefits in `approval.excludes` (an expression yielding object
    ids — the principal, and a group's members when the principal is a group) so they can't approve it, and refuses

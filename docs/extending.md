@@ -56,15 +56,12 @@ navigation then shows their status and links to `/monitoring?group=<key>` (no na
 `probeStatus` widget with `group: <key>` on the overview. `avd` is the full example; `billing` is a reports-only
 section (`tests/content/m365-workload-sections.test.ts` checks Exchange, SharePoint and Teams).
 
-**Retiring** keeps history: `status: retired` with a version bump on every related definition (a schedule also
-`enabled: false`) and a summary that starts `Retired — <why, or replaced by Title (id)>.` — the sentence people see
-when they open it. Nothing active may link to, embed, run or schedule it (`tests/content/retired-content.test.ts`),
-`publish --dry-run` lists it as `− retire`, and `docs/backlog.md` says how to bring it back. Never delete the files.
-
-**Preview** marks content not yet confirmed to work against a live tenant (checked only on fixtures, or with a known
-live problem): `preview: true` plus a version bump. Pages show a quiet "Preview" badge and `adminforge validate` lists
-them; it changes nothing about how the definition runs. Remove it (version bump) once it works live. Don't use
-`status: preview`. Details for both: `docs/content-recipes.md` › Versions, previews and retiring.
+**Retiring** keeps history: `status: retired` with a version bump on every related definition and a summary that
+starts `Retired — <why, or replaced by Title (id)>.` (the sentence people see when they open it); nothing active may
+point at it (`tests/content/retired-content.test.ts`). Never delete the files. **Preview** (`preview: true` plus a
+version bump) marks new content not yet confirmed to work against a live tenant: pages show a quiet "Preview" badge
+and `adminforge validate` lists them; remove it once it works live. The full procedure for both:
+`docs/content-recipes.md` › Versions, previews and retiring.
 
 ## Guardrails that run automatically
 

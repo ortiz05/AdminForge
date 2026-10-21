@@ -30,7 +30,7 @@ synthetic tests and configuration checks that write time-series results shown on
 ## Steps
 
 1. **Reuse first.** `pnpm adminforge list --kind probe,schedule --section <section>` shows a section's checks and
-   schedules. Probes are swept by tag: tag a new probe (`tags: [hourly]`, `[config-check]`) and an existing
+   schedules. Probes are swept by tag: tag a new probe (`sweep-15m`, `sweep-1h`, `sweep-6h`, `config-check`, `synthetic-transaction`) and an existing
    sweep schedule (`schedules/probes/*.schedule.yaml`, `job.select.tags`) picks it up — often no new schedule needed.
 2. **Scaffold:** `pnpm adminforge new probe probes/<name>` (writes `probes/<name>.probe.yaml`, id `probes.<name>`;
    set `group:`) / `new schedule <job group>/<name>` (`reports/`, `maintenance/`, `billing/`; sweeps are `sweep.*` in
@@ -86,7 +86,9 @@ synthetic tests and configuration checks that write time-series results shown on
    - `report` (`ref`, `params`, `delivery: [{ type: file, format, path, retain }]`, plus `{ type: email, to }` and
      `{ type: teams, webhook }`). Recipients and webhooks are **always** `${ env.X }` keys (configuration, never
      content); e-mail needs `AF_MAIL_SENDER` and the automation identity's Mail.Send, Teams a Workflows webhook on a
-     Microsoft host. The file is always kept with the run;
+     Microsoft host. Today `validate` refuses any `env.…WEBHOOK` key in content (secret-looking names never reach
+     expressions), so a content schedule can't name a Teams webhook yet (`docs/backlog.md`); portal schedules can. The
+     file is always kept with the run;
    - `playbook` (`ref`, `inputs`, `mode`; write playbooks need `approvedBy` — enabling them requires a second
      approver);
    - `script` (a pinned runner script; validates, but runs fail with `script_not_supported` — see When not to use);
@@ -107,7 +109,8 @@ synthetic tests and configuration checks that write time-series results shown on
    `validate --scopes` checks it separately; a write, sensitive-read or tier-0 permission also needs that identity's
    own `AF_IDENTITY_<NAME>_ALLOW_*` opt-in. `news` and `contentHealth` jobs always use `automation`.
    `{ user: creator }` is only for report schedules created in the portal ("Run as: Me") — content can't use it.
-   Runner (PowerShell) datasources work only as the automation identity.
+   A report with runner (PowerShell) datasources runs as the automation identity only: a named app identity or a
+   portal schedule's "Run as: Me" is refused (`runner_identity_not_supported`).
 8. **Fixtures (required)** for mock mode: every KQL probe needs its `// af:<probe id>` variant
    (`tests/content/fixtures-complete.test.ts` fails without it; computed booleans are 1/0), and an HTTP, DNS or
    certificate probe a `hosts/`, `dns/` or `tls/` fixture keyed for the synthetic configuration

@@ -36,14 +36,15 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
    - **User data** goes through `$encode()` / `$odata()` / `$odataSearch()` / `$kql()` / `$guid()`, placed as
      `docs/content-recipes.md` › Quoting user data shows; validation follows it through wrappers, lambdas and
      variables. Advanced filters: declare `filters.advanced.fields` and use `${ advanced }`.
-   - **Resource Graph joins** (Azure refuses the rest; `validate` checks it — `resourceGraphJoinProblem` in
-     `portal/packages/schemas/src/datasource.ts`): no leading `union`; only `leftouter` / `inner` / `innerunique` joins
-     (`leftouter` + `where isnull(x)` instead of `leftanti`); at most three `join` + `union` together; only **one**
-     join to another table, unless every one is `resources` ↔ `resourcecontainers`; a `union` stays in one table or
-     that pair, and every branch projects the columns used after it. Subscription names and split queries:
-     `docs/content-recipes.md` › Resource Graph.
-   - Every Resource Graph or Log Analytics query starts with a `// af:<page id>#<datasource>` line (fixtures match on
-     it).
+   - **Resource Graph joins** (Azure refuses the rest): no leading `union`; at most three `join` + `union` together;
+     only **one** join to another table, unless every one is `resources` ↔ `resourcecontainers`; a `union` stays in
+     one table or that pair — `validate` checks these (`resourceGraphJoinProblem` in
+     `portal/packages/schemas/src/datasource.ts`). Also, though only the section tests check it
+     (`tests/content/azure-report-library.test.ts`): only `leftouter` / `inner` / `innerunique` joins (`leftouter` +
+     `where isnull(x)` instead of `leftanti`), no `let` statements, and every union branch projects the columns used
+     after it. Subscription names and split queries: `docs/content-recipes.md` › Resource Graph.
+   - Every Resource Graph or Log Analytics query starts with a `// af:<page id>#<name>` line, unique per query
+     (usually the datasource name): fixtures match on it.
    - `ds.<name>` references: declare a dependency above the datasources that use it (`validate` refuses references to
      later ones and loops). In a datasource's `when`, request and runner `parameters` the `ds.` prefix is required;
      widgets, headers and actions use bare names. A dependency some viewers can't read gets `optional: true`: its
@@ -63,14 +64,16 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
      category — a type, a source, a computed `'true'`/`'false'` flag with no good or bad — is `kind: enum`
      (`map: { "true": "On", "false": "Off" }`; `tests/content/status-tones.test.ts`).
    - `rowKey` is unique per row: a table grouped by several columns gets a composite key in the query.
-   - KPI labels: about 22 characters a line, two lines at `span: 2`; a hint after a status pill is cut off — keep it to
-     two or three words or leave it out (`docs/widgets.md` › kpi).
+   - KPI labels wrap to two lines and are cut after that — about 22 characters a line at `span: 2`; a hint after a
+     status pill is cut off — keep it to two or three words or leave it out (`docs/widgets.md` › kpi).
    - Entity pages declare `entity: user|group|device|app|resource` and take an `id` param; one page per kind, and all
      five are taken (`tests/unit/api/search-entity-pages.test.ts`). A new entity page gets a sample id in
      `SAMPLE_PARAMS` (`tests/content/fixtures-complete.test.ts`).
 5. **Declare** `requires.scopes` (exact Graph/ARM permissions), `requires.licences` (`signInLogs`,
    `conditionalAccess`, `pim`, `intune`, `exchange`, …), `requires.portalRoles` where Readers shouldn't see it,
-   `nav: { section, label, icon (Phosphor kebab-case), order }`, specific `tags` and a `summary`. **Reports** keep
+   `nav: { section, label, icon (Phosphor kebab-case), order }`, specific `tags` and a `summary`. Licence keys are the
+   features in `portal/apps/api/src/capabilities/features.ts` (the schema takes any text, so a wrong key gates
+   nothing). **Reports** keep
    `nav.section: reports` and appear in the Reports catalogue (`/reports`) on their own, under their `area:` (else the
    key's first segment) — always a navigation section key. Move a report with `area:` and a page with `nav.section`,
    never by renaming its key (schedules, links and saved views use it). `export` makes a report schedulable and its
@@ -86,8 +89,9 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
 8. **Tests:** content tests run on their own. Add a new file under `tests/content/` only for page-specific logic (a
    transform) — never append to `validate-all.test.ts`. A transform that can see many rows also gets
    `tests/content/content-at-scale-<area>.scale.test.ts` (the `scale` project).
-9. **Lifecycle:** bump `version` on every change; `preview: true` while the page is checked only against fixtures;
-   retire with `status: retired`, never delete (`docs/content-recipes.md` › Versions, previews and retiring).
+9. **Lifecycle:** bump `version` on every change; a new page whose requests ran only against fixtures gets
+   `preview: true`; retire with `status: retired`, never delete (`docs/content-recipes.md` › Versions, previews and
+   retiring).
 10. **Check:** `pnpm adminforge validate`, `pnpm --filter @adminforge/tests exec vitest run --project content`,
     `pnpm guard`; then `/p/<key>` in mock mode (`CLAUDE.md` › Commands) in steel and daylight. Run every new request
     once against a real tenant, read-only (`validating-against-a-tenant`) — fixtures can't catch a request Microsoft
@@ -99,8 +103,8 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
 - [ ] The page renders in mock mode from synthetic fixtures and you looked at it in steel and daylight: KPI labels
       whole, no empty widgets, no alert banners
 - [ ] `version` bumped on every changed definition; `requires`, `nav`, `tags` and `summary` set
-- [ ] Every new request ran once live, read-only — or the page is `preview: true` and `docs/licensing-review.md` /
-      `docs/backlog.md` say what is unchecked
+- [ ] Every new request ran once live, read-only — or `docs/licensing-review.md` / `docs/backlog.md` say what is
+      unchecked, and a new page is `preview: true`
 - [ ] `content-reviewer` ran and its findings are fixed or answered
 
 ## Common mistakes

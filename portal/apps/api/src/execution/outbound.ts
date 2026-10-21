@@ -950,6 +950,8 @@ interface ResolvedFunction {
   /** Operation path template (provenance). */
   template: string;
   mode: Mode;
+  /** The connection marks this read-mode POST as one that only reads (S-23). */
+  readPost: boolean;
   audience: string;
   scopes: string[];
 }
@@ -1131,6 +1133,7 @@ export class Outbound implements OutboundExecutor {
       body,
       declaredWrite,
       declaredRead: fn ? fn.mode === 'read' : call.declaredRead === true,
+      readPost: fn?.readPost === true,
     });
     if (!decision.allowed) throw new PolicyDenied(decision.reason);
     // The policy must judge what is actually sent: fetch's URL parser can still rewrite a path (it drops TAB/LF/CR and
@@ -1144,6 +1147,7 @@ export class Outbound implements OutboundExecutor {
         body,
         declaredWrite,
         declaredRead: fn ? fn.mode === 'read' : call.declaredRead === true,
+        readPost: fn?.readPost === true,
       });
       if (!again.allowed) throw new PolicyDenied(again.reason);
     }
@@ -1753,6 +1757,7 @@ export class Outbound implements OutboundExecutor {
       path: resolved.path,
       template: def.operations[name]!.path,
       mode: resolved.mode,
+      readPost: def.operations[name]!.readPost === true,
       audience,
       scopes,
     };

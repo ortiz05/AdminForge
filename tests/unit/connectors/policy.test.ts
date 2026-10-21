@@ -159,11 +159,20 @@ describe('request policy', () => {
   });
 
   describe('function connections', () => {
-    it('allow POST to an operation the connection declares read', () => {
+    it('allow POST to an operation the connection declares read with readPost (S-23)', () => {
+      expect(
+        evaluate('read', {
+          service: 'function',
+          method: 'POST',
+          path: '/api/search',
+          declaredRead: true,
+          readPost: true,
+        }).allowed,
+      ).toBe(true);
       expect(
         evaluate('read', { service: 'function', method: 'POST', path: '/api/search', declaredRead: true })
           .allowed,
-      ).toBe(true);
+      ).toBe(false);
       expect(evaluate('read', { service: 'function', method: 'POST', path: '/api/search' }).allowed).toBe(
         false,
       );

@@ -11,6 +11,11 @@ export interface OutboundRequest {
   declaredWrite?: boolean;
   /** Set by the executor only for `function` calls to operations a published connection declares `mode: read`. */
   declaredRead?: boolean;
+  /**
+   * Set by the executor only for `function` calls to `mode: read` operations a published connection also marks
+   * `readPost: true` (S-23): the reviewed statement that this POST only reads.
+   */
+  readPost?: boolean;
   /** Exchange/Teams cmdlet name for admin-API calls. */
   cmdlet?: string;
 }
@@ -81,7 +86,13 @@ function evaluateRead(req: OutboundRequest, method: string, path: string): Polic
   if (req.service === 'runner')
     return req.declaredWrite ? deny('This script changes data. Arm write access to continue.') : ALLOW;
   if (SAFE.has(method)) return ALLOW;
-  if (req.service === 'function' && req.declaredRead && !req.declaredWrite) return ALLOW;
+  // A connection's read operation may POST unarmed only when the connection also says readPost (S-23).
+  if (req.service === 'function' && req.declaredRead && !req.declaredWrite && method === 'POST')
+    return req.readPost
+      ? ALLOW
+      : deny(
+          `${method} ${path} is declared a read, but its connection doesn't confirm that this POST only reads (readPost). Arm write access to continue.`,
+        );
   if (method === 'POST' && (READ_POSTS[req.service] ?? []).some((re) => re.test(path)))
     return req.service === 'graph' && path === '/$batch' ? evaluateBatch(req.body) : ALLOW;
   return deny(`${method} ${path} changes data. Arm write access to continue.`);
@@ -89,7 +100,8 @@ function evaluateRead(req: OutboundRequest, method: string, path: string): Polic
 
 /**
  * Default-deny request policy (ADR-003).
- * Read mode: only safe methods and allowlisted read-only POSTs leave the API ($batch sub-requests are checked one by one).
+ * Read mode: only safe methods and allowlisted read-only POSTs leave the API ($batch sub-requests are checked one by one;
+ * a connection's POST only when the connection declares it `mode: read` with `readPost: true`).
  * Write mode: everything read mode allows, plus writes declared by published content.
  */
 export function evaluate(mode: Mode, req: OutboundRequest): PolicyDecision {

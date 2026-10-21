@@ -72,14 +72,17 @@ describe('function client', () => {
       path: '/api/employees/search',
       mode: 'read',
     });
-    expect(
+    const check = (readPost?: boolean) =>
       evaluate('read', {
         service: 'function',
         method: r.method,
         path: r.path,
         declaredRead: r.mode === 'read',
-      }).allowed,
-    ).toBe(true);
+        ...(readPost ? { readPost } : {}),
+      }).allowed;
+    // A read-mode POST runs unarmed only when its connection also says readPost (S-23).
+    expect(check(true)).toBe(true);
+    expect(check()).toBe(false);
   });
   it('retries read POSTs marked idempotent', async () => {
     const { fn, f } = client([{ status: 503 }, { status: 200, body: [] }]);

@@ -3,7 +3,8 @@ import { Expr, HttpMethod, Identifier, Mode, envelopeShape } from './common';
 
 /**
  * Connections describe external Entra-secured APIs (your Function Apps, §7.5). Only the named operations can be called,
- * and read sessions may only call `mode: read` operations (ADR-003). Base URL and audience are usually `${ env.X }`.
+ * and read sessions may only call `mode: read` operations (ADR-003) — a POST among them only with `readPost: true`
+ * (S-23). Base URL and audience are usually `${ env.X }`.
  */
 
 const BaseUrl = z.union([
@@ -34,10 +35,24 @@ export const ConnectionOperation = z
     description: z.string().optional(),
     /** Safe to retry on 5xx/network errors (default: GET/HEAD/PUT/DELETE). */
     idempotent: z.boolean().optional(),
+    /**
+     * A `mode: read` POST (a search or query that takes its filter as a body): the reviewed statement that it changes
+     * nothing, so read sessions may call it unarmed (S-23). Required on read-mode POSTs, refused anywhere else.
+     */
+    readPost: z.boolean().optional(),
   })
   .refine((op) => op.mode === 'write' || !['PUT', 'PATCH', 'DELETE'].includes(op.method), {
     message: 'PUT/PATCH/DELETE operations must be mode: write',
     path: ['mode'],
+  })
+  .refine((op) => !(op.mode === 'read' && op.method === 'POST') || op.readPost === true, {
+    message:
+      'A mode: read operation that POSTs needs readPost: true, the reviewed statement that the POST only reads (otherwise make it mode: write)',
+    path: ['readPost'],
+  })
+  .refine((op) => op.readPost !== true || (op.mode === 'read' && op.method === 'POST'), {
+    message: 'readPost only applies to mode: read operations that POST',
+    path: ['readPost'],
   });
 export type ConnectionOperation = z.infer<typeof ConnectionOperation>;
 

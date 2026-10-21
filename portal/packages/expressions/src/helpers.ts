@@ -1,6 +1,6 @@
 import type jsonata from 'jsonata';
 import { DEADLINE_BINDING, checkDeadline } from './budget';
-import { MAX_SEQUENCE } from './limits';
+import { checkGrowth, MAX_SEQUENCE, PERCENT_GROWTH } from './limits';
 import type * as NodeCrypto from 'node:crypto';
 
 /**
@@ -27,18 +27,23 @@ function requireValue(name: string, v: unknown): string | number | boolean {
 export function encodePathSegment(value: unknown): string {
   const s = String(requireValue('$encode', value));
   if (s === '.' || s === '..') throw new Error(`$encode: "${s}" is not a valid path segment`);
+  checkGrowth('$encode', s, PERCENT_GROWTH);
   return encodeURIComponent(s);
 }
 
 /** Quoted OData string literal: O'Brien → 'O''Brien'. */
 export function odataLiteral(value: unknown): string {
-  return `'${String(requireValue('$odata', value)).replaceAll("'", "''")}'`;
+  const s = String(requireValue('$odata', value));
+  checkGrowth('$odata', s, 2, 2);
+  return `'${s.replaceAll("'", "''")}'`;
 }
 
 /** Escapes `\` and `"` for use inside a quoted Graph `$search` clause. */
 export function odataSearchEscape(value: unknown): string {
   if (value === undefined || value === null) return '';
-  return String(requireValue('$odataSearch', value)).replace(/[\\"]/g, (c) => `\\${c}`);
+  const s = String(requireValue('$odataSearch', value));
+  checkGrowth('$odataSearch', s, 2);
+  return s.replace(/[\\"]/g, (c) => `\\${c}`);
 }
 
 /**
@@ -50,6 +55,7 @@ export function kqlLiteral(value: unknown): string {
   if (value === undefined || value === null) throw new Error('$kql: value is missing');
   if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean')
     throw new Error(`$kql: expected a string, got ${Array.isArray(value) ? 'array' : typeof value}`);
+  checkGrowth('$kql', String(value), 2, 2);
   const escaped = String(value).replace(
     /[\\"\n\r\t]/g,
     (c) => ({ '\\': '\\\\', '"': '\\"', '\n': '\\n', '\r': '\\r', '\t': '\\t' })[c]!,

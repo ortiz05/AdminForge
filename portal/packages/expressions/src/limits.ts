@@ -5,7 +5,9 @@ import jsonata from 'jsonata';
  * call runs to completion: `$pad("", 1e9)`, `$string` of a huge value, `$sort` (an O(n²)-memory merge in JSONata) or
  * `$distinct` (O(n²)) on a big range could stall the event loop for seconds or exhaust memory. These overrides keep
  * JSONata's behaviour and refuse sizes no AdminForge content needs. `$eval` (code from data) is disabled. `&` is an
- * operator, not a built-in: evaluation rewrites it into a size-checked concatenation (`rewriteConcat`).
+ * operator, not a built-in: evaluation rewrites it into a size-checked concatenation (`rewriteConcat`). The encoders
+ * (`$encodeUrl`, `$encodeUrlComponent`, `$base64encode`, and AdminForge's `$encode`, `$odata`, `$odataSearch`, `$kql`)
+ * refuse an input whose result could pass MAX_TEXT, judged from its length before encoding (`checkGrowth`).
  */
 
 /** Largest range (`[1..n]`) or sequence an expression may build. */
@@ -18,16 +20,40 @@ export const MAX_PAD = 10_000;
 type Focus = jsonata.Focus & { createSequence?: () => unknown[] };
 type Builtin = { implementation: (this: Focus, ...args: unknown[]) => unknown };
 
+type BuiltinName =
+  'pad' | 'string' | 'join' | 'replace' | 'encodeUrl' | 'encodeUrlComponent' | 'base64encode';
+const BUILTINS: readonly BuiltinName[] = [
+  'pad',
+  'string',
+  'join',
+  'replace',
+  'encodeUrl',
+  'encodeUrlComponent',
+  'base64encode',
+];
+
 let originals: Promise<Record<string, Builtin>> | undefined;
 /** JSONata's own implementation of a built-in (looked up once). */
-async function builtin(name: 'pad' | 'string' | 'join' | 'replace'): Promise<Builtin> {
-  originals ??= jsonata('{"pad": $pad, "string": $string, "join": $join, "replace": $replace}').evaluate(
-    {},
-  ) as Promise<Record<string, Builtin>>;
+async function builtin(name: BuiltinName): Promise<Builtin> {
+  originals ??= jsonata(`{${BUILTINS.map((n) => `"${n}": $${n}`).join(', ')}}`).evaluate({}) as Promise<
+    Record<string, Builtin>
+  >;
   return (await originals)[name]!;
 }
 
 const tooLarge = (fn: string, what: string) => new Error(`${fn}: ${what}`);
+
+/** Most characters percent-encoding makes of one UTF-16 unit: three UTF-8 bytes, each as `%XX`. */
+export const PERCENT_GROWTH = 9;
+
+/**
+ * Refuses `text` when its encoded form could pass MAX_TEXT characters: every character becomes at most `perChar`, plus
+ * `extra` (quotes). Judged from the length alone, before anything is built.
+ */
+export function checkGrowth(fn: string, text: string, perChar: number, extra = 0): void {
+  if (text.length * perChar + extra > MAX_TEXT)
+    throw tooLarge(fn, `the result could exceed ${MAX_TEXT} characters`);
+}
 
 /** True when the JSON text of `value` would be longer than `budget` characters (stops counting once it is). */
 function exceeds(value: unknown, budget: number): boolean {
@@ -179,6 +205,20 @@ async function replace(
   return (await builtin('replace')).implementation.call(this, str, pattern, replacement, limit);
 }
 
+/** `$encodeUrl` / `$encodeUrlComponent`: percent-encoding makes up to nine characters of one. */
+const percentEncoder = (name: 'encodeUrl' | 'encodeUrlComponent') =>
+  async function (this: Focus, str: unknown): Promise<unknown> {
+    if (typeof str === 'string') checkGrowth(`$${name}`, str, PERCENT_GROWTH);
+    return (await builtin(name)).implementation.call(this, str);
+  };
+
+/** `$base64encode`: four characters for every three. */
+async function base64encode(this: Focus, str: unknown): Promise<unknown> {
+  if (typeof str === 'string' && 4 * Math.ceil(str.length / 3) > MAX_TEXT)
+    throw tooLarge('$base64encode', `the result could exceed ${MAX_TEXT} characters`);
+  return (await builtin('base64encode')).implementation.call(this, str);
+}
+
 /** The size-checked `&` evaluation calls instead of JSONata's operator (`$__af…` names are reserved for AdminForge). */
 export const CONCAT_FUNCTION = '__afConcat';
 
@@ -284,6 +324,9 @@ export function registerLimits(expr: jsonata.Expression): void {
   expr.registerFunction('string', string, '<x-b?:s>');
   expr.registerFunction('join', join, '<a<s>s?:s>');
   expr.registerFunction('replace', replace, '<s-(sf)(sf)n?:s>');
+  expr.registerFunction('encodeUrl', percentEncoder('encodeUrl'), '<s-:s>');
+  expr.registerFunction('encodeUrlComponent', percentEncoder('encodeUrlComponent'), '<s-:s>');
+  expr.registerFunction('base64encode', base64encode, '<s-:s>');
   expr.registerFunction('sort', sort, '<af?:a>');
   expr.registerFunction('distinct', distinct, '<x:x>');
   expr.registerFunction('eval', () => {

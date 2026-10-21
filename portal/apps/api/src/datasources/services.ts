@@ -1,4 +1,4 @@
-import { createFixtureFetch } from '@adminforge/connectors';
+import { createFixtureFetch, fixtureKey } from '@adminforge/connectors';
 import type { Connection } from '@adminforge/schemas';
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { MemorySettingsStore, SqliteSettingsStore, type SettingsStore } from '../admin/settings-store';
@@ -92,8 +92,7 @@ export function createContentServices(
       automation,
       identities,
       // DATA_MODE=fixtures: synthetic responses from ADMINFORGE_FIXTURES_DIR, never Microsoft.
-      fetch:
-        config.DATA_MODE === 'fixtures' ? createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR) : base.fetch,
+      fetch: config.DATA_MODE === 'fixtures' ? fixtureFetch(config, log) : base.fetch,
       connection: async (key) => (await definitions.resolve('connection', key)).def as Connection,
       env,
       now: base.now,
@@ -146,6 +145,46 @@ export function createContentServices(
     settings,
     contentEnv: env,
   };
+}
+
+/** What a request without a fixture answers with mock sign-in: no file path (the API log names the file to add). */
+export const MOCK_NO_FIXTURE =
+  'Mock mode has no synthetic data for this request. The API log names the fixture file to add.';
+
+/**
+ * The fixture fetch of DATA_MODE=fixtures (synthetic responses from ADMINFORGE_FIXTURES_DIR, never Microsoft).
+ *
+ * With **mock sign-in only** (AUTH_MODE=mock, which config.ts refuses in production and off loopback, and which never
+ * holds the automation identity) a write no fixture describes is accepted — 204, there is no tenant to change — so
+ * write playbooks complete end to end, and a request no fixture answers gets a mock-mode message that names no file;
+ * the file to add goes to the API log. With Entra sign-in on fixtures (allowed: a real person is signed in) nothing is
+ * accepted that a fixture doesn't describe: an unfixtured write stays a 404 and fails the step.
+ */
+export function fixtureFetch(
+  config: Pick<Config, 'AUTH_MODE' | 'ADMINFORGE_FIXTURES_DIR'>,
+  log?: Log,
+): typeof fetch {
+  if (config.AUTH_MODE !== 'mock') return createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR);
+  const fixtures = createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR, { acceptWrites: true });
+  return (async (input: string | URL | Request, init?: RequestInit) => {
+    const res = await fixtures(input, init);
+    if (res.status !== 404) return res;
+    const body = (await res
+      .clone()
+      .json()
+      .catch(() => null)) as { error?: { code?: string } } | null;
+    if (body?.error?.code !== 'FixtureNotFound') return res;
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    log?.warn(
+      { fixture: { method, candidates: fixtureKey(method, url).candidates } },
+      'mock mode: no fixture for this request',
+    );
+    return new Response(JSON.stringify({ error: { code: 'FixtureNotFound', message: MOCK_NO_FIXTURE } }), {
+      status: 404,
+      headers: res.headers,
+    });
+  }) as typeof fetch;
 }
 
 /** The audit event of a secret-bearing read (values are never returned): who, and for unattended reads which identity and schedule. */

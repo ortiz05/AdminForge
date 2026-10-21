@@ -37,7 +37,7 @@ const nav = tv({
     hiddenCount: 'text-xs font-normal text-fg-3 tabular-nums',
     /** The section's open pages, set off from the next section's row. */
     list: 'flex flex-col gap-0.5 pb-2 nav-collapsed:pb-0',
-    /** Check status: a dot when healthy, a ring with no result yet, the status glyph when degraded or failing. */
+    /** Check status: Synthetic monitoring's status icon (healthy, degraded, failing), once a probe has a result. */
     check: [
       'ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-sm',
       'transition-colors duration-(--af-motion-fast) hover:bg-hover',
@@ -240,26 +240,20 @@ function NavLink({
   );
 }
 
-/** Dot when healthy, ring with no result yet, the status glyph (warning, cross) when degraded or failing. */
-function CheckGlyph({ status }: { status: SectionCheck['status'] }) {
-  if (status === 'crit' || status === 'warn') {
-    const Glyph = STATUS_ICON[status];
-    return (
-      <Glyph size={14} weight="fill" aria-hidden className={status === 'crit' ? 'text-crit' : 'text-warn'} />
-    );
-  }
-  return (
-    <span
-      className={cn('size-2 rounded-pill', status === 'ok' ? 'bg-ok' : 'border border-fg-3')}
-      aria-hidden
-    />
-  );
+/** A section's mark: the status it shows, once at least one of its probes has a result. */
+type MarkStatus = Exclude<SectionCheck['status'], 'unknown'>;
+
+const MARK_TEXT: Record<MarkStatus, string> = { ok: 'text-ok', warn: 'text-warn', crit: 'text-crit' };
+
+/** The section's mark, or none while no probe of it has a result yet (a fresh install shows no marks). */
+function markOf(check: SectionCheck | undefined): (SectionCheck & { status: MarkStatus }) | undefined {
+  return check && check.status !== 'unknown' ? (check as SectionCheck & { status: MarkStatus }) : undefined;
 }
 
 /**
  * The section's check status at the end of its row, linking to Synthetic monitoring for the section's own probes
- * (`/monitoring?group=<key>`). Never colour alone: the shape differs per state (dot, ring, warning, cross) and the
- * link's name and tooltip say it in words.
+ * (`/monitoring?group=<key>`). It is Synthetic monitoring's status icon at 12 px, so the rail and the page read alike;
+ * never colour alone: the shape differs per state and the link's name and tooltip say it in words.
  */
 function SectionCheckLink({
   section,
@@ -267,9 +261,10 @@ function SectionCheckLink({
   active,
 }: {
   section: NavSection;
-  check: SectionCheck;
+  check: SectionCheck & { status: MarkStatus };
   active: boolean;
 }) {
+  const Glyph = STATUS_ICON[check.status];
   const s = nav();
   const text = checksText(check);
   return (
@@ -283,7 +278,7 @@ function SectionCheckLink({
         aria-current={active ? 'page' : undefined}
         data-status={check.status}
       >
-        <CheckGlyph status={check.status} />
+        <Glyph size={12} weight="fill" aria-hidden className={MARK_TEXT[check.status]} />
       </Link>
     </Tooltip>
   );
@@ -306,8 +301,9 @@ export interface NavRailProps {
 
 /**
  * Sections and pages from GET /api/nav, collapsible to a 56 px icon rail. Section rows open and close their section
- * and, when the section has probes, end with its check status (a link to `/monitoring?group=<key>`); the icon rail
- * always shows every page (its headings and check status are hidden).
+ * and, once one of the section's probes has a result, end with its check status (a link to `/monitoring?group=<key>`)
+ * instead of the closed section's page count; the icon rail always shows every page (its headings and check status are
+ * hidden).
  */
 export function NavRail({
   sections,
@@ -322,15 +318,17 @@ export function NavRail({
   const search = useRouterState({ select: (st) => st.location.search }) as Record<string, unknown>;
   const { checks, pending: checksPending } = useSectionChecks();
   const checkHref = (key: string) => `/monitoring?group=${key}`;
-  // A section's check view (/monitoring?group=…) is its mark's place, not Synthetic monitoring's — except in the icon
-  // rail, which has no marks: there Synthetic monitoring stays the current place.
+  // In the icon rail headings are hidden, and so are the marks (Synthetic monitoring has every probe).
+  const markFor = (key: string) => (collapsed ? undefined : markOf(checks?.[key]));
+  // A section's check view (/monitoring?group=…) is its mark's place, not Synthetic monitoring's — except where there
+  // is no mark (the icon rail, no result yet): there Synthetic monitoring stays the current place.
   const hrefs = [
     ...(sections?.flatMap((x) => x.items.map((i) => i.href)) ?? []),
-    ...(collapsed ? [] : (sections ?? []).filter((x) => checks?.[x.key]).map((x) => checkHref(x.key))),
+    ...(sections ?? []).filter((x) => markFor(x.key)).map((x) => checkHref(x.key)),
   ];
-  // Every row keeps the status column while it loads and once some section has checks, so the carets line up and
+  // Every row keeps the status column while it loads and once some section has a mark, so the carets line up and
   // nothing moves when the answer arrives.
-  const statusColumn = !collapsed && (checksPending || Object.keys(checks ?? {}).length > 0);
+  const statusColumn = !collapsed && (checksPending || (sections ?? []).some((x) => markFor(x.key)));
   const active = (href: string) => isActive(href, pathname, search, hrefs);
   const s = nav();
   return (
@@ -350,8 +348,7 @@ export function NavRail({
             ? section.items.filter((item) => active(item.href) || counts?.[item.key])
             : section.items;
           const hidden = section.items.length - items.length;
-          // In the icon rail headings are hidden, and so is the check status (Synthetic monitoring has every probe).
-          const check = collapsed ? undefined : checks?.[section.key];
+          const check = markFor(section.key);
           const status = check ? (
             <SectionCheckLink section={section} check={check} active={active(checkHref(section.key))} />
           ) : statusColumn ? (
@@ -378,7 +375,8 @@ export function NavRail({
                       <span className="min-w-0 flex-1 truncate" title={section.label}>
                         {section.label}
                       </span>
-                      {closed && hidden > 0 && (
+                      {/* Not beside a mark, where a number would read as a count of failures. */}
+                      {closed && hidden > 0 && !check && (
                         <span
                           className={s.hiddenCount()}
                           title={`${hidden} ${hidden === 1 ? 'page' : 'pages'} hidden`}

@@ -74,24 +74,27 @@ describe('navigation: check status per section', () => {
       'data-status',
       'warn',
     );
-    expect(
-      within(nav()).getByRole('link', { name: 'Azure service checks: 1 with no result yet' }),
-    ).toHaveAttribute('data-status', 'unknown');
+    // No probe of Azure's has a result yet: no mark (nav-check-marks.test.tsx).
+    expect(within(nav()).queryByRole('link', { name: /^Azure service checks/ })).toBeNull();
 
     // Sections without probes get no mark; AdminForge's own (platform) checks aren't a section.
-    expect(checkLinks()).toHaveLength(4);
+    expect(checkLinks()).toHaveLength(3);
     expect(within(nav()).queryByRole('link', { name: /^Automation service checks/ })).toBeNull();
     expect(within(nav()).queryByRole('link', { name: /AdminForge/ })).toBeNull();
     expect(await axeViolations(container)).toEqual([]);
   });
 
-  it('section rows are full size with their hidden-page count; the toggle stays a separate control', async () => {
+  it('section rows are full size with their hidden-page count (not beside a mark); the toggle stays a separate control', async () => {
     renderApp({ handlers: [probesAnswer({ body: PROBES })] });
     await screen.findByRole('navigation', { name: 'Primary' });
     const toggle = await within(nav()).findByRole('button', { name: 'Identity (6 pages hidden)' });
     expect(toggle).toHaveClass('text-md', 'text-fg-2');
     expect(toggle).not.toHaveClass('af-eyebrow');
-    expect(toggle).toHaveTextContent('Identity6');
+    // The count would read as a count of failures beside the mark: the name says it instead.
+    expect(toggle).toHaveTextContent(/^Identity$/);
+    expect(within(nav()).getByRole('button', { name: 'Automation (3 pages hidden)' })).toHaveTextContent(
+      'Automation3',
+    );
     // The check link isn't inside the toggle (no nested controls) nor inside the heading that names the list.
     const link = await within(nav()).findByRole('link', { name: /^Identity service checks/ });
     expect(toggle.contains(link)).toBe(false);

@@ -2,14 +2,15 @@ import path from 'node:path';
 import { loadContentDir } from '@adminforge/schemas';
 import { repoRoot } from '../lib/repo';
 
-// After a restart, a run resumes and retries the step that was in flight (D-01) — with the outputs of the steps before
-// it as they were. A write whose second send would hurt is `idempotent: false`: it ends `needs_review` ("check whether
-// it took effect") instead of being sent again.
+// After a restart, a run resumes and retries the step that was in flight (D-01), after reading and checking again what
+// it read and checked before it (engine.ts › recheck) — but whether the first send took effect is unknown. A write
+// whose second send would hurt is `idempotent: false`: it ends `needs_review` ("check whether it took effect") instead
+// of being sent again.
 //
 // - A write that acts on what the person saw (`assert` against `inputs.expected…`, e.g. AVD session numbers, which a
-//   host reuses) would be retried without that check: it could sign out or message whoever holds the session now.
+//   host reuses): a sign-out or message that went out may be followed by someone else taking the session number.
 // - A device restart sent twice could reboot the device again after the person is back at work; a wipe sent twice
-//   (its `notPending` check not re-run) could reset a device that kept its enrolment again once it is set up.
+//   could reset a device that kept its enrolment again once it is set up.
 // Writes that are safe to send twice (PATCH/PUT to a state, a `$ref` add Graph refuses the second time, set-style
 // runner scripts) keep the default; docs/backlog.md lists the ones reviewed.
 

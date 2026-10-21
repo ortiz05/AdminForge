@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: avd.send-user-message
-version: 1.0.1
+version: 1.0.2
 title: Send a message to an Azure Virtual Desktop user
 summary: >-
   Shows a message in a user's Azure Virtual Desktop session — "save your work, this host restarts at 18:00" before
@@ -68,8 +68,8 @@ steps:
       ${ 'That session now belongs to ' & (steps.lookup.output.properties.userPrincipalName ? steps.lookup.output.properties.userPrincipalName : 'nobody') & ', not ' & inputs.expectedUser & ' (session numbers are reused on a host). Nothing was sent: refresh the list and try again.' }
 
   # A disconnected session has no screen to show it on: skipped, and the summary says so.
-  # Not retried after a restart: the retry would reuse `sameUser` from before it (the session number may belong to
-  # someone else by then), and the message may already be on the screen. It ends `needs_review` instead.
+  # Not retried after a restart: the message may already be on the screen. A send in flight when the worker stopped
+  # ends `needs_review` instead. (After any other pause the run reads the session and checks `sameUser` again first.)
   - id: send
     type: arm
     mode: write

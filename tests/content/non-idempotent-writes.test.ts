@@ -8,7 +8,8 @@ import { repoRoot } from '../lib/repo';
 //
 // - A write that acts on what the person saw (`assert` against `inputs.expected…`, e.g. AVD session numbers, which a
 //   host reuses) would be retried without that check: it could sign out or message whoever holds the session now.
-// - A device restart sent twice could reboot the device again after the person is back at work.
+// - A device restart sent twice could reboot the device again after the person is back at work; a wipe sent twice
+//   (its `notPending` check not re-run) could reset a device that kept its enrolment again once it is set up.
 // Writes that are safe to send twice (PATCH/PUT to a state, a `$ref` add Graph refuses the second time, set-style
 // runner scripts) keep the default; docs/backlog.md lists the ones reviewed.
 
@@ -32,6 +33,7 @@ const NOT_RETRIED: Array<[string, string]> = [
   ['avd.log-off-user-session', 'logOff'],
   ['avd.send-user-message', 'send'],
   ['endpoint.restart-device', 'restart'],
+  ['endpoint.wipe-device', 'wipe'],
 ];
 
 describe('writes whose second send would hurt are not retried after a restart', () => {

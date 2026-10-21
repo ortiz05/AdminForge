@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: endpoint.wipe-device
-version: 1.0.0
+version: 1.0.1
 title: Wipe Intune device
 summary: >-
   Factory-resets an Intune-managed device (lost or stolen device, or a corporate device being reissued). All data is
@@ -58,9 +58,13 @@ steps:
       ${ $not((inputs.keepUserData = true or inputs.keepEnrollmentData = true) and steps.device.output.operatingSystem != 'Windows') }
     message: ${ 'Keeping user data or enrolment state is only supported on Windows; ' & steps.device.output.deviceName & ' runs ' & steps.device.output.operatingSystem & '.' }
 
+  # Not retried after a restart: the retry would reuse `notPending` from before it, and with enrolment data kept a
+  # second wipe could reset the device again once it is set up. A wipe in flight when the worker stopped ends
+  # `needs_review` instead.
   - id: wipe
     type: graph
     mode: write
+    idempotent: false
     describe: "${ 'Factory-reset ' & steps.device.output.deviceName & (inputs.keepUserData = true ? ' keeping user data' : '') & ' (cannot be undone)' }"
     request:
       method: POST

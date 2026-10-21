@@ -156,6 +156,10 @@ describe('avd.log-off-user-session: the sign-out DELETE goes out once', () => {
     // Before, the token broker answered the challenge by running the whole call again: DELETE, poll, DELETE, poll.
     expect(methods).toEqual(['GET', 'DELETE', 'GET']);
     expect(outcome.status).toBe('failed');
-    expect(outcome.error?.message).toMatch(/^Azure accepted the change/);
+    expect(outcome.error).toMatchObject({
+      code: 'accepted_unconfirmed',
+      message: expect.stringMatching(/^Azure accepted/),
+    });
+    expect(outcome.error).not.toHaveProperty('hint');
   });
 });

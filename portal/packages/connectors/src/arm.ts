@@ -1,6 +1,7 @@
 import { assertSafePath, buildQuery } from './graph';
 import {
   abortableSleep,
+  afterAcceptance,
   ApiError,
   createHttpClient,
   retryDelay,
@@ -90,18 +91,15 @@ export function createArmClient(opts: ArmClientOptions) {
     }));
 
   /**
-   * A read after Azure accepted the request (a poll, the final result). Its sign-in (claims) challenge loses the
-   * challenge: the caller answers one by running the whole call again with a new token, which would send the accepted
-   * change a second time (security review). The step fails instead, saying the change was accepted.
+   * A read after Azure accepted the request (a poll, the final result). The caller answers a sign-in (claims)
+   * challenge by running the whole call again with a new token, which would send the accepted change a second time
+   * (security review): here the challenge fails the step instead, saying the change was accepted.
    */
   const afterAccepted = <T>(url: string) =>
     get<T>(url).catch((err: unknown) => {
-      if (!(err instanceof ApiError) || err.status !== 401 || !err.claims) throw err;
-      throw new ApiError(
-        401,
-        err.code,
+      throw afterAcceptance(
+        err,
         'Azure accepted the change, but reading whether it finished needed a new sign-in. It was not sent again: check the resource before running anything again.',
-        err.requestId,
       );
     });
 

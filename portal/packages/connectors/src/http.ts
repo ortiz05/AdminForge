@@ -15,6 +15,29 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A change Microsoft accepted whose outcome couldn't be read: a later request of the same call — a long-running
+ * operation's poll, a further `$batch` chunk — got a sign-in (claims) challenge. Not an ApiError, so nothing answers the
+ * challenge by sending the whole call again with a new token, and not transient, so no retry policy sends it again.
+ */
+export class AcceptedUnconfirmedError extends Error {
+  readonly code = 'accepted_unconfirmed';
+  constructor(
+    message: string,
+    readonly requestId?: string,
+  ) {
+    super(message);
+    this.name = 'AcceptedUnconfirmedError';
+  }
+}
+
+/** `err`, or an AcceptedUnconfirmedError saying `message` when it is a claims challenge (once Microsoft accepted). */
+export function afterAcceptance(err: unknown, message: string): unknown {
+  return err instanceof ApiError && err.status === 401 && err.claims
+    ? new AcceptedUnconfirmedError(message, err.requestId)
+    : err;
+}
+
 /** Throttling, server errors and network failures — worth retrying for idempotent work (§7.8). */
 export function isTransient(err: unknown): boolean {
   return (

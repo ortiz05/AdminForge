@@ -1,4 +1,11 @@
-import { abortableSleep, ApiError, createHttpClient, retryDelay, type HttpClientOptions } from './http';
+import {
+  abortableSleep,
+  afterAcceptance,
+  ApiError,
+  createHttpClient,
+  retryDelay,
+  type HttpClientOptions,
+} from './http';
 import { defaultSleep } from './types';
 
 export interface GraphRequest {
@@ -178,11 +185,27 @@ export function createGraphClient(opts: GraphClientOptions) {
    */
   async function batch(items: BatchItem[]): Promise<Record<string, { status: number; body: unknown }>> {
     const out: Record<string, { status: number; body: unknown }> = {};
+    // Once a chunk was answered, a later chunk's sign-in (claims) challenge must not run the whole batch again (the
+    // caller's answer to one): its writes went out already.
+    let answered = false;
+    const send = async (chunk: BatchItem[], beta: boolean) => {
+      try {
+        const responses = await sendChunk(chunk, beta);
+        answered = true;
+        return responses;
+      } catch (err) {
+        if (!answered) throw err;
+        throw afterAcceptance(
+          err,
+          'Microsoft Graph processed part of this batch, but the rest needed a new sign-in. Nothing was sent again: check what changed before running anything again.',
+        );
+      }
+    };
     for (const beta of [false, true]) {
       const group = items.filter((i) => !!i.beta === beta);
       for (let i = 0; i < group.length; i += 20) {
         const chunk = group.slice(i, i + 20);
-        const responses = await sendChunk(chunk, beta);
+        const responses = await send(chunk, beta);
         for (const r of responses) out[r.id] = { status: r.status, body: decodeBatchBody(r) };
         const throttled = responses.filter((r) => r.status === 429);
         if (!throttled.length) continue;
@@ -196,8 +219,7 @@ export function createGraphClient(opts: GraphClientOptions) {
         }
         await abortableSleep(sleep, delayMs, opts.signal);
         const retry = chunk.filter((c) => throttled.some((t) => t.id === c.id));
-        for (const r of await sendChunk(retry, beta))
-          out[r.id] = { status: r.status, body: decodeBatchBody(r) };
+        for (const r of await send(retry, beta)) out[r.id] = { status: r.status, body: decodeBatchBody(r) };
       }
     }
     return out;

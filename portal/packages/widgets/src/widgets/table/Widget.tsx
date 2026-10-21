@@ -177,8 +177,15 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
       return withFilter('relativeTime', {
         value: (row) => (get(row) as string | null | undefined) ?? null,
         cell: (row) => <TimeCell value={get(row)} kind={k} />,
-        // Never cut off: "2026-10-15" / "2026-10-15 14:03" fit these floors.
-        width: width ?? (k === 'date' ? 'minmax(112px, 0.7fr)' : 'minmax(150px, 0.8fr)'),
+        // Never cut off: "2026-10-15" / "2026-10-15 14:03" fit these floors; a filterable date also fits its header's
+        // sort caret and filter button.
+        width:
+          width ??
+          (k === 'date'
+            ? filter && filter !== 'none'
+              ? 'minmax(144px, 0.7fr)'
+              : 'minmax(112px, 0.7fr)'
+            : 'minmax(150px, 0.8fr)'),
         minWidth: k === 'date' ? 112 : 150,
       });
     }
@@ -220,7 +227,7 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
           if (v == null) return <span className={TABLE_MUTED_TEXT}>—</span>;
           return <span className={v ? 'text-fg' : TABLE_MUTED_TEXT}>{v ? 'Yes' : 'No'}</span>;
         },
-        width: width ?? 'minmax(96px, 0.5fr)',
+        width: width ?? 'minmax(112px, 0.5fr)',
       });
     case 'guid':
       return withFilter('id', { value: (row) => (get(row) == null ? null : str(get(row))) });

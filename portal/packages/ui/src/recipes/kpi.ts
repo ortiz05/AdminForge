@@ -5,7 +5,8 @@ export const kpi = tv({
     root: 'flex min-w-0 flex-col gap-2 p-(--af-pad-panel)',
     // Two lines before the ellipsis: a KPI label is the only words the number has (design review D-15).
     label: 'line-clamp-2 text-sm font-medium text-fg-2',
-    valueRow: 'flex min-h-8 items-end justify-between gap-3',
+    // The number sits at the foot of the tile, so a two-line label beside one-line ones doesn't push it out of line.
+    valueRow: 'mt-auto flex min-h-8 items-end justify-between gap-3',
     value: 'af-kpi-value flex min-w-0 items-baseline gap-1.5 text-fg',
     unit: 'font-body text-sm font-medium text-fg-3',
     foot: 'flex min-h-5 min-w-0 items-center gap-2 text-xs text-fg-3',

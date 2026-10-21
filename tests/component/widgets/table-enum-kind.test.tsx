@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TableColumn } from '@adminforge/schemas';
 import { WIDGETS, type TableConfig } from '@adminforge/widgets';
+import { axeViolations } from '../axe';
 import { ready, renderWidget } from './helpers';
 
 // Plain categories (a join type, a source, a group type) are `enum` columns: the label as text, a facet filter, no
@@ -39,8 +40,8 @@ const grid = () => screen.getByRole('grid', { name: 'Results' });
 const bodyRows = () => within(grid()).getAllByRole('row').slice(1);
 
 describe('table enum columns', () => {
-  it('render the label as plain text — mapped (case-insensitively), else the raw value — with no status pill', () => {
-    renderWidget(Table, config, ready(rows));
+  it('render the label as plain text — mapped (case-insensitively), else the raw value — with no status pill', async () => {
+    const { container } = renderWidget(Table, config, ready(rows));
     const [avery, blake, casey] = bodyRows();
     const entra = within(avery!).getByText('Entra joined');
     expect(entra.closest('[data-status]')).toBeNull();
@@ -54,6 +55,7 @@ describe('table enum columns', () => {
       'data-status',
       'crit',
     );
+    expect(await axeViolations(container)).toEqual([]);
   });
 
   it('are filtered by facet by default, with the labels as options', async () => {

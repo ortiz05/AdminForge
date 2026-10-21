@@ -218,26 +218,53 @@ const MIN_WIDTH: Record<ColumnKind, number> = {
   tags: 120,
 };
 
-/** The column's grid track: its own width (a fixed one no narrower than the kind's floor) or the kind's default. */
-export function columnTrack(c: Pick<DataColumn<unknown>, 'kind' | 'width' | 'minWidth'>): string {
-  const kind = c.kind ?? 'text';
-  if (!c.width) return DEFAULT_WIDTH[kind];
-  const px = /^(\d+(?:\.\d+)?)px$/.exec(c.width);
-  return px ? `${Math.max(Number(px[1]), c.minWidth ?? MIN_WIDTH[kind])}px` : c.width;
-}
+/** A two-line text column (messages, descriptions) gets room to say something before it wraps. */
+const WRAPPED_WIDTH = 'minmax(200px, 1.8fr)';
+/** A relative time with a filter: the header also holds the sort caret and the filter button ("Last activity"). */
+const FILTERED_TIME_WIDTH = 'minmax(144px, 0.8fr)';
 
 /**
- * Truncated header and cell text (`data-af-clip`) gets its full text as a tooltip when the pointer reaches it —
- * measured then, so text that fits carries no redundant title.
+ * The column's grid track: its own width — a fixed one, or a `minmax()` lower bound, no narrower than the kind's
+ * floor — or the kind's default.
+ */
+export function columnTrack(
+  c: Pick<DataColumn<unknown>, 'kind' | 'width' | 'minWidth' | 'lines' | 'filter'>,
+): string {
+  const kind = c.kind ?? 'text';
+  const floor = c.minWidth ?? MIN_WIDTH[kind];
+  if (!c.width) {
+    if (c.lines === 2) return WRAPPED_WIDTH;
+    if (kind === 'relativeTime' && (c.filter ?? DEFAULT_FILTER[kind]) !== 'none') return FILTERED_TIME_WIDTH;
+    return DEFAULT_WIDTH[kind];
+  }
+  const px = /^(\d+(?:\.\d+)?)px$/.exec(c.width);
+  if (px) return `${Math.max(Number(px[1]), floor)}px`;
+  const range = /^minmax\((\d+(?:\.\d+)?)px,\s*(.+)\)$/.exec(c.width);
+  if (range && Number(range[1]) < floor) return `minmax(${floor}px, ${range[2]})`;
+  return c.width;
+}
+
+const CLIPPABLE = '[data-af-clip], .truncate';
+
+/**
+ * Header and cell text that is cut off (`truncate`, or a `data-af-clip` line clamp) gets its full text as a tooltip
+ * when the pointer reaches it — measured then, so text that fits carries no redundant title. Only titles set here
+ * are touched (`data-af-title`); a cell's own title (a timestamp, an id) stays. Mouse only: keyboard and touch users
+ * read the full text in the row's inspector, and screen readers get it from the DOM.
  */
 function titleIfClipped(e: PointerEvent<HTMLElement>) {
   const target = e.target as HTMLElement;
   const el =
-    target.closest<HTMLElement>('[data-af-clip]') ??
-    target.closest('[role="columnheader"], [role="gridcell"]')?.querySelector<HTMLElement>('[data-af-clip]');
-  if (!el) return;
-  if (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight) el.title = el.textContent ?? '';
-  else el.removeAttribute('title');
+    target.closest<HTMLElement>(CLIPPABLE) ??
+    target.closest('[role="columnheader"], [role="gridcell"]')?.querySelector<HTMLElement>(CLIPPABLE);
+  if (!el || (el.title && el.dataset.afTitle === undefined)) return;
+  if (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight) {
+    el.title = el.textContent ?? '';
+    el.dataset.afTitle = '';
+  } else {
+    el.removeAttribute('title');
+    delete el.dataset.afTitle;
+  }
 }
 
 const DEFAULT_FILTER: Record<ColumnKind, ColumnFilterKind> = {
@@ -426,7 +453,7 @@ function Cell<T extends RowData>({ col, row, now }: { col: DataColumn<T>; row: T
       return col.lines === 2 ? (
         <span
           data-af-clip=""
-          className="line-clamp-2 text-xs leading-snug break-words whitespace-normal compact:line-clamp-1"
+          className="line-clamp-2 text-xs leading-snug break-words whitespace-normal text-fg-2 compact:line-clamp-1 compact:text-sm"
         >
           {asString(v)}
         </span>

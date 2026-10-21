@@ -132,6 +132,15 @@ outcome. Decisions taken in that review:
 
 ## Platform review (2026-10-21)
 
+- **A retired key says so.** `GET /api/definitions/:kind/:key` and a page's data answer 409 `definition_retired` for
+  a key whose latest version is retired (on the files and in the database), with the retirement note — the first
+  sentence of a summary written `Retired — <why, or what replaced it (its id)>. …` — and where to go instead; exact
+  versions still load for run history. No `successor` field: the note names the replacement, which is enough for
+  the person. A key never published is 404 with a hint for the person (no CLI command).
+- **Browsers learn that content changed, not what.** `definitions.changed` carries `{all: true}`, never the keys:
+  they named definitions the person's roles may not open. The web app refetches its content on any change anyway.
+  Rejected: filtering keys per session by `requires.portalRoles` (an async lookup per change and per key for no gain
+  in the browser).
 - **One content schema version, bumped only for breaking schema changes.** `CONTENT_SCHEMA_VERSION`
   (`@adminforge/schemas`, `schema-version.ts`) is a single integer for every kind; `adminforge publish` stamps it on
   each definition row (`definitions.schema_version`, a plain `ADD COLUMN … DEFAULT 1`: no table rebuild, rows from

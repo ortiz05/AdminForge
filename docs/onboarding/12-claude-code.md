@@ -34,8 +34,8 @@ well, it is the fastest way to a consistent change; you still own every line it 
 
 1. **Describe the outcome**, not the implementation: "Add a report of guests who haven't signed in for 90 days,
    exportable, emailed every Monday." Name a skill if you want to be sure ("use the adding-a-playbook skill").
-2. **Let it search first.** A good session starts by finding existing content and code to extend; push back if it
-   jumps straight to new files.
+2. **Let it search first.** A good session starts by finding existing content
+   (`pnpm adminforge list --section <section>`) and code to extend; push back if it jumps straight to new files.
 3. **Review the plan for big changes** before it writes code (ask it to plan first), especially for API, security or
    schema changes.
 4. **Run the reviewer agents** before you commit — they review `git diff HEAD` — or ask them to review

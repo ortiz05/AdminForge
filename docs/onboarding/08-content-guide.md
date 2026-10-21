@@ -9,7 +9,7 @@ happen. Each kind has a Claude Code skill with the detailed rules — this page 
 | Kind       | Folder                                                                       | What it is                                                                              | Skill                        |
 | ---------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------- |
 | page       | `pages/<section>/`                                                           | A list, entity view or tool page rendered at `/p/<id>`                                  | `adding-a-page-or-report`    |
-| dashboard  | `dashboards/`                                                                | KPIs and charts                                                                         | `adding-a-page-or-report`    |
+| dashboard  | `dashboards/<section>/` (section overviews flat)                             | KPIs and charts                                                                         | `adding-a-page-or-report`    |
 | report     | `reports/<section>/`                                                         | An exportable page; appears in the Reports catalogue automatically                      | `adding-a-page-or-report`    |
 | playbook   | `playbooks/<section>/`                                                       | A change: inputs → dry-run preview → confirm → steps (read and write)                   | `adding-a-playbook`          |
 | runbook    | `runbooks/<section>/`                                                        | A guided procedure of playbooks and manual steps                                        | `adding-a-playbook`          |
@@ -29,7 +29,9 @@ The navigation rail's parent sections (`navigation.yaml`) are `overview`, `ident
 definition joins one with `nav.section`; a report's catalogue area is its id's first segment or `area:`; a probe's
 service is `group:` (a section key, or `platform` for AdminForge itself). Folders follow the id, not the section: the
 Exchange, SharePoint and Teams pages kept their `m365.*` ids (and `pages/m365/`) when they moved to their own sections,
-so links, schedules and saved views kept working. A new section for a service or team follows the pattern in
+so links, schedules and saved views kept working. `adminforge validate` enforces it (folder = id prefix; the exceptions
+and the full taxonomy are in [`portal/content/README.md`](../../portal/content/README.md)), and
+`adminforge list --section <key>` finds a section's content wherever it is filed. A new section for a service or team follows the pattern in
 [`docs/extending.md`](../extending.md#extension-points) (navigation entry, overview dashboard, reports area, probes
 with a group and a "Service checks" item).
 
@@ -56,9 +58,9 @@ requires:
 - **Scaffold, don't copy-paste:** `pnpm adminforge new <kind> <section>/<name>` (kinds: page, dashboard, report,
   playbook, runbook, connection, probe, schedule, feed; pages also take
   `--template list-detail|dashboard|report|entity`) writes the file, a fixture stub and the right `$schema` line.
-  Runner scripts are added by hand with their skill (`adding-a-runner-script`).
-- **Reuse first:** search (`rg -l "<topic>" portal/content`) and extend an existing definition before adding a
-  near-duplicate.
+  Scripts are added by hand with their skill (`adding-a-runner-script`).
+- **Reuse first:** `pnpm adminforge list --section <section>` (or `--kind`, `--search`, `--status`) and
+  `rg -l "<topic>" portal/content`; extend an existing definition before adding a near-duplicate.
 - **Installation values** are `${ env.X }` with the key documented in `config/example.env` — never literal tenant
   values. Expressions can read only non-secret `AF_*` keys.
 - **Requirements:** `requires` can also name `azureRoles`. Licences: declare them and record anything new in
@@ -176,7 +178,7 @@ from a reviewed commit on `main` ([Releases and operations](13-releases-and-oper
 
 ## Before you open the PR
 
-- [ ] Searched for an existing definition; extended it if one fits
+- [ ] Searched for an existing definition (`pnpm adminforge list`); extended it if one fits
 - [ ] `version` bumped on every changed definition; `status` right
 - [ ] `requires` complete: roles, exact scopes, Entra/Azure role guidance, licences
 - [ ] Untrusted values quoted (`$kql()`, not character stripping); filters at the source; Resource Graph join limits;

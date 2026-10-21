@@ -38,8 +38,10 @@ extension point — and the reviewer agents in `.claude/agents/`.
 3. **Content first.** A new page, report, playbook, runbook, schedule, or probe is YAML in `portal/content`, not code.
    Only when the renderer/engine can't express it, extend them _generically_ (and document in `docs/widgets.md` or the
    schema) — never special-case one page.
-4. **Reuse before adding.** Search existing content first (`rg -l "<topic>" portal/content`, `rg "^id:" portal/content`).
-   Extend an existing playbook or page (bump its `version`) rather than creating a near-duplicate.
+4. **Reuse before adding.** Search existing content first: `pnpm adminforge list --section <section>` or
+   `--kind <kind> --search "<words>"` (folders follow ids, not sections: `portal/content/README.md`), and
+   `rg -l "<topic>" portal/content` for full text. Extend an existing playbook or page (bump its `version`) rather than
+   creating a near-duplicate.
 5. **Design tokens only.** UI code uses token utilities (`bg-panel`, `text-fg-2`, `border-line`, `h-(--af-control-h)`);
    no raw colours, no arbitrary Tailwind values. Change the look in `portal/packages/design-tokens/src/tokens.ts`.
    Ember (`armed`) means write mode — nothing else may use it.
@@ -79,6 +81,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Provisioning status            | `pnpm adminforge provision status` (every provisioned object ✓/✗ plus live token checks)                                                 |
 | Database migrations            | `pnpm --filter @adminforge/api db:migrate` (optional: the API migrates its database file at start)                                       |
 | Dev against the tenant         | `pnpm --filter @adminforge/api init:local` once, then `pnpm dev` (config from the env file; see below)                                   |
+| Find content                   | `pnpm adminforge list [--kind k] [--section s] [--status s] [--search text] [--json]`                                                    |
 | Scaffold content               | `pnpm adminforge new <kind> <section>/<name> [--template list-detail\|dashboard\|report\|entity]`                                        |
 | Validate content               | `pnpm adminforge validate` (add `--scopes` to compare with the app registrations)                                                        |
 | Playbook/runbook tests         | `pnpm adminforge test [pattern]`                                                                                                         |

@@ -41,12 +41,13 @@ New to AdminForge? Start with the [engineer onboarding guide](onboarding/README.
 
 ## Extending it
 
-| Doc                                                     | Owns                                                                | Audience               | Update when                                                      |
-| ------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------- |
-| [`docs/extending.md`](extending.md)                     | How each extension point is done with Claude Code, and the workflow | Engineers              | How something is extended changes (with the matching skill)      |
-| [`.claude/skills/`](../.claude/skills/)                 | One step-by-step skill per extension point                          | Claude Code, engineers | A schema field, CLI command, widget option or convention changes |
-| [`.claude/agents/`](../.claude/agents/)                 | The reviewer agents: content, security, design                      | Claude Code, reviewers | What a review must check changes                                 |
-| [`.claude/hooks/README.md`](../.claude/hooks/README.md) | The Claude Code hooks and what each runs after an edit              | Engineers              | A hook is added or changes                                       |
+| Doc                                                       | Owns                                                                                                        | Audience                     | Update when                                                      |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------- |
+| [`docs/extending.md`](extending.md)                       | How each extension point is done with Claude Code, and the workflow                                         | Engineers                    | How something is extended changes (with the matching skill)      |
+| [`portal/content/README.md`](../portal/content/README.md) | Where content goes: folder = id prefix and its exceptions, sections, finding content with `adminforge list` | Content authors, Claude Code | A content kind, a folder rule or an exception changes            |
+| [`.claude/skills/`](../.claude/skills/)                   | One step-by-step skill per extension point                                                                  | Claude Code, engineers       | A schema field, CLI command, widget option or convention changes |
+| [`.claude/agents/`](../.claude/agents/)                   | The reviewer agents: content, security, design                                                              | Claude Code, reviewers       | What a review must check changes                                 |
+| [`.claude/hooks/README.md`](../.claude/hooks/README.md)   | The Claude Code hooks and what each runs after an edit                                                      | Engineers                    | A hook is added or changes                                       |
 
 ## Why it is this way, and what is next
 

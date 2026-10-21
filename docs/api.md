@@ -712,7 +712,9 @@ waits for, and `Portal.Admin`; `metadata` for everyone else (S-25). Automation r
 - **Body:** `{confirmed: boolean, notes? (≤ 4000), values? (validated against the step's declared fields)}`.
 - **Response:** `{status}`. Audited.
 - **Errors:** `run_not_found` 404, `task_not_found` 404, `run_finished` 409, `already_decided` 409, `forbidden` 403,
-  `invalid_inputs` 400.
+  `invalid_inputs` 400, `not_armed` 403.
+- Confirming a step with write steps after it (non-dry-run) needs the caller to be **armed**, as approving such a gate
+  does: later steps run as them (`not_armed` 403, hint "Arm write access, then confirm."). Declining needs nothing.
 - Confirming a step that takes values is only allowed for the person it waits for (the initiator, or the approver
   after an approval) — otherwise `not_your_step` 403; anyone allowed may decline. Values are audited with `redact`
   fields masked.

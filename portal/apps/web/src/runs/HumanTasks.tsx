@@ -17,7 +17,7 @@ import {
 import { WriteAction } from '../app/WriteAction';
 import { useShell } from '../app/shell-context';
 import { activeRunsQueryKey } from './keys';
-import { api } from '../lib/api';
+import { api, ApiRequestError } from '../lib/api';
 import { useMe } from '../lib/session';
 import { Callout } from '../ops/ui';
 import { decide, type ApprovalItem, type Decision } from './approvals';
@@ -246,6 +246,8 @@ export function ManualStepCard({
   instructions: string;
   checklist: string[];
 }) {
+  const me = useMe();
+  const { arm, openArmDialog } = useShell();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<boolean[]>(() => checklist.map(() => false));
@@ -266,6 +268,9 @@ export function ManualStepCard({
       void queryClient.invalidateQueries({ queryKey: ['runs'] });
     },
   });
+  /** The API refused Mark done without write access (the steps after it write). */
+  const needsArm =
+    mutation.isError && mutation.error instanceof ApiRequestError && mutation.error.code === 'not_armed';
   return (
     <div className="flex flex-col gap-3 rounded-(--af-panel-radius) border border-accent bg-panel p-4 shadow-1">
       <p className="af-eyebrow text-accent">Your turn</p>
@@ -295,9 +300,32 @@ export function ManualStepCard({
             : 'Recorded with the step (ticket numbers, what you saw).'
         }
       />
-      {mutation.isError && (
+      {/* The steps after this one change the tenant and run as you: marking it done needs write access. */}
+      {needsArm && !arm.armed && (
+        <Callout
+          tone="info"
+          role="alert"
+          title="Marking this done needs write access"
+          icon={<LockKeyOpenIcon size={18} />}
+          action={
+            me.canArm ? (
+              <Button size="sm" onClick={openArmDialog}>
+                <LockKeyOpenIcon size={14} aria-hidden />
+                Arm write access
+              </Button>
+            ) : undefined
+          }
+        >
+          The steps after this one change the tenant and run as you. Arm write access, then mark it done.
+          Saying you can’t do it doesn’t need it.
+        </Callout>
+      )}
+      {mutation.isError && !needsArm && (
         <Callout tone="crit" role="alert" title="That wasn’t recorded">
           {(mutation.error as Error).message}
+          {mutation.error instanceof ApiRequestError && mutation.error.hint && (
+            <span className="mt-1 block">{mutation.error.hint}</span>
+          )}
         </Callout>
       )}
       <div className="flex flex-wrap justify-end gap-2">

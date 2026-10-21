@@ -8,6 +8,7 @@ import {
   redactInputs,
   stepIdOf,
   validateInputs,
+  writesAfter,
   type AutomationDefinition,
   type InputIssue,
   type RunError,
@@ -1387,6 +1388,12 @@ export class RunService {
             hint: `Ask ${task.policy.requestedByUpn ?? 'the engineer running it'} to complete it, or mark it as not done.`,
           },
         );
+      // The steps after it run as the person who confirms: when they write, confirming needs write access, as approving
+      // such a gate does — a read-only session (or a copied read-only id) can't let them go out.
+      if (!row.dryRun && (def ? writesAfter(def, path) : true) && !isArmed(s, this.deps.now()))
+        throw new AppError(403, 'not_armed', 'The steps after this one change data and will run as you.', {
+          hint: 'Arm write access, then confirm.',
+        });
       if (params || input.values) {
         const v = await validateInputs(params, input.values ?? {}, {
           now: this.deps.now(),

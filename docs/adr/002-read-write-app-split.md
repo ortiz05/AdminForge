@@ -12,7 +12,7 @@ for its resource, not only the ones requested, so once an app holds write scopes
 there is no genuinely read-only token from that app. Conditional Access can only target an app (or an authentication
 context), and "assignment required" can only limit who may sign in to an app as a whole.
 
-## Options considered
+### Options considered
 
 - **One app with incremental consent** (request write scopes only when needed). Rejected: after the first consent the
   write scopes ride in every token; a read page's token could change the tenant.

@@ -13,7 +13,7 @@ distribution lists, Teams policies or SharePoint tenant settings; the Exchange O
 must run with the calling engineer's delegated tokens (Read or Write app, by mode), one person's tokens must never
 reach another person's job, and module imports take seconds.
 
-## Options considered
+### Options considered
 
 - **Azure Functions with PowerShell.** Rejected: a 230-second HTTP response limit, cold module loads on every
   scale-out, and tokens would have to sit in queue messages.

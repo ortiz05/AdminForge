@@ -11,7 +11,7 @@ Delegated access must stay honest. A playbook run outlives the request that star
 for input, for write access, or simply run in the background. AdminForge's principle is that it can never do more
 than the engineer could do themselves, and that a second person's approval means a second person acts.
 
-## Options considered
+### Options considered
 
 - **Stored service-account refresh tokens** (one account runs every background step). Rejected: app-only access by
   another name — every run could do what that account can, whoever started it.

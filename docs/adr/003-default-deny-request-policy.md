@@ -12,7 +12,7 @@ Teams admin API's `user_impersonation` can't express "read only", so even a Read
 the engineer's own role allows. Microsoft Graph's read scopes are fine-grained, but several reads are POSTs (`$batch`,
 Resource Graph and Log Analytics queries), so "GET only" doesn't separate reads from writes either.
 
-## Options considered
+### Options considered
 
 - **Trust Microsoft's authorization (RBAC) alone.** Rejected: an engineer with Contributor or Exchange admin rights
   could change the tenant from a page meant to read it, and a bug in content could too.

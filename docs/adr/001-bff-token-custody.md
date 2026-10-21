@@ -13,7 +13,7 @@ tokens can do what the engineer can. A browser is the easiest place to steal the
 compromised dependency or a malicious extension reads anything JavaScript can read. The IETF guidance for OAuth in
 browser-based apps recommends a backend-for-frontend for exactly this risk profile.
 
-## Options considered
+### Options considered
 
 - **SPA with MSAL.js, tokens in browser storage** — the default for single-page apps. Rejected: access and refresh
   tokens sit where any script on the page can read them, and the blast radius is the engineer's whole admin access.

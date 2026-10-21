@@ -14,7 +14,7 @@ else. Many people (and Claude Code) add screens and content, so a page must not 
 be checked by a test rather than by eye, and an administrator should be able to adjust a few things (the accent, the
 radius scale) without a release.
 
-## Options considered
+### Options considered
 
 - **A component library's theme (Fluent UI).** Rejected: AdminForge would look like the Azure portal, and the theme
   doesn't stop a page from using any colour.

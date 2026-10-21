@@ -7,12 +7,8 @@ Status: proposed | accepted (YYYY-MM-DD) | superseded by ADR-NNN
 
 ## Context
 
-What problem forces a decision now, and the constraints (security model, identities, operations).
-
-## Options considered
-
-- **Each alternative that was weighed** — and the reason it lost.
-- **The chosen one.** Chosen: why.
+What problem forces a decision now, the constraints (security model, identities, operations), and the alternatives
+that were considered — each with the reason it lost.
 
 ## Decision
 

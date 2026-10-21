@@ -12,7 +12,7 @@ should do are systems engineers, not front-end developers, and a portal for the 
 reports, playbooks and checks that look and behave the same. Each needs review — many change the tenant — and
 expressions in them see tenant data, so they must not be able to run arbitrary code.
 
-## Options considered
+### Options considered
 
 - **Code-only pages** (a React screen per page). Rejected: every page is a release, the look drifts page by page and
   reviewers must read UI code to see what a page calls.

@@ -179,8 +179,9 @@ the reason.
   `idempotent: false` (then the run ends `needs_review`), so write steps whose second send would hurt declare
   `idempotent: false` (`tests/content/non-idempotent-writes.test.ts`). Such a step's request is also sent at most once
   by the HTTP client (`sendOnce`): never again after a server error, a network failure or a timeout, only after a 429,
-  which Microsoft answers before processing the request. A worker whose run lock lapsed stops at its next checkpoint
-  once its lease renewal notices.
+  which Microsoft answers before processing the request — and validate refuses a `retry` policy on it. A sign-in
+  (claims) challenge on an Azure long-running operation's poll fails the step instead of sending the accepted change
+  again. A worker whose run lock lapsed stops at its next checkpoint once its lease renewal notices.
 - **A resumed run checks again before it writes** (`engine.ts` › `recheck`). After any pause — an approval, input,
   write access, a sign-in, a `wait`, a restart — the reads, transforms and asserts the run ran since the last write
   sent in their scope run again right before its next write, so a check such as "the session still belongs to this

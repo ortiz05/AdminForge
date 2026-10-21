@@ -570,6 +570,14 @@ function checkAutomation(
             path: [...at, 'describe'],
             message: 'Write steps need describe (shown in the dry-run plan).',
           });
+        // Sent at most once whenever the outcome is unknown: a retry policy would send it again (security review).
+        if (step.idempotent === false && step.retry)
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'retry'],
+            message:
+              'A step marked idempotent: false is never sent twice: remove retry (or idempotent: false, if a second send is harmless).',
+          });
         if (step.onError === 'compensate' && def.mode !== 'write')
           ctx.addIssue({
             code: 'custom',

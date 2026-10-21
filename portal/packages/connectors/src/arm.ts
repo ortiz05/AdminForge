@@ -89,6 +89,22 @@ export function createArmClient(opts: ArmClientOptions) {
       headers: r.headers,
     }));
 
+  /**
+   * A read after Azure accepted the request (a poll, the final result). Its sign-in (claims) challenge loses the
+   * challenge: the caller answers one by running the whole call again with a new token, which would send the accepted
+   * change a second time (security review). The step fails instead, saying the change was accepted.
+   */
+  const afterAccepted = <T>(url: string) =>
+    get<T>(url).catch((err: unknown) => {
+      if (!(err instanceof ApiError) || err.status !== 401 || !err.claims) throw err;
+      throw new ApiError(
+        401,
+        err.code,
+        'Azure accepted the change, but reading whether it finished needed a new sign-in. It was not sent again: check the resource before running anything again.',
+        err.requestId,
+      );
+    });
+
   /** Follows `nextLink`; refuses links that leave ARM. */
   async function* pages<T>(req: ArmRequest, maxPages = 50): AsyncGenerator<T[]> {
     let next: string | undefined = buildArmUrl(base, req);
@@ -145,7 +161,9 @@ export function createArmClient(opts: ArmClientOptions) {
       ensureArm(asyncOp, 'Azure-AsyncOperation');
       for (;;) {
         await wait();
-        const poll = await get<{ status?: string; error?: { code?: string; message?: string } }>(asyncOp);
+        const poll = await afterAccepted<{ status?: string; error?: { code?: string; message?: string } }>(
+          asyncOp,
+        );
         retryAfter = poll.headers.get('retry-after');
         const status = (poll.data?.status ?? '').toLowerCase();
         if (!TERMINAL.has(status)) continue;
@@ -156,8 +174,8 @@ export function createArmClient(opts: ArmClientOptions) {
             poll.data?.error?.message ?? `The Azure operation ended as ${poll.data?.status}.`,
             poll.requestId,
           );
-        if (method === 'PUT' || method === 'PATCH') return get<T>(resourceUrl);
-        if (method === 'POST' && location) return get<T>(ensureArm(location, 'Location'));
+        if (method === 'PUT' || method === 'PATCH') return afterAccepted<T>(resourceUrl);
+        if (method === 'POST' && location) return afterAccepted<T>(ensureArm(location, 'Location'));
         return poll as ArmResult<T>;
       }
     }
@@ -165,7 +183,7 @@ export function createArmClient(opts: ArmClientOptions) {
       ensureArm(location, 'Location');
       for (;;) {
         await wait();
-        const poll = await get<T>(location);
+        const poll = await afterAccepted<T>(location);
         retryAfter = poll.headers.get('retry-after');
         if (poll.status !== 202) return poll;
       }
@@ -178,7 +196,7 @@ export function createArmClient(opts: ArmClientOptions) {
     ) {
       for (;;) {
         await wait();
-        const poll = await get<T>(resourceUrl);
+        const poll = await afterAccepted<T>(resourceUrl);
         retryAfter = poll.headers.get('retry-after');
         const state = provisioning(poll.data)?.toLowerCase();
         if (!state || state === 'succeeded') return poll;

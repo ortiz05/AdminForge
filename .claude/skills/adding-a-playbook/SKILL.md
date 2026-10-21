@@ -50,7 +50,7 @@ Markdown sections, manual steps and executable steps.
      who holds it now (`avd.log-off-user-session`: `sameUser`).
    - `compensate` runs only when a **later** step fails with `onError: compensate` (completed steps are undone in
      reverse). A playbook whose last step is its only write has nothing to undo it: don't promise an undo — say "run it
-     again with the other setting" (`avd.set-drain-mode`).
+     again with the other setting" (`avd.set-drain-mode`). `validate` warns about a `compensate` that can never run.
 5. **Risk:** `risk: low|medium|high|critical`. `high` and `critical` playbooks and runbooks need a `confirm` block (the
    schema enforces it), `typed` with the value the person recognises (the UPN, the object's name). A playbook offered as
    a bulk action (`bulkActions`) confirms by typing from `medium` up too: a bulk run asks for the item count. `click` is
@@ -108,7 +108,8 @@ Operator` for drain mode, `Desktop Virtualization User Session Operator` for mes
 11. **Try it in mock mode:** arm with the dev toolbar, preview, then run to the end. A write with no fixture is
     accepted (there is no tenant); a read needs one (`docs/content-recipes.md` › Fixtures). Drafts can be previewed
     but never run.
-12. **Validate live only on `AF-Test-*` objects** (`validating-against-a-tenant`): dry run, then run, then compensate.
+12. **Validate live only on `AF-Test-*` objects** (`validating-against-a-tenant`): dry run, then run, then compensate
+    where a later step can fail into it (otherwise undo it by hand as the summary says).
 
 ## Done when
 
@@ -119,7 +120,8 @@ Operator` for drain mode, `Desktop Virtualization User Session Operator` for mes
 - [ ] Every precondition is an `assert` step before the write it guards (so it runs again after a pause)
 - [ ] Scopes exist on the Write app (`validate --scopes`); a tier-0 opt-in is named in the PR
 - [ ] It runs end to end in mock mode from the page that offers it
-- [ ] Dry run → run → compensate passed on `AF-Test-*` objects, or the live check is recorded as still to do
+- [ ] Dry run → run (→ compensate, where a later step can fail into it) passed on `AF-Test-*` objects, or the live
+      check is recorded as still to do
 - [ ] `content-reviewer` ran and its findings are fixed or answered
 
 ## Common mistakes

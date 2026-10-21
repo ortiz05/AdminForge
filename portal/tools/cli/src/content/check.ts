@@ -12,7 +12,8 @@
  *   - `env.X` references to keys that config/example.env does not declare;
  *   - Graph writes naming a user after `/users/` by anything but `$guid()` (content/lint.ts `usersWriteProblems`);
  *   - a file outside the folder its id names (`folderPrefixProblem`: folder = id prefix, portal/content/README.md).
- * Warnings (printed, never fail): a `$schema` that doesn't point at the generated JSON schema, Graph beta endpoints.
+ * Warnings (printed, never fail): a `$schema` that doesn't point at the generated JSON schema, Graph beta endpoints,
+ * a `compensate` that can never run (`unreachableCompensations`).
  *
  * Reads files only (content, scripts, config/example.env); no network, no database, nothing in the tenant.
  */
@@ -118,6 +119,84 @@ export function folderPrefixProblem(file: string, def: Placed): string | null {
   return `${def.id} belongs in ${expected}/ — a definition's folder is its id prefix (portal/content/README.md). Move the file: a published id never changes.`;
 }
 
+/** A step as the compensation rule reads it. */
+interface FlowStep {
+  id?: string;
+  type?: string;
+  onError?: string;
+  compensate?: unknown;
+  then?: unknown;
+  else?: unknown;
+  steps?: unknown;
+}
+
+/** A `compensate` block that can never run: where it is, and its step as `steps.<id>[.<id>…]` (or `sections.<id>…`). */
+export interface UnreachableCompensation {
+  segments: Array<string | number>;
+  path: string;
+}
+
+/**
+ * The `compensate` blocks of a playbook or runbook that can never run. The engine undoes completed steps only when a
+ * step with `onError: compensate` fails (engine.ts › `policy`, `finishCompensation`): a leaf step, or a branch or
+ * forEach whose steps failed. So a step's `compensate` runs only if such a step can fail after the step completed —
+ * one written after it, a branch or forEach around it, or any step of a forEach around it (a later item can fail).
+ * Generous on purpose (a step in a branch's other arm counts as after it): this backs a warning, never a false one.
+ */
+export function unreachableCompensations(def: {
+  steps?: unknown;
+  sections?: unknown;
+}): UnreachableCompensation[] {
+  interface Node {
+    step: FlowStep;
+    segments: Array<string | number>;
+    ids: string[];
+    ancestors: Node[];
+    index: number;
+    /** Index after its last descendant. */
+    end: number;
+  }
+  const nodes: Node[] = [];
+  const visit = (steps: unknown, at: Array<string | number>, ids: string[], ancestors: Node[]) => {
+    if (!Array.isArray(steps)) return;
+    steps.forEach((s: FlowStep, i) => {
+      if (!s || typeof s !== 'object') return;
+      const node: Node = {
+        step: s,
+        segments: [...at, i],
+        ids: [...ids, String(s.id)],
+        ancestors,
+        index: nodes.length,
+        end: 0,
+      };
+      nodes.push(node);
+      const inner = [...ancestors, node];
+      if (s.type === 'branch') {
+        visit(s.then, [...at, i, 'then'], node.ids, inner);
+        visit(s.else, [...at, i, 'else'], node.ids, inner);
+      }
+      if (s.type === 'forEach') visit(s.steps, [...at, i, 'steps'], node.ids, inner);
+      node.end = nodes.length;
+    });
+  };
+  visit(def.steps, ['steps'], ['steps'], []);
+  if (Array.isArray(def.sections))
+    def.sections.forEach((sec: { id?: string; steps?: unknown }, i) =>
+      visit(sec?.steps, ['sections', i, 'steps'], ['sections', String(sec?.id)], []),
+    );
+  const fails = (n: Node) => n.step.onError === 'compensate';
+  const within = (n: Node) => nodes.slice(n.index + 1, n.end);
+  return nodes
+    .filter(
+      (n) =>
+        n.step.compensate &&
+        !nodes.slice(n.end).some(fails) &&
+        !n.ancestors.some(fails) &&
+        !n.ancestors.some((a) => a.step.type === 'forEach' && within(a).some(fails)),
+    )
+    .map((n) => ({ segments: [...n.segments, 'compensate'], path: [...n.ids, 'compensate'].join('.') }));
+}
+
 /**
  * Schema, references, expression compilation, injection lint (OData, KQL, paths), datasource rules, script pins,
  * env keys, folders, `$schema` paths. No network.
@@ -176,6 +255,11 @@ export async function checkContent(
       );
     if (JSON.stringify(d.def).includes('"beta":true'))
       warnings.push(`${d.file}: uses Microsoft Graph beta (preview) endpoints.`);
+    if ((d.def.kind === 'playbook' || d.def.kind === 'runbook') && d.def.status !== 'retired')
+      for (const u of unreachableCompensations(d.def as { steps?: unknown; sections?: unknown }))
+        warnings.push(
+          `${at(u.segments)} ${u.path}: never runs — completed steps are undone only when a step after them fails with onError: compensate, and none can. Add onError: compensate to a later step, or remove the block and say how to undo the change (playbook skill, step 4).`,
+        );
   }
   return { definitions: definitions.length, errors: errs, warnings, loaded: definitions };
 }

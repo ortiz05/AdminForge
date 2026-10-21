@@ -62,36 +62,40 @@ const pinnedCells = () => [
 ];
 
 describe('DataTable: the end-pinned column and long headers', () => {
-  it('keeps the end-pinned column at the right edge, on the row’s own surface', async () => {
-    const { container } = renderTable();
-    for (const cell of pinnedCells()) expect(cell).toHaveClass('sticky', 'right-0');
-    // Body cells take the row's surface (hover, selected), so the columns scrolling under them never show through.
-    const body = screen.getAllByRole('button', { name: /^Actions for / })[0]!.closest('[role="gridcell"]')!;
-    expect(body).toHaveClass('bg-inherit');
-    expect(body.closest('[role="row"]')).toHaveClass('bg-panel');
-    expect(screen.getByRole('columnheader', { name: 'Actions' })).toHaveClass('bg-panel');
-    expect(await axeViolations(container)).toEqual([]);
-  });
-
-  it('draws a hairline on its edge only while the other columns scroll under it', () => {
+  it('while the columns scroll sideways, keeps the end-pinned column at the right edge with a hairline', async () => {
     const restore = stubWidths(1268, 1134);
     try {
-      renderTable();
-      for (const cell of pinnedCells()) expect(cell).toHaveClass('border-l');
+      const { container } = renderTable();
+      for (const cell of pinnedCells()) expect(cell).toHaveClass('sticky', 'right-0', 'border-l');
+      // Body cells take the row's surface (hover, selected), so the columns scrolling under them never show through.
+      const body = screen.getAllByRole('button', { name: /^Actions for / })[0]!.closest('[role="gridcell"]')!;
+      expect(body).toHaveClass('bg-inherit');
+      expect(body.closest('[role="row"]')).toHaveClass('bg-panel');
+      expect(screen.getByRole('columnheader', { name: 'Actions' })).toHaveClass('bg-panel');
+      expect(await axeViolations(container)).toEqual([]);
     } finally {
       restore();
     }
-    const restoreFits = stubWidths(900, 1134);
+  });
+
+  it('when everything fits it is a plain cell', () => {
+    const restore = stubWidths(900, 1134);
     try {
-      const { unmount } = renderTable();
-      // The previous render is still mounted in the document; look at the newest table only.
-      const grids = screen.getAllByRole('grid', { name: 'Users' });
-      const last = grids[grids.length - 1]!;
-      expect(within(last).getByRole('columnheader', { name: 'Actions' })).not.toHaveClass('border-l');
-      unmount();
+      renderTable();
+      for (const cell of pinnedCells()) {
+        expect(cell).not.toHaveClass('sticky');
+        expect(cell).not.toHaveClass('border-l');
+      }
     } finally {
-      restoreFits();
+      restore();
     }
+  });
+
+  it('draws the row focus ring above the cells, so a pinned cell never covers it', () => {
+    renderTable();
+    const row = screen.getAllByRole('button', { name: /^Actions for / })[0]!.closest('[role="row"]')!;
+    expect(row).toHaveClass('after:absolute', 'after:inset-0', 'after:z-1', 'focus-visible:outline-none');
+    expect(row).toHaveClass('focus-visible:after:outline-2', 'focus-visible:after:outline-focus');
   });
 
   it('a long header wraps to two lines before it is cut off, and shows its full text when it is', () => {

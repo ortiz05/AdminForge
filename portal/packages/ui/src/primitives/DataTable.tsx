@@ -868,11 +868,11 @@ export function DataTable<T extends RowData>({
     scrollRef.current = el;
     setScrollEl(el);
   }, []);
-  // A column pinned to the end (row actions) stays at the right edge while the others scroll under it; a hairline
-  // marks its edge only while they do (design review L17: at 1440 px the Users actions were off-screen).
+  // While the columns scroll sideways, one pinned to the end (row actions) stays at the right edge with a hairline and
+  // the row's surface (design review L17: at 1440 px the Users actions were off-screen); otherwise it is a plain cell.
   const overflowsX = useOverflowsX(scrollEl, template);
   const pinnedEnd = (c: { pin?: 'start' | 'end' }, surface: string) =>
-    c.pin === 'end' ? cn('sticky right-0', surface, overflowsX && 'border-l border-line') : undefined;
+    c.pin === 'end' && overflowsX ? cn('sticky right-0 border-l border-line', surface) : undefined;
   const rowHeight = useRowHeight(rootEl, density, 40);
   const virtualizer = useVirtualizer({
     count: rows.length,

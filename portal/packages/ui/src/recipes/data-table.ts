@@ -11,7 +11,8 @@ export const dataTable = tv({
     inner: 'w-full min-w-fit',
     head: 'sticky top-0 z-(--af-z-sticky) border-b border-line bg-panel',
     headRow: 'grid grid-cols-(--af-dt-cols)',
-    th: 'group/th flex h-(--af-table-row-h) min-w-0 items-center gap-0.5 px-2 text-xs font-semibold text-fg-3 first:pl-(--af-pad-panel) last:pr-(--af-pad-panel)',
+    // A two-line header grows the header row (compact density) instead of touching its borders.
+    th: 'group/th flex min-h-(--af-table-row-h) min-w-0 items-center gap-0.5 px-2 py-1 text-xs font-semibold text-fg-3 first:pl-(--af-pad-panel) last:pr-(--af-pad-panel)',
     sortButton: [
       // A header may wrap to two lines (its text clamps); the button grows with it.
       '-mx-1 inline-flex min-h-7 min-w-0 items-center gap-1 rounded-sm px-1 text-left font-semibold',
@@ -25,7 +26,10 @@ export const dataTable = tv({
     row: [
       // The row's own surface (panel, hover, selected), which an end-pinned cell takes over the columns scrolling under it.
       'group/row absolute inset-x-0 top-0 grid h-(--af-table-row-h) grid-cols-(--af-dt-cols) items-center border-b border-line bg-panel text-fg',
-      'transition-colors duration-(--af-motion-fast) hover:bg-hover focus-visible:-outline-offset-2',
+      'transition-colors duration-(--af-motion-fast) hover:bg-hover',
+      // The focus ring is drawn on an overlay above the cells, so an end-pinned cell never covers it.
+      'after:pointer-events-none after:absolute after:inset-0 after:z-1 focus-visible:outline-none',
+      'focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus',
     ],
     td: 'flex h-full min-w-0 items-center px-2 first:pl-(--af-pad-panel) last:pr-(--af-pad-panel)',
   },

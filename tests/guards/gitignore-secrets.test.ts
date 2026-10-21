@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { repoRoot } from '../lib/repo';
 
-// Key material, env-file backups and database files never reach git (S-20): images are built from `git archive HEAD`
+// Env files, key material, env-file backups and database files never reach git (S-20): images are built from `git archive HEAD`
 // (portal/deploy/kubernetes/build-images.sh), so whatever is committed ships. `adminforge db backup --plaintext` and
 // `db import-postgres --to` can leave a SQLite database (with its -wal/-shm files) in a checkout; a certificate export
 // or an editor's `.env.bak` is one `git add .` away. The repository's .gitignore must keep all of them out — checked
@@ -24,6 +24,15 @@ const MUST_BE_IGNORED = [
   'legacy.sqlite-wal',
   '.env',
   '.env.local',
+  // AdminForge's own env files (~/.config/adminforge/<env>.env, .admin.env, .host.env) copied into a checkout
+  'dev.env',
+  'dev.admin.env',
+  'config/validation.host.env',
+  'legacy.db-journal',
+  'certs/automation.jks',
+  'id_rsa',
+  'id_ecdsa',
+  '.ssh/id_ed25519',
 ];
 
 // Look-alikes that are source, documentation or the documented example and must stay committable.
@@ -51,7 +60,7 @@ function ignored(rel: string): boolean {
   return r.status === 0;
 }
 
-describe('.gitignore keeps key material, env backups and databases out of git', () => {
+describe('.gitignore keeps env files, key material, env backups and databases out of git', () => {
   it.each(MUST_BE_IGNORED)('ignores %s', (rel) => {
     expect(ignored(rel)).toBe(true);
   });

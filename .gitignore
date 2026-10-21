@@ -11,17 +11,23 @@ test-results/
 # so anything committed ships (tests/guards/gitignore-secrets.test.ts).
 .env
 .env.*
+*.env
 *.env.bak*
 !config/example.env
 *.pem
 *.pfx
 *.p12
 *.key
+*.jks
+id_rsa
+id_ecdsa
+id_ed25519
 .local/
 # Databases: `adminforge db backup --plaintext` or `db import-postgres --to` can leave one in a checkout (ADR-016)
 *.db
 *.db-wal
 *.db-shm
+*.db-journal
 *.sqlite*
 
 # Generated

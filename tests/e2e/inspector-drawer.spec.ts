@@ -7,7 +7,7 @@ import { mockApi, setPrefs, settle } from './support/mock-api';
 
 /**
  * The inspector drawer: `inspector-wide-factor` × the standard drawer width, never over the navigation rail; when that
- * leaves less than 24rem of the list beside it, it covers the list (light scrim that closes it, the page inert) instead
+ * leaves less than 16rem of the list beside it (MIN_LIST_BESIDE_INSPECTOR_REM), it covers the list (light scrim that closes it, the page inert) instead
  * of sharing the screen. "Open full page" sits in the header, keeps the inspector's tab, and focus moves through the
  * header in order and returns to the row on close. Expected widths come from the design tokens, not from numbers here.
  */
@@ -17,7 +17,7 @@ const navWidth = (collapsed: boolean) => px(collapsed ? L['nav-w-collapsed'] : L
 const drawerWidth = (viewport: number, collapsed: boolean) =>
   Math.min(Number(L['inspector-wide-factor']) * px(L['inspector-w']), viewport - navWidth(collapsed));
 const covers = (viewport: number, collapsed: boolean) =>
-  viewport - navWidth(collapsed) - drawerWidth(viewport, collapsed) < 24 * 16;
+  viewport - navWidth(collapsed) - drawerWidth(viewport, collapsed) < 16 * 16;
 
 async function openInspector(
   page: Page,
@@ -73,9 +73,9 @@ for (const width of [1280, 1440, 1920]) {
 }
 
 test('covering the list: the scrim over the visible sliver closes the inspector', async ({ page }) => {
-  // 1920px with the rail expanded: a sliver of the list stays visible beside the drawer, too narrow to use.
-  expect(covers(1920, false)).toBe(true);
-  const { row } = await openInspector(page, { width: 1920, navCollapsed: false });
+  // 1280px with the rail expanded: a sliver of the list stays visible beside the drawer, too narrow to use.
+  expect(covers(1280, false)).toBe(true);
+  const { row } = await openInspector(page, { width: 1280, navCollapsed: false });
   await page.locator('[data-drawer-cover]').click({ position: { x: 20, y: 200 } });
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page).not.toHaveURL(/inspect=/);
@@ -150,8 +150,9 @@ for (const closeWith of ['Escape', 'Close'] as const) {
 }
 
 for (const theme of ['steel', 'daylight'] as const) {
-  for (const width of [1280, 1920]) {
-    // The group inspector has a KPI strip: one row of KPIs when the drawer is wide.
+  for (const width of [1280, 1440, 1920]) {
+    // The group inspector has a KPI strip: one row of KPIs when the drawer is wide. At 1440 and 1920 the list stays
+    // visible beside it (D-10).
     test(`visual · group inspector · ${width}px · ${theme}`, async ({ page }) => {
       await openInspector(page, { theme, width, list: 'identity.groups' });
       await settle(page);

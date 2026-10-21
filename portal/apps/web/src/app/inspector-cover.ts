@@ -9,7 +9,8 @@ import { useSyncExternalStore } from 'react';
 import { scale } from '@adminforge/design-tokens';
 import { useHtmlAttribute } from '@adminforge/ui';
 
-export const MIN_LIST_BESIDE_INSPECTOR_REM = 24;
+/** Enough for the list's first column (a name and its sign-in line): rows beside the drawer stay clickable. */
+export const MIN_LIST_BESIDE_INSPECTOR_REM = 16;
 
 const px = (value: string) => Number.parseFloat(value);
 

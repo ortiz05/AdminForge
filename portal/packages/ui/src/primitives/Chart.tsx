@@ -40,6 +40,27 @@ export interface ChartProps {
 
 const isTheme = (v: string | null): v is ThemeName => (THEME_NAMES as readonly string[]).includes(v ?? '');
 
+/** Below this much room along the value axis its labels collide or crowd the plot: they're left out. */
+export const MIN_VALUE_AXIS_PX = 160;
+/** Category labels beside horizontal bars are cut at this width. */
+const CATEGORY_LABEL_PX = 180;
+/** About how wide one character of an axis label is (12 px UI font), to estimate the category labels' width. */
+const LABEL_CHAR_PX = 7;
+
+/** Every value is a whole number (counts): the value axis then steps by whole numbers, never 0.2, 0.4, … */
+const wholeNumbers = (series: ChartSeries[]) =>
+  series.every((sr) => sr.data.every((v) => v === null || Number.isInteger(v)));
+
+/**
+ * How much of the plot's width the value axis has to run along: all of it for vertical charts (its labels take the
+ * left edge), the width less the category labels for horizontal bars.
+ */
+function valueAxisRoom(width: number, horizontal: boolean, categories: string[]): number {
+  if (!horizontal) return width;
+  const longest = categories.reduce((n, c) => Math.max(n, c.length), 0);
+  return width - Math.min(CATEGORY_LABEL_PX, longest * LABEL_CHAR_PX);
+}
+
 /** ECharts bound to the token themes. Lazy-loads the runtime, follows `<html data-theme>`, and always offers a table view. */
 export function Chart({
   title,
@@ -63,10 +84,21 @@ export function Chart({
   const theme = isTheme(themeAttr) ? themeAttr : DEFAULT_THEME;
   const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const series = useMemo(() => allSeries.slice(0, MAX_SERIES), [allSeries]);
+  // The plot's measured width (0 until measured: then nothing is hidden).
+  const [plotWidth, setPlotWidth] = useState(0);
+  const cramped =
+    plotWidth > 0 && valueAxisRoom(plotWidth, horizontal && kind === 'bar', categories) < MIN_VALUE_AXIS_PX;
   const s = chart();
 
-  const option = useMemo(
-    () => ({
+  const option = useMemo(() => {
+    const valueAxis = {
+      type: 'value' as const,
+      ...(wholeNumbers(series) ? { minInterval: 1 } : {}),
+      // Too little room: no labels (the tooltip and the table view still give every value); otherwise ECharts drops
+      // the ones that would overlap.
+      axisLabel: { show: !cramped, hideOverlap: true, formatter: (v: number) => axisFormat(v) },
+    };
+    return {
       animation: !reducedMotion,
       animationDuration: 300,
       grid: { left: 4, right: 12, top: 12, bottom: 4, containLabel: true },
@@ -82,13 +114,13 @@ export function Chart({
               type: 'category' as const,
               data: categories,
               inverse: true,
-              axisLabel: { width: 180, overflow: 'truncate' as const },
+              axisLabel: { width: CATEGORY_LABEL_PX, overflow: 'truncate' as const },
             },
-            xAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => axisFormat(v) } },
+            xAxis: valueAxis,
           }
         : {
             xAxis: { type: 'category' as const, data: categories, boundaryGap: kind === 'bar' },
-            yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => axisFormat(v) } },
+            yAxis: valueAxis,
           }),
       series: series.map((sr) =>
         kind === 'bar'
@@ -111,9 +143,8 @@ export function Chart({
               emphasis: { focus: 'series' as const },
             },
       ),
-    }),
-    [kind, categories, series, stacked, title, valueFormat, axisFormat, horizontal, reducedMotion],
-  );
+    };
+  }, [kind, categories, series, stacked, title, valueFormat, axisFormat, horizontal, reducedMotion, cramped]);
 
   // Mount the chart once the plot is visible; load the runtime on first use.
   useEffect(() => {
@@ -124,9 +155,14 @@ export function Chart({
       if (disposed || !plotRef.current) return;
       const c = loadEcharts().init(plotRef.current, `af-${theme}`, { renderer: 'svg' });
       instance.current = c;
+      setPlotWidth(plotRef.current.clientWidth);
       setReady(true);
       if (typeof ResizeObserver !== 'undefined') {
-        observer = new ResizeObserver(() => c.resize());
+        observer = new ResizeObserver((entries) => {
+          c.resize();
+          const width = entries[entries.length - 1]?.contentRect.width;
+          if (width !== undefined) setPlotWidth(Math.round(width));
+        });
         observer.observe(plotRef.current);
       }
     });

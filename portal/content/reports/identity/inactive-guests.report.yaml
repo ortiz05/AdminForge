@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.inactive-guests
-version: 2.0.0
+version: 2.0.1
 title: Inactive guests
 summary: >-
   Guest accounts that haven't signed in for the chosen number of days, plus invitations never redeemed — the external
@@ -167,7 +167,7 @@ layout:
     id: domains
     title: Top home domains (inactive guests)
     type: bar
-    span: 3
+    span: 6
     rows: 1
     data: guests.domains
     x: domain

@@ -6,7 +6,8 @@ export const panel = tv({
     header: 'flex min-h-12 items-start justify-between gap-3 px-(--af-pad-panel) pt-(--af-pad-panel)',
     heading: 'flex min-w-0 flex-col gap-1.5',
     eyebrow: 'af-eyebrow',
-    title: 'truncate text-md leading-snug font-semibold text-fg',
+    /** Two lines before it's cut: a long title in a narrow panel stays readable. */
+    title: 'line-clamp-2 text-md leading-snug font-semibold break-words text-fg',
     description: 'text-sm text-fg-3',
     actions: 'flex shrink-0 items-center gap-1 -mt-1 -mr-1.5',
     body: 'min-w-0 flex-1 p-(--af-pad-panel)',

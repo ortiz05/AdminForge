@@ -157,7 +157,12 @@ describe('Playbook drawer', () => {
     const drawer = await screen.findByRole('dialog', { name: 'Disable sign-in' });
     await userEvent.click(within(drawer).getByRole('button', { name: 'Preview (dry run)' }));
     expect(await within(drawer).findByText('This preview expired')).toBeInTheDocument();
-    expect(within(drawer).getByText('Preview expired: Run previews again first.')).toBeInTheDocument();
+    expect(
+      within(drawer).getByText('Previews are good for 15 minutes. Select Run to preview again and confirm.'),
+    ).toBeInTheDocument();
+    expect(
+      within(drawer).getByText('Preview expired. Select Run to preview again and confirm.'),
+    ).toBeInTheDocument();
     await userEvent.click(within(drawer).getByRole('button', { name: 'Disable sign-in' }));
     expect(await screen.findByRole('dialog', { name: 'Disable sign-in?' })).toBeInTheDocument();
     expect(state.runPosts.filter((p) => (p as { dryRun: boolean }).dryRun)).toHaveLength(2);

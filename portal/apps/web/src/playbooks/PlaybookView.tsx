@@ -300,7 +300,7 @@ function PreviewSection({ flow }: { flow: PlaybookFlow }) {
                   ? (flow.preview.rejection.hint ?? 'Nothing ran. Preview again, then confirm.')
                   : !flow.preview.fresh
                     ? 'The plan below is for the earlier inputs. Nothing runs until you preview the current ones.'
-                    : `Previews are good for 15 minutes. ${flow.def.kind === 'runbook' ? 'Start runbook' : 'Run'} previews again first, then asks you to confirm.`}
+                    : `Previews are good for 15 minutes. Select ${flow.def.kind === 'runbook' ? 'Start runbook' : 'Run'} to preview again and confirm.`}
               </Callout>
             )}
           {detail.run.status === 'succeeded' && <PlanView plan={detail.plan} />}
@@ -581,7 +581,7 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
 /** "expires in 12 min" — the server refuses a preview after 15 minutes. `start`: what the run button is called. */
 function expiryText(ms: number | null, start: 'Run' | 'Start runbook'): string | null {
   if (ms === null) return null;
-  if (ms <= 0) return `Preview expired: ${start} previews again first.`;
+  if (ms <= 0) return `Preview expired. Select ${start} to preview again and confirm.`;
   const min = Math.ceil(ms / 60_000);
   return `Preview expires in ${min} min.`;
 }

@@ -89,7 +89,7 @@ test('the nav badge and the top-bar pill lead to the breaking news', async ({ pa
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Primary' });
   await expect(nav.getByRole('link', { name: 'News and changes (3 unread changes)' })).toBeVisible();
-  await page.getByRole('link', { name: '2 unread breaking changes: open News and changes' }).click();
+  await page.getByRole('link', { name: '2 new breaking changes: open News and changes' }).click();
   await expect(page).toHaveURL(/\/news\?breaking=true/);
   await expect(page.getByRole('button', { name: 'Remove filter Breaking only' })).toBeVisible();
   await expect(page.getByRole('article')).toHaveCount(3);

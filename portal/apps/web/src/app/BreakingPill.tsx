@@ -5,10 +5,11 @@ const pill = tv({
   base: [
     // Info, not crit: "breaking" covers advisories and deadlines too, and the pill is on every page. The News page
     // gives each item its own tone (incidents in crit).
-    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-accent/40 bg-accent-subtle px-2.5 text-xs font-semibold text-info',
-    'transition-colors duration-(--af-motion-fast) hover:border-accent',
+    // No outline: in the top bar only the mode pill (Read-only) is outlined.
+    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill bg-accent-subtle px-2.5 text-xs font-semibold text-info',
+    'transition-colors duration-(--af-motion-fast) hover:bg-accent/25',
     // In write mode the rail turns ember: the pill follows the rail's ink instead of adding a second colour.
-    'armed:border-on-armed/40 armed:bg-on-armed/15 armed:text-on-armed armed:hover:border-on-armed',
+    'armed:bg-on-armed/15 armed:text-on-armed armed:hover:bg-on-armed/25',
   ],
 });
 
@@ -24,7 +25,8 @@ export function BreakingPill({ count }: { count: number }) {
       to="/news"
       search={{ breaking: true }}
       className={pill()}
-      aria-label={`${count} unread breaking ${count === 1 ? 'change' : 'changes'}: open News and changes`}
+      // The name starts with what the pill shows ("4 new breaking"), so voice control can say it (WCAG 2.5.3).
+      aria-label={`${text} new breaking ${count === 1 ? 'change' : 'changes'}: open News and changes`}
     >
       <NewspaperIcon size={14} weight="fill" aria-hidden />
       <span className="tabular-nums">{text}</span>

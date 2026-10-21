@@ -50,18 +50,21 @@ describe('Breaking-news pill tone', () => {
   it('uses the info tone with the count, not the alarm tone', async () => {
     const { container } = renderShell(newsSummary({ breakingUnread: 4 }));
     const pill = await screen.findByRole('link', {
-      name: '4 unread breaking changes: open News and changes',
+      name: '4 new breaking changes: open News and changes',
     });
     expect(pill).toHaveTextContent('4new breaking');
+    // Its name starts with what it shows (WCAG 2.5.3), and only the mode pill beside it is outlined.
+    expect(pill.getAttribute('aria-label')).toMatch(/^4 new breaking/);
     expect(pill).toHaveClass('text-info', 'bg-accent-subtle');
     expect(pill.className).not.toMatch(TONE);
+    expect(pill.className).not.toMatch(/(^|\s)border(\s|-|$)/);
     expect(await axeViolations(container)).toEqual([]);
   });
 
   it('does not pulse: a quiet signal on every page', async () => {
     renderShell(newsSummary({ breakingUnread: 2 }));
     const pill = await screen.findByRole('link', {
-      name: '2 unread breaking changes: open News and changes',
+      name: '2 new breaking changes: open News and changes',
     });
     expect(pill.querySelector('svg')).not.toBeNull();
     expect(pill.innerHTML).not.toMatch(/animate-/);
@@ -70,7 +73,7 @@ describe('Breaking-news pill tone', () => {
   it('caps the count at 99+ and keeps following the rail in write mode', async () => {
     renderShell(newsSummary({ breakingUnread: 140 }));
     const pill = await screen.findByRole('link', {
-      name: '140 unread breaking changes: open News and changes',
+      name: '99+ new breaking changes: open News and changes',
     });
     expect(pill).toHaveTextContent('99+new breaking');
     expect(pill.className).toContain('armed:text-on-armed');

@@ -71,13 +71,13 @@ describe('News signals in the shell', () => {
       await within(nav).findByRole('button', { name: /^Overview \(\d+ pages hidden\)$/ }),
     );
     expect(await within(nav).findByRole('link', { name: 'News and changes' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /unread breaking/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /new breaking/ })).not.toBeInTheDocument();
   });
 
   it('the top bar shows unread breaking items and opens the feed filtered to them', async () => {
     const { router } = renderShell(newsSummary());
     const pill = await screen.findByRole('link', {
-      name: '2 unread breaking changes: open News and changes',
+      name: '2 new breaking changes: open News and changes',
     });
     // In the session rail (the top bar), not on the page.
     expect(pill.closest('header')).toHaveClass('af-rail');
@@ -90,7 +90,7 @@ describe('News signals in the shell', () => {
 
   it('the pill follows the rail in write mode instead of adding a second alarm colour', async () => {
     renderShell(newsSummary({ breakingUnread: 1 }));
-    const pill = await screen.findByRole('link', { name: '1 unread breaking change: open News and changes' });
+    const pill = await screen.findByRole('link', { name: '1 new breaking change: open News and changes' });
     expect(pill.className).toContain('armed:text-on-armed');
     expect(pill.className).not.toMatch(/(^|\s)(bg|text|border)-armed/);
   });

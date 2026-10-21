@@ -137,17 +137,21 @@ export function setHistoryOwner(oid: string | null): void {
   emit();
 }
 
-/** Sign-out: every user's history leaves this browser. */
-export function forgetAllHistory(): void {
+/** Every user's stored history leaves this browser; without `keepOwner` nothing is stored again until `setHistoryOwner`. */
+function forget({ keepOwner }: { keepOwner: boolean }): void {
   for (const k of storedKeys()) remove(k);
-  owner = null;
+  if (!keepOwner) owner = null;
   cache = [];
   emit();
 }
 
-// A 401 means the session ended (or needs a fresh sign-in): the history goes with it, as at sign-out, and nothing is
-// stored again until a signed-in session names its owner.
-onUnauthenticated(forgetAllHistory);
+/** Sign-out: every user's history leaves this browser. */
+export const forgetAllHistory = (): void => forget({ keepOwner: false });
+
+// Any 401 takes the stored history out of the browser, as sign-out does. When the session ended (or the answer isn't
+// AdminForge's) nothing is stored again until a signed-in session names its owner; after `reauth` — Microsoft wants a
+// fresh sign-in, the session and its person stay — the same person keeps recording.
+onUnauthenticated((code) => forget({ keepOwner: code === 'reauth' }));
 
 function subscribe(listener: () => void) {
   listeners.add(listener);

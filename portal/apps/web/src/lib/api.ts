@@ -38,22 +38,23 @@ export function rememberCsrf(token: string | undefined): void {
 
 const SIGN_IN_PATH = '/auth/login';
 
-const unauthenticatedListeners = new Set<() => void>();
+const unauthenticatedListeners = new Set<(code: string | undefined) => void>();
 
 /**
- * Runs `listener` on every 401 from the BFF — the session ended (idle or absolute expiry, perhaps in a tab left open)
- * or Microsoft wants a fresh sign-in — so what this browser keeps for the signed-in person (Query Studio history)
- * leaves with the session, not only at Sign out. Returns the unsubscribe.
+ * Runs `listener` on every 401 from the BFF, with its error code: `unauthenticated` (the session ended — idle or
+ * absolute expiry, perhaps in a tab left open), `reauth` (Microsoft wants a fresh sign-in; the session stays) or none
+ * (an answer that isn't AdminForge's). What this browser keeps for the signed-in person (Query Studio history) leaves
+ * with the session, not only at Sign out. Returns the unsubscribe.
  */
-export function onUnauthenticated(listener: () => void): () => void {
+export function onUnauthenticated(listener: (code: string | undefined) => void): () => void {
   unauthenticatedListeners.add(listener);
   return () => void unauthenticatedListeners.delete(listener);
 }
 
-function notifyUnauthenticated(): void {
+function notifyUnauthenticated(code: string | undefined): void {
   for (const listener of unauthenticatedListeners) {
     try {
-      listener();
+      listener(code);
     } catch {
       // Clean-up is best effort; the request's own error still reaches the caller.
     }
@@ -140,8 +141,8 @@ export async function api<T = unknown>(path: string, options: RequestOptions<T> 
   const data = text ? parseJson(text) : undefined;
 
   if (!res.ok) {
-    if (res.status === 401) notifyUnauthenticated();
     const parsed = parseApiError(data);
+    if (res.status === 401) notifyUnauthenticated(parsed?.error.code);
     const correlation = res.headers.get('x-correlation-id') ?? undefined;
     if (!parsed) {
       throw new ApiRequestError(
@@ -197,7 +198,9 @@ async function refreshCsrf(signal: AbortSignal | undefined, background: boolean)
       credentials: 'same-origin',
       signal,
     });
-    const me = res.ok ? parseJson(await res.text()) : undefined;
+    const text = await res.text();
+    if (res.status === 401) notifyUnauthenticated(parseApiError(parseJson(text))?.error.code);
+    const me = res.ok ? parseJson(text) : undefined;
     if (!isRecord(me) || typeof me.csrf !== 'string') return false;
     rememberCsrf(me.csrf);
     return true;

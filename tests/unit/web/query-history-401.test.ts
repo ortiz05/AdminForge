@@ -88,15 +88,35 @@ describe('Query Studio history on a 401', () => {
     expect(storage.getItem('adminforge.prefs')).toBe('{}');
   });
 
-  it('so does a request Microsoft wants a fresh sign-in for, and a 401 without an AdminForge body', async () => {
+  it('so does a request Microsoft wants a fresh sign-in for — the session stays, so the same person keeps recording', async () => {
     await call(json({ error: { code: 'reauth', message: 'Microsoft needs you to sign in again.' } }, 401));
     expect(storage.getItem(historyKey(A))).toBeNull();
-
-    setHistoryOwner(A);
+    expect(storage.getItem(historyKey(B))).toBeNull();
+    expect(readHistory()).toEqual([]);
     recordRun(entry('resources | take 1'));
     expect(storage.getItem(historyKey(A))).toContain('take 1');
+  });
+
+  it('so does a 401 without an AdminForge body (it is treated as a session that ended)', async () => {
     await call(new Response('<html>Unauthorized</html>', { status: 401, statusText: 'Unauthorized' }));
     expect(storage.getItem(historyKey(A))).toBeNull();
+    recordRun(entry('resources | take 1'));
+    expect(storage.getItem(historyKey(A))).toBeNull();
+  });
+
+  it('so does the 401 of the session check behind a stale-CSRF retry', async () => {
+    const fetch = vi.fn(async (url: string) =>
+      url === '/api/me'
+        ? json({ error: { code: 'unauthenticated', message: 'Session ended.' } }, 401)
+        : json({ error: { code: 'csrf', message: 'This page is out of date.' } }, 403),
+    );
+    vi.stubGlobal('fetch', fetch);
+    await expect(api('/auth/arm/extend', { method: 'POST', background: true })).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(fetch.mock.calls.map((c) => c[0])).toEqual(['/auth/arm/extend', '/api/me']);
+    expect(storage.getItem(historyKey(A))).toBeNull();
+    expect(storage.getItem(historyKey(B))).toBeNull();
   });
 
   it('after the 401 nothing is stored until a signed-in session names its owner again', async () => {

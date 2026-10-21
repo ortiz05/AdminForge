@@ -1,7 +1,8 @@
 # An example installation: copy this folder (outside the repository, or to a private repository of your own), then
 # replace every example value — registry, tag, host name, storage class, the ingress controller's namespace and pod
-# network. Apply with `kubectl apply -k <your copy>`. Nothing here is tenant-specific: the tenant's settings are in
-# the adminforge-env Secret (../../README.md → Secrets).
+# network, the private addresses the pod may reach (networkpolicy-private-egress.yaml). Check the cluster first
+# (portal/deploy/kubernetes/preflight.sh). Apply with `kubectl apply -k <your copy>`. Nothing here is
+# tenant-specific: the tenant's settings are in the adminforge-env Secret (../../README.md → Secrets).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: adminforge

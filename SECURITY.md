@@ -287,12 +287,14 @@ the reason.
   object id first, so the protected-object guard recognises a protected account. Every changing call is a declared
   write (request policy, emergency stop, protected-object guard), reads stay read-only, and they refuse a person's
   grant. A run in which a transaction acted is audited as a write (`schedule.run`, `mode: write`, each transaction's
-  outcome code); **Run now** is refused while their schedule is turned off. Their reach is the administrator's
-  scoping of the identity to the test objects: Exchange RBAC for Applications on the test mailbox, Sites.Selected with
-  write on one site, a Teams application access policy for one test user (OnlineMeetings.ReadWrite.All still needs
-  `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS`, which lifts the ceiling for every write permission content declares — use a
-  dedicated named identity for them if that matters, ADR-014). The file check downloads only from a SharePoint host
-  over https on the default port, without credentials.
+  outcome code), and so is each one a scheduler one-shot (`--probe`, `--once`) ran (`probe.run`); one-shots run none
+  while automation is paused, and without the database (`--no-store`) refuse every write, since they can neither read
+  the emergency stop nor keep an audit record. **Run now** is refused while their schedule is turned off. Their reach
+  is the administrator's scoping of the identity to the test objects: Exchange RBAC for Applications on the test
+  mailbox, Sites.Selected with write on one site, a Teams application access policy for one test user
+  (OnlineMeetings.ReadWrite.All still needs `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS`, which lifts the ceiling for every
+  write permission content declares — use a dedicated named identity for them if that matters, ADR-014). The file
+  check downloads only from a SharePoint host over https on the default port, without credentials.
 - Report files, probe result rows and the outputs of scheduled runs were collected with application permissions, so
   by default only `Portal.Operator` can see them (a schedule's `requires.portalRoles` overrides this), plus the
   playbook's own roles for run outputs. A probe's result **message** is shown to every Reader, so checks never copy

@@ -21,3 +21,8 @@ export type { ScheduleRunRow } from './schedules/types';
 
 // One probe now.
 export { runProbe, type ProbeOutcome } from './probes/checks';
+
+// The emergency stop one-shots read ("automation paused"), and the error a one-shot without the database refuses
+// changes with (one-shot.ts).
+export { isPaused } from './execution/emergency';
+export { AppError } from './errors';

@@ -1,7 +1,16 @@
-import { createContext, type Config, type DeliveryDeps, type AppContext } from '@adminforge/api/tooling';
+import { randomUUID } from 'node:crypto';
 import {
+  createContext,
+  type AppContext,
+  type AuditInput,
+  type Config,
+  type DeliveryDeps,
+} from '@adminforge/api/tooling';
+import {
+  AppError,
   createRunsModule,
   createSchedulesModule,
+  isPaused,
   runProbe,
   Scheduler,
   type ProbeOutcome,
@@ -10,7 +19,7 @@ import {
   type SchedulerOptions,
   type SchedulesModule,
 } from '@adminforge/api/tooling/scheduler';
-import type { Probe } from '@adminforge/schemas';
+import { PROBE_METRICS, TRANSACTION_KINDS, type Probe } from '@adminforge/schemas';
 
 /**
  * One-shot runs as the automation identity: one schedule now, or probes now, without the leader lock — and the
@@ -23,6 +32,11 @@ import type { Probe } from '@adminforge/schemas';
  * - `runScheduleOnce` / `runProbesOnce` take only the pieces they use, so tests drive them with fakes.
  * - `scheduleRunLines` / `probeLine` / `probeSummary` are pure formatters. They print keys, statuses, reason codes and
  *   counts only — never messages, details, recipients or item contents, which can hold tenant data.
+ *
+ * Synthetic transactions (ADR-015) are the one-shots' only writes. They follow the emergency stop: none runs while
+ * automation is paused, and changes paused refuses their writes (the outbound executor). One that acted is audited as a
+ * write, as the scheduler audits a run with them. Without the database a one-shot can read neither switch nor keep an
+ * audit record, so every declared write it would send is refused (`database_required`, security review L1).
  */
 
 /** The log the one-shot reports through (the service's JSON log, or the live script's masked stderr). */
@@ -34,7 +48,10 @@ export interface OneShotLog {
 
 export interface OneShotOptions {
   log: OneShotLog;
-  /** No database: probe results are not stored, and schedules can't run (their state lives in the database). */
+  /**
+   * No database: probe results are not stored, schedules run on in-memory state, and no change is made (without the
+   * database the emergency stop can't be read nor an audit record kept).
+   */
   noStore?: boolean;
   /**
    * Email/Teams delivery override for this process: report delivery (the jobs) and `notify.onFailure`/`onSuccess`
@@ -52,8 +69,11 @@ export interface OneShot {
   schedules: SchedulesModule;
   /** Runs one schedule now as a manual, audited run; `requestedBy` is recorded on it (`cli:<user>`, …). */
   runSchedule(key: string, requestedBy: string): Promise<ScheduleRunRow>;
-  /** Runs every probe, or the named ones, now; results are stored unless `noStore` or there is no database. */
-  runProbes(keys?: readonly string[]): Promise<ProbesOnceResult>;
+  /**
+   * Runs every probe, or the named ones, now; results are stored unless `noStore` or there is no database. A synthetic
+   * transaction that acted is audited for `requestedBy` (`cli:<user>`, …).
+   */
+  runProbes(keys?: readonly string[], requestedBy?: string): Promise<ProbesOnceResult>;
   /** Stops the modules and closes the event bus, definition source and database (errors ignored: shutting down). */
   close(): Promise<void>;
 }
@@ -77,23 +97,33 @@ export function openOneShot(config: Config, opts: OneShotOptions): OneShot {
   const schedules = createSchedulesModule(ctx, runs, {
     inProcess: false,
     log,
+    // Probes and jobs (synthetic transactions) make no change without the database: see the module comment.
+    ...(ctx.database ? {} : { probeDeps: { outbound: refusingWrites(ctx.outbound) } }),
     ...(opts.delivery ? { delivery: opts.delivery } : {}),
   });
   // The override on the module's defaults — not the platform fetch, which would take mock mode onto the internet.
   const delivery: DeliveryDeps | undefined = opts.delivery && schedules.delivery;
+  const automationPaused = () => isPaused(ctx.settings, 'automation');
   return {
     ctx,
     runs,
     schedules,
     runSchedule: (key, requestedBy) =>
-      runScheduleOnce({ ctx, schedules, log, ...(delivery ? { delivery } : {}) }, key, requestedBy),
-    runProbes: (keys) =>
+      runScheduleOnce(
+        { ctx, schedules, log, automationPaused, ...(delivery ? { delivery } : {}) },
+        key,
+        requestedBy,
+      ),
+    runProbes: (keys, requestedBy) =>
       runProbesOnce(
         {
           definitions: ctx.definitions,
           probeDeps: schedules.probeDeps,
           store: !opts.noStore && ctx.database ? schedules.store : null,
           log,
+          audit: ctx.audit,
+          automationPaused,
+          ...(requestedBy ? { requestedBy } : {}),
         },
         keys,
       ),
@@ -113,6 +143,8 @@ export interface ScheduleOnceDeps {
   log: OneShotLog;
   /** Delivery for notify.onFailure/onSuccess (see OneShotOptions.delivery). */
   delivery?: DeliveryDeps;
+  /** "Automation paused" (Admin → Settings): the run is recorded as skipped, as the scheduler records one. */
+  automationPaused?: () => Promise<boolean>;
 }
 
 /**
@@ -133,6 +165,7 @@ export async function runScheduleOnce(
     now: deps.ctx.now,
     log: deps.log,
     ...(deps.delivery ? { delivery: deps.delivery } : {}),
+    ...(deps.automationPaused ? { automationPaused: deps.automationPaused } : {}),
   });
   return scheduler.runOnce(key, requestedBy);
 }
@@ -145,6 +178,12 @@ export interface ProbesOnceDeps {
   log: Pick<OneShotLog, 'warn'>;
   /** Tests: the probe runner (default: the API's `runProbe`). */
   run?: typeof runProbe;
+  /** Where a synthetic transaction that acted is recorded as a write (as the scheduler records a run with one). */
+  audit?: { append(event: AuditInput): Promise<unknown> };
+  /** "Automation paused" (Admin → Settings): synthetic transactions don't run while it is on. */
+  automationPaused?: () => Promise<boolean>;
+  /** Who asked (`cli:<user>`), for the audit record. */
+  requestedBy?: string;
 }
 
 export interface ProbeRun {
@@ -179,7 +218,14 @@ export async function runProbesOnce(
   const results: ProbeRun[] = [];
   for (const rec of [...wanted].sort((a, b) => a.key.localeCompare(b.key))) {
     const probe = rec.def as Probe;
-    const outcome = await run(rec.key, probe, deps.probeDeps, {});
+    const transaction = isTransaction(probe);
+    const correlationId = randomUUID();
+    const outcome =
+      transaction && (await deps.automationPaused?.()) === true
+        ? automationPausedOutcome(rec.key, probe)
+        : await run(rec.key, probe, deps.probeDeps, { correlationId });
+    if (transaction && !NO_CALL_CODES.has(outcome.code))
+      await auditTransaction(deps, rec.key, probe, outcome, correlationId);
     counts[outcome.status] = (counts[outcome.status] ?? 0) + 1;
     results.push({ key: rec.key, kind: probe.check.kind, outcome });
     if (deps.store)
@@ -199,6 +245,92 @@ export async function runProbesOnce(
         );
   }
   return { results, missing, counts };
+}
+
+const isTransaction = (probe: Probe) => (TRANSACTION_KINDS as readonly string[]).includes(probe.check.kind);
+
+/** Outcome codes of a synthetic transaction that made no change (schedules/jobs.ts, plus the two of one-shots). */
+const NO_CALL_CODES = new Set([
+  'not_configured',
+  'content_error',
+  'licence_required',
+  'writes_paused',
+  'automation_paused',
+  'database_required',
+]);
+
+/** A synthetic transaction not run because automation is paused. */
+function automationPausedOutcome(key: string, probe: Probe): ProbeOutcome {
+  return {
+    probeKey: key,
+    ts: new Date(),
+    status: 'error',
+    metric: null,
+    unit: PROBE_METRICS[probe.check.kind].unit,
+    durationMs: 0,
+    code: 'automation_paused',
+    message:
+      'Not run: an administrator has paused automation, and this synthetic transaction changes test objects. A Portal Admin can resume automation under Admin → Settings.',
+    details: null,
+  };
+}
+
+/** A synthetic transaction that acted, recorded as a write by the automation identity (ADR-015). */
+async function auditTransaction(
+  deps: ProbesOnceDeps,
+  key: string,
+  probe: Probe,
+  outcome: ProbeOutcome,
+  correlationId: string,
+): Promise<void> {
+  if (!deps.audit) return;
+  const by = deps.requestedBy ?? 'a one-shot';
+  await deps.audit
+    .append({
+      actorOid: 'automation',
+      actorUpn: 'automation identity',
+      mode: 'write',
+      action: 'probe.run',
+      targetType: 'probe',
+      targetId: key,
+      result: outcome.status === 'ok' || outcome.status === 'warn' ? 'success' : 'failure',
+      correlationId,
+      details: {
+        summary: `Run once by ${by}, executed as automation identity.`,
+        trigger: 'one-shot',
+        requestedBy: deps.requestedBy ?? null,
+        check: probe.check.kind,
+        status: outcome.status,
+        code: outcome.code,
+      },
+    })
+    .catch((err: unknown) =>
+      deps.log.warn(
+        { err: { message: (err as Error).message } },
+        'could not audit the synthetic transaction',
+      ),
+    );
+}
+
+/** The outbound executor of a one-shot without the database: every declared write is refused (module comment). */
+function refusingWrites(outbound: AppContext['outbound']): AppContext['outbound'] {
+  const refusal = () =>
+    new AppError(
+      409,
+      'database_required',
+      'This one-shot runs without the database, so it can’t read the emergency stop or keep an audit record: it makes no changes.',
+      { hint: 'Run it without --no-store (it needs DATABASE_PATH).' },
+    );
+  return {
+    execute: async (identity, call, opts) => {
+      if (call.declaredWrite === true) throw refusal();
+      return outbound.execute(identity, call, opts);
+    },
+    assertWritable: async () => {
+      throw refusal();
+    },
+    ...(outbound.gate ? { gate: outbound.gate.bind(outbound) } : {}),
+  };
 }
 
 const pad = (s: string, n: number) => (s.length >= n ? s : s + ' '.repeat(n - s.length));

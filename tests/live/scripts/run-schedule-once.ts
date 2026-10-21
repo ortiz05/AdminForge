@@ -6,6 +6,7 @@
 // Usage (from the repository root, dev env file only — no ADMINFORGE_ENV_OVERLAY):
 //   pnpm exec tsx tests/live/scripts/run-schedule-once.ts --schedule <key> [--deliver none|sender]
 //   pnpm exec tsx tests/live/scripts/run-schedule-once.ts --probe <key> [--probe <key>…] [--no-store]
+//   (--no-store: no database, so synthetic transactions make no change — their writes are refused)
 //
 // --deliver none (default): every recipient list (AF_…_RECIPIENTS / _EMAIL / _ALERTS, approvals included) and every
 //   Teams webhook (AF_…_WEBHOOK…) is blanked for this process, so delivery reports `not_configured`.
@@ -135,7 +136,7 @@ try {
     for (const line of scheduleRunLines(values.schedule, run)) console.log(line);
     exitCode = run.status === 'succeeded' ? 0 : 1;
   } else {
-    const result = await oneShot.runProbes(values.probe);
+    const result = await oneShot.runProbes(values.probe, `live-script:${process.env.USER ?? 'operator'}`);
     console.log(PROBE_HEADER);
     for (const key of result.missing) console.log(`${key.padEnd(48)} unknown probe`);
     for (const r of result.results) console.log(probeLine(r));

@@ -27,8 +27,14 @@ pnpm --filter @adminforge/scheduler exec tsx src/main.ts --probe <key> [--probe 
 pnpm --filter @adminforge/scheduler exec tsx src/main.ts --schedule <key>  # one schedule now (a manual run, audited)
 pnpm --filter @adminforge/scheduler typecheck
 #   add --no-store to a probe one-shot to skip writing probe results (no database at all, so it needs
-#   CONTENT_SOURCE=fs: with published content, CONTENT_SOURCE=db, it can't load the probes)
+#   CONTENT_SOURCE=fs: with published content, CONTENT_SOURCE=db, it can't load the probes; and it makes no change)
 ```
+
+Synthetic transactions (ADR-015) are a one-shot's only writes, and they follow the emergency stop: none runs while
+automation is paused (a `--schedule` run is recorded as skipped, as the scheduler records one), changes paused refuses
+their writes, and each one that acted is audited as a write (`probe.run`, or `schedule.run` for a schedule). Without
+the database (`--no-store`) a one-shot can read neither switch nor keep an audit record, so every declared write it
+would send is refused (`database_required`).
 
 In the pod the same flags run the bundle:
 `kubectl -n adminforge exec deploy/adminforge -c api -- node portal/apps/scheduler/dist/main.js --once`.

@@ -5,6 +5,7 @@ import { isArmed } from '../auth/session-store';
 import { Heartbeat } from '../health/heartbeat';
 import { Engine, type Clock, type Limits, type RunnerPort } from '@adminforge/engine';
 import type { AppContext } from '../context';
+import { fixtureFetch } from '../datasources/services';
 import type { DefinitionResolver } from '../definitions/types';
 import type { OutboundExecutor } from '../execution/types';
 import { RunChildRunner } from './children';
@@ -53,6 +54,8 @@ export interface RunsOptions {
   secretTtlMs?: number;
   /** How often an open run stream re-checks its session and access (default 10 s; tests shorten it). */
   streamPollMs?: number;
+  /** Tests: overrides for the approvers' email/Teams delivery (the configuration `env` it reads, …). */
+  delivery?: Partial<DeliveryDeps>;
   clock?: Clock;
   env?: () => Record<string, unknown>;
   limits?: Partial<Limits>;
@@ -133,9 +136,12 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
 
   const approvalsDelivery: DeliveryDeps = {
     outbound: ctx.outbound,
-    fetch: ctx.fetch,
+    // DATA_MODE=fixtures: the approvers' Teams webhook gets the fixture fetch, like schedules' delivery (e-mail already
+    // goes through the fixture outbound), so mock mode never reaches the internet.
+    fetch: ctx.config.DATA_MODE === 'fixtures' ? fixtureFetch(ctx.config) : ctx.fetch,
     env: testing ? {} : loadEnv(),
     publicBaseUrl: ctx.config.PUBLIC_BASE_URL,
+    ...opts.delivery,
   };
   const store = new RepositoryRunStore(repo, ctx.audit, async (r) => {
     const results = await notifyApprovers(

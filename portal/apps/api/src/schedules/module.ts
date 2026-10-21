@@ -79,6 +79,8 @@ export interface SchedulesModule {
   probes: ProbeViews;
   /** Dependencies for running probes directly (CLI one-shots). */
   probeDeps: ProbeDeps;
+  /** Email/Teams delivery as resolved here (overrides on the defaults; the fixture fetch with DATA_MODE=fixtures). */
+  delivery: DeliveryDeps;
   jobs: JobRunner;
   /** The scheduler, when it runs in this process. */
   scheduler: Scheduler | null;
@@ -295,6 +297,7 @@ export function createSchedulesModule(
     identities,
     probes,
     probeDeps,
+    delivery,
     jobs,
     scheduler,
     news,

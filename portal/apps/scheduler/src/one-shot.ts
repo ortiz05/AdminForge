@@ -39,9 +39,9 @@ export interface OneShotOptions {
   /**
    * Email/Teams delivery override for this process: report delivery (the jobs) and `notify.onFailure`/`onSuccess`
    * (the scheduler). `env` — what `${ env.X }` recipient lists, webhooks and the sender resolve to — is the point of
-   * an override; `outbound`, `fetch` and `publicBaseUrl` default to the process's own. Absent, jobs deliver from the
-   * installation's configuration and a one-shot schedule run sends no notifications (audit log and portal event
-   * only) — the service's behaviour.
+   * an override; `outbound`, `fetch` and `publicBaseUrl` default to the schedules module's (the fixture fetch with
+   * DATA_MODE=fixtures). Absent, jobs deliver from the installation's configuration and a one-shot schedule run sends
+   * no notifications (audit log and portal event only) — the service's behaviour.
    */
   delivery?: Pick<DeliveryDeps, 'env'> & Partial<DeliveryDeps>;
 }
@@ -67,19 +67,15 @@ export function openOneShot(config: Config, opts: OneShotOptions): OneShot {
     warn: (obj, msg) => log.warn(obj, msg),
     info: (obj, msg) => log.info(obj, msg),
   });
-  const delivery: DeliveryDeps | undefined = opts.delivery && {
-    outbound: ctx.outbound,
-    fetch: ctx.fetch,
-    publicBaseUrl: config.PUBLIC_BASE_URL,
-    ...opts.delivery,
-  };
   // Scheduled playbook runs are queued for the run worker (the API process); a one-shot never executes them itself.
   const runs = createRunsModule(ctx, { inProcessWorker: false, log });
   const schedules = createSchedulesModule(ctx, runs, {
     inProcess: false,
     log,
-    ...(delivery ? { delivery } : {}),
+    ...(opts.delivery ? { delivery: opts.delivery } : {}),
   });
+  // The override on the module's defaults — not the platform fetch, which would take mock mode onto the internet.
+  const delivery: DeliveryDeps | undefined = opts.delivery && schedules.delivery;
   return {
     ctx,
     runs,

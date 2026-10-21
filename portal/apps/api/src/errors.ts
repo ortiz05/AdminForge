@@ -51,6 +51,12 @@ export const unauthenticated = () =>
     login: loginUrl(),
   });
 
+/** Signed in, but no AdminForge role (sign-in, or a session left without one): what Entra sign-in answers too. */
+export const noPortalRole = () =>
+  new AppError(403, 'no_portal_role', 'Your account doesn’t have access to AdminForge yet.', {
+    hint: 'Ask a portal administrator to add you to an AdminForge group: Reader to view, Operator to make changes.',
+  });
+
 /** Parses a request body with zod, throwing a 400 ApiErrorBody on failure. */
 export function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
   const parsed = schema.safeParse(body ?? {});

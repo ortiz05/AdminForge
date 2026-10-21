@@ -372,6 +372,9 @@ Lets a report schedule run with its creator's own access (ADR-014, `identity: { 
 - **Who:** Session + CSRF; registered only with `AUTH_MODE=mock` (refused in production by config). For tests and e2e.
 - **Body:** `{roles?: PortalRole[], armedMinutes?: number (> 0, ≤ 1440, fractions allowed) | null}` — `null` disarms.
 - **Response:** the [`GET /api/me`](#get-apime) body for the updated session.
+- **`roles: []`:** as with Entra, no session is left without an AdminForge role: the session ends (audited
+  `session.access_revoked`, `reason: roles`, `mock: true`), the cookie is cleared, and the answer is 403
+  `no_portal_role`.
 
 #### `GET /api/me`
 

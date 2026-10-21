@@ -2,12 +2,12 @@ import { PortalRole } from '@adminforge/schemas';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { auditActor, type AppContext } from '../context';
-import { parseBody } from '../errors';
+import { noPortalRole, parseBody } from '../errors';
 import { buildMe } from '../routes/me';
 import { ARM_RATE_LIMIT, armMinutes, armPreconditions } from './arm-routes';
 import { requireSessionWithCsrf } from './guards';
 import { safeReturnTo } from './return-to';
-import { dropWriteAccess, endSession, startSession } from './session-plugin';
+import { clearSessionCookie, dropWriteAccess, endSession, startSession } from './session-plugin';
 
 /** The synthetic identity used by mock sign-in (never a real tenant). */
 export const MOCK_USER = {
@@ -19,7 +19,10 @@ export const MOCK_USER = {
   tenantDomain: 'example.com',
 } as const;
 
-/** POST /auth/mock/state — lets tests and the e2e suite put the session into any state. */
+/**
+ * POST /auth/mock/state — lets tests and the e2e suite put the session into any state, except one Entra never leaves:
+ * a session without any AdminForge role ends, as the role re-check ends it with Entra.
+ */
 export const MockStateRequest = z.object({
   roles: z.array(PortalRole).optional(),
   /** Minutes until write access ends (fractions allowed for expiry tests); null disarms. */
@@ -49,9 +52,20 @@ export function mockAuthRoutes(app: FastifyInstance, ctx: AppContext) {
     return reply.redirect(safeReturnTo(request.query.returnTo));
   });
 
-  app.post('/auth/mock/state', async (request) => {
+  app.post('/auth/mock/state', async (request, reply) => {
     let session = requireSessionWithCsrf(request);
     const body = parseBody(MockStateRequest, request.body);
+    if (body.roles?.length === 0) {
+      await endSession(ctx, session);
+      clearSessionCookie(ctx, reply);
+      await ctx.audit.append({
+        ...auditActor(ctx, request, session),
+        action: 'session.access_revoked',
+        result: 'success',
+        details: { previousRoles: session.roles, reason: 'roles', mock: true },
+      });
+      throw noPortalRole();
+    }
     if (body.roles) session = (await ctx.sessions.update(session.idHash, { roles: body.roles }))!;
     if (body.armedMinutes === null) session = await dropWriteAccess(ctx, session);
     else if (body.armedMinutes !== undefined) {

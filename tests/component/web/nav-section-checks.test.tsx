@@ -1,6 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { PROBES_KEY } from '@adminforge/web/src/app/section-checks';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
+import { probesQuery } from '@adminforge/web/src/ops/schedules';
 import { me } from '../../support/web/fixtures/session';
 import type { MockHandler } from '../../support/web/mock-handler';
 import { axeViolations } from '../axe';
@@ -126,6 +128,14 @@ describe('navigation: check status per section', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Example Org' })).toBeInTheDocument();
     expect(checkLinks()).toHaveLength(0);
     expect(screen.queryByText('You can’t see this.')).toBeNull();
+  });
+
+  it('shares Synthetic monitoring’s cache: one request for the rail and the page', async () => {
+    expect(PROBES_KEY).toEqual(probesQuery.queryKey);
+    const { calls } = renderApp({ path: '/monitoring', handlers: [probesAnswer({ body: PROBES })] });
+    await within(await screen.findByRole('main')).findByRole('button', { name: /^probes\.entra-openid/ });
+    await within(nav()).findByRole('link', { name: /^Identity service checks/ });
+    expect(calls.filter((c) => c.url === '/api/probes')).toHaveLength(1);
   });
 
   it('the status mark is reached with the keyboard, right after its section toggle', async () => {

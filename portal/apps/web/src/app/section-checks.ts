@@ -1,7 +1,7 @@
 import { useContext } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryFunctionContext } from '@tanstack/react-query';
 import { SessionContext } from '../lib/session';
-import { probesQuery, type ProbeItem, type ProbeStatus } from '../ops/schedules';
+import type { ProbeItem, ProbeStatus } from '../ops/schedules';
 
 /**
  * The navigation rail's check status per section: a section key is also a probe `group` (`identity`, `exchange`, …),
@@ -50,6 +50,18 @@ export function checksText(check: SectionCheck): string {
 
 const select = (data: { items: ProbeItem[] }) => sectionChecks(data.items);
 
+/** Synthetic monitoring's query key (`probesQuery` in ops/schedules.ts): one cache entry for the rail and the page. */
+export const PROBES_KEY = ['probes'] as const;
+
+/**
+ * Synthetic monitoring's own fetch and parser, loaded on first use: the shell is on every page, and the schedules
+ * module stays out of the initial download (the rail only needs each probe's group and status).
+ */
+async function fetchProbes(ctx: QueryFunctionContext<typeof PROBES_KEY>) {
+  const { probesQuery } = await import('../ops/schedules');
+  return probesQuery.queryFn!(ctx);
+}
+
 export interface SectionChecks {
   /** Check status by section key; undefined while loading, when the viewer may not read probes, or on an error. */
   checks: Record<string, SectionCheck> | undefined;
@@ -65,7 +77,8 @@ export function useSectionChecks(): SectionChecks {
   const me = useContext(SessionContext);
   const canRead = !!me?.roles.includes('Portal.Reader');
   const q = useQuery({
-    ...probesQuery,
+    queryKey: PROBES_KEY,
+    queryFn: fetchProbes,
     select,
     enabled: canRead,
     // Synthetic monitoring polls every minute while it's open; the rail is content with every five.

@@ -28,6 +28,11 @@ export interface KpiProps {
   trend?: number[];
   /** Context under the value, e.g. "of 500 seats". */
   hint?: ReactNode;
+  /**
+   * Shown between the label and the number (a figure that couldn't be shown: its reference and Try again). The number
+   * and its foot keep their place at the bottom, in line with the other cells of a strip.
+   */
+  extra?: ReactNode;
   loading?: boolean;
   /** `cell` sits inside a KpiStrip (no border of its own). */
   variant?: 'tile' | 'cell';
@@ -45,6 +50,7 @@ export function Kpi({
   delta,
   trend,
   hint,
+  extra,
   loading,
   variant,
   className,
@@ -60,6 +66,7 @@ export function Kpi({
   return (
     <div className={s.root({ className })} role="group" aria-label={label} aria-busy={loading || undefined}>
       <span className={s.label()}>{label}</span>
+      {extra}
       <div className={s.valueRow()}>
         <div aria-live="polite" className="min-w-0">
           {loading ? (
@@ -92,7 +99,7 @@ export function Kpi({
                 {delta.value}
               </span>
             )}
-            {(delta?.period || hint) && <span className="min-w-0 truncate">{delta?.period ?? hint}</span>}
+            {(delta?.period || hint) && <span className={s.hint()}>{delta?.period ?? hint}</span>}
           </>
         )}
       </div>

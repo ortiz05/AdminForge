@@ -133,19 +133,24 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
     );
     const view =
       layout === 'cell' ? (
-        <div className="flex min-w-0 flex-col bg-panel">
-          <Kpi
-            variant="cell"
-            label={shown}
-            value="—"
-            status={{ tone: 'crit', label: 'Couldn’t be shown' }}
-            className="pb-2"
-          />
-          <div className="flex flex-wrap items-center gap-2 px-(--af-pad-panel) pb-(--af-pad-panel)">
-            {this.state.reference && <IdChip value={this.state.reference} label="Reference" />}
-            {retry}
-          </div>
-        </div>
+        // Shaped like the strip's other cells: the label, then the reference and Try again, then "—" and the status at
+        // the foot, in line with the other numbers. The chip shows the value only (its button names the reference), so
+        // it stays on one line in a narrow cell.
+        <Kpi
+          variant="cell"
+          label={shown}
+          value="—"
+          status={{ tone: 'crit', label: 'Couldn’t be shown' }}
+          className="h-full"
+          extra={
+            <div className="flex flex-wrap items-center gap-2">
+              {this.state.reference && (
+                <IdChip value={this.state.reference} label="Reference" showLabel={false} />
+              )}
+              {retry}
+            </div>
+          }
+        />
       ) : (
         <ErrorState
           compact

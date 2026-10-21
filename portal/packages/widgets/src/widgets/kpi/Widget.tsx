@@ -86,8 +86,10 @@ export function KpiWidget({ config, data, runtime, variant = 'tile' }: WidgetPro
       }
       loading={data.status === 'loading' || data.status === 'idle'}
       variant={variant === 'cell' ? 'cell' : 'tile'}
+      // A tile fills its grid cell, a strip cell its row — through the drill-down link too — so the number sits at the
+      // foot in line with the strip's other figures (design review M3).
       className={cn(
-        variant !== 'cell' && 'h-full',
+        'h-full',
         config.href && 'transition-colors duration-(--af-motion-fast) group-hover:bg-hover',
       )}
     />

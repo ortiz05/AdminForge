@@ -41,6 +41,10 @@ belongs in the page's text or the linked list. The line under the number shows t
 `hint` (or the delta's period), which gets only what's left: keep a hint to two or three words, or leave it out on a
 KPI that shows a status.
 
+Consecutive KPIs share one strip. Every cell is as tall as its row — a drill-down (`href`) cell too — and its number
+sits at the foot, so the figures line up however long the labels are. A cell that can't be shown keeps its place: its
+label, the reference and **Try again**, then "—" and "Couldn't be shown" in line with the other figures.
+
 ## table
 
 ```yaml

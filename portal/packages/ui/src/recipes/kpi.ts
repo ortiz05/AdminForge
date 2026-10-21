@@ -10,7 +10,10 @@ export const kpi = tv({
     value: 'af-kpi-value flex min-w-0 items-baseline gap-1.5 text-fg',
     unit: 'font-body text-sm font-medium text-fg-3',
     foot: 'flex min-h-5 min-w-0 items-center gap-2 text-xs text-fg-3',
-    status: 'inline-flex min-w-0 shrink-0 items-center gap-1 font-medium',
+    // The status keeps its words and the hint gets what's left; only a status wider than the whole cell (a phone's two
+    // columns) ends in an ellipsis instead of running out of the cell.
+    status: 'inline-flex min-w-0 max-w-full shrink-0 items-center gap-1 font-medium',
+    hint: 'min-w-0 truncate',
     delta: 'inline-flex shrink-0 items-center gap-1 font-medium',
   },
   variants: {

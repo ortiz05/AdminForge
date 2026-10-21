@@ -24,7 +24,7 @@ describe('entity header status', { timeout: 20_000 }, () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('neutral: an outline badge with the label, no status pill', async () => {
-    const { container } = renderPage(path, {
+    const { view } = renderPage(path, {
       definitions: { 'page/test.thing': page('neutral', 'Security group') },
       results: RESULTS,
     });
@@ -32,7 +32,7 @@ describe('entity header status', { timeout: 20_000 }, () => {
     await screen.findByRole('heading', { level: 1, name: 'Adele Vance' }, SLOW);
     expect(badge.closest('[data-status]')).toBeNull();
     expect(badge.closest('[data-header-category]')).not.toBeNull();
-    expect(await axeViolations(container)).toEqual([]);
+    expect(await axeViolations(view.container)).toEqual([]);
   });
 
   it('a state keeps its status pill', async () => {

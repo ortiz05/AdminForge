@@ -138,8 +138,9 @@ datasources:
 header:
   title: ${ group.displayName }
   subtitle: "${ group.kind & ' group · ' & group.membership & ' membership' & (group.onPremisesSyncEnabled = true ? ' · synced from AD' : '') }"
-  status: "${ group.isAssignableToRole = true ? 'warn' : 'neutral' }"
-  statusLabel: "${ group.isAssignableToRole = true ? 'Role-assignable' : group.kind }"
+  # Only a state worth flagging: the group's kind and membership are already the subtitle.
+  status: "${ group.isAssignableToRole = true ? 'warn' : null }"
+  statusLabel: "${ group.isAssignableToRole = true ? 'Role-assignable' : null }"
   ids:
     Object id: ${ group.id }
 

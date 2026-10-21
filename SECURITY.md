@@ -154,7 +154,11 @@ the reason.
 - Time-boxed: `WRITE_SESSION_MAX_MINUTES` (default 60), one extension. Expiry, disarm, sign-out and losing the
   Operator role drop the Write tokens.
 - Writes happen only through published content that declares them (`mode: write` steps with `describe`, `risk`,
-  `confirm` / `approval`). There is no generic write proxy. Reads go through a default-deny request policy.
+  `confirm` / `approval`). There is no generic write proxy. Reads go through a default-deny request policy. A step
+  that starts a child playbook that writes, and any step with a `compensate` block, is a write too: `validate` refuses
+  either without `mode: write`, and in a write playbook the engine counts them as writes wherever it looks for one —
+  where the approval gate of `approval: { required: true }` goes, and whether whoever approves or confirms a manual
+  step before them must be armed.
 - Risky playbooks must be previewed first; the server checks that the confirmation matches the preview (same user,
   version, inputs, under 15 minutes old), and a preview confirms at most one run. Drafts can be previewed, never run.
   High- and critical-risk playbooks confirm by typing a value the person recognises — in bulk, the number of items

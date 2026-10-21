@@ -511,7 +511,8 @@ delegated **read** identity; the client names a page and a datasource, never a U
 
 - **Who:** Session + every role in the page's `requires.portalRoles`.
 - **Body:** `{page, version?, datasource, params?, cursor?}` — `page` is a page, dashboard or report key; `params` are
-  validated and defaulted against the page's declared params (the query-builder filter is compiled server-side);
+  validated and defaulted against the page's declared params (the query-builder filter is compiled server-side; an
+  entity param must be the id it names — a GUID, also a UPN for `user`, a whole `/subscriptions/…` id for `resource`);
   `cursor` is the opaque value from the previous page (≤ 8192 chars).
 - **Response** (`DatasourceResult`): `data`; `cursor?` (next page); `provenance`
   (`{service, path, ms, requestId?, cachedAt?}`, or `null` for static/skipped datasources); `errors?` (graphBatch
@@ -553,7 +554,11 @@ step runs with the acting engineer's current session. A write step parks the run
 is armed (also a run bound to the session before it was armed: arming gives the session a new id, and the run asks to
 be resumed before its next write); an ended session parks it in `awaiting_reauth`; `POST …/resume` continues it. A
 restart doesn't end a run: it stops at a checkpoint and continues after the restart (a step that was in flight is
-retried, or the run ends `needs_review` if it is `idempotent: false`).
+retried, or the run ends `needs_review` if it is `idempotent: false`). An `idempotent: false` step's request is sent at
+most once: never again after a server error, a network failure or a timeout, only after a 429; a sign-in challenge
+after Microsoft accepted the change (an Azure long-running operation's poll, a later `$batch` chunk) fails the step
+with `accepted_unconfirmed` instead of sending it again. With `DATA_MODE=fixtures` PowerShell steps answer from the
+runner fixtures and never reach the runner.
 
 A run that continues after any pause — a decision, input, arming, a sign-in, a `wait` step, a restart — reads and checks
 again, right before its next write, what it read and checked since the last write it sent (reads, transforms and

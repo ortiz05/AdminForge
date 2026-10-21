@@ -130,8 +130,9 @@ Details and examples: [content recipes](../content-recipes.md#versions-previews-
 The schema refuses most mistakes; know the rules so you design for them (`adding-a-playbook` has the detail):
 
 - A definition that writes declares top-level `mode: write`, and its `requires.portalRoles` includes
-  `Portal.Operator`. Steps that `PUT`/`PATCH`/`DELETE` must be `mode: write`; a `POST` must say `mode: read` or
-  `mode: write`; every write step has a `describe` shown in the dry-run plan.
+  `Portal.Operator`. Steps that `PUT`/`PATCH`/`DELETE` must be `mode: write`, and so must a `type: playbook` step whose
+  child writes and any step with a `compensate`; a `POST` must say `mode: read` or `mode: write`; every write step has
+  a `describe` shown in the dry-run plan.
 - `risk`: `high` needs a `confirm` block (`click` or `typed`); `critical` needs `confirm` **and**
   `approval: { required: true }`. Approvals exclude the people a change grants access to (`approval.excludes`), and
   nobody approves their own request.
@@ -139,9 +140,9 @@ The schema refuses most mistakes; know the rules so you design for them (`adding
   never stored in run outputs or the audit log. Inputs that are sensitive are `redact: true`.
 - Make steps safe to re-run or undo: `assert` preconditions, `compensate` where a change can be reversed, and mark
   non-idempotent steps `idempotent: false` — it matters on every restart, not only a crash: a step still in flight
-  ten seconds after a stop is sent again unless it says `idempotent: false` (then the run ends `needs_review`). A
-  `compensate` block runs only when a **later** step fails — it isn't an undo button, so don't promise one for a
-  playbook whose last step is the write.
+  ten seconds after a stop is sent again unless it says `idempotent: false` (then the run ends `needs_review`), and
+  such a step's request is sent at most once (it can't have `retry`). A `compensate` block runs only when a **later**
+  step fails — it isn't an undo button, so don't promise one for a playbook whose last step is the write.
 - **Act on what the person saw.** When the target's id can be reused or change hands (AVD session ids are Windows
   session numbers; a list can be minutes old), pass what the row showed (`expectedUser`) and `assert` the looked-up
   target still matches before writing (`avd.log-off-user-session`).

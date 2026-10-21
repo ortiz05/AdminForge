@@ -32,8 +32,11 @@ need no two-person approval: they can't be pointed at anything but the configure
 be changed by content, and the permissions are scoped to those objects — Exchange RBAC for Applications on the test
 mailboxes, Sites.Selected with a write grant on one site, a Teams application access policy for one user. A run in
 which a transaction acted is audited as a write (`schedule.run`, `mode: write`, each transaction's outcome code), and
-**Run now** is refused while their schedule is turned off (an administrator who switched it off — say, because a
-test object turned out to be in use — means it).
+so is each transaction a scheduler one-shot (`--probe`, `--once`) ran that acted (`probe.run`). **Run now** and a
+`--schedule` one-shot are refused while their schedule is turned off (an administrator who switched it off — say,
+because a test object turned out to be in use — means it). One-shots follow the emergency stop like the scheduler:
+none runs a transaction while automation is paused, and without the database (`--no-store`) they make no change,
+since they could neither read the stop nor keep an audit record.
 
 ## Consequences
 

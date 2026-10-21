@@ -61,11 +61,13 @@ curl -s https://adminforge.example.com/readyz
 A stop lets every run finish the step it is on and stop at its next checkpoint: steps get 10 s, then a step still in
 flight is interrupted. The runs stay `running` and their jobs are queued again; after the restart they continue where
 they stopped — an interrupted step is retried, or, if it is `idempotent: false`, the run ends `needs_review` (check the
-target before running it again). As after any pause, a resumed run reads and checks again what it read and checked
-before its next write: if a check no longer holds, the write isn't sent and the run ends `failed` — or `needs_review`
-when that write was in flight at the stop and may have gone out. Running schedule jobs get 30 s (then they are recorded
-as interrupted). The API gives the whole stop `SHUTDOWN_TIMEOUT_SECONDS` (50 s), then logs what is still open and exits
-1; the pod has 60 s in all.
+target before running it again). Such a step's request is sent at most once at any time: never again after a server
+error, a network failure or a timeout (only after a 429), and a sign-in challenge after Microsoft accepted a change
+fails the step `accepted_unconfirmed` — the change may have happened, so check the target too. As after any pause, a
+resumed run reads and checks again what it read and checked before its next write: if a check no longer holds, the write
+isn't sent and the run ends `failed` — or `needs_review` when that write was in flight at the stop and may have gone
+out. Running schedule jobs get 30 s (then they are recorded as interrupted). The API gives the whole stop
+`SHUTDOWN_TIMEOUT_SECONDS` (50 s), then logs what is still open and exits 1; the pod has 60 s in all.
 
 `/healthz` answers when the process is up (the startup and liveness probes; three failures in a row restart the
 container). `/readyz` also reads the database and the heartbeats of the run worker and the scheduler: `ok`; `degraded`
@@ -179,7 +181,9 @@ message, the remedy and the link, whose page reads with their own permissions). 
 what they made: they act **only** on dedicated test objects named in `AF_SYNTHETIC_*` keys (the mail check also sends
 from `AF_MAIL_SENDER`), and do nothing ("not configured", the run succeeds with a note) until those are set. Use test
 objects nobody reads, and scope the identity to them. Runs in which they acted are audited as writes (`schedule.run`);
-turning the schedule off also stops **Run now** (`schedule_disabled`). Run now on any other disabled schedule runs it
+a one-shot audits each one that acted (`probe.run`). Turning the schedule off also stops **Run now** and a
+`--schedule` one-shot (`schedule_disabled`); `--probe` and `--once` still run them, to check them before the schedule
+is turned on. While automation is paused no one-shot runs them. Run now on any other disabled schedule runs it
 but only writes the file — no email, Teams post or notification — to try a schedule before enabling it; `--schedule`
 one-shots deliver as configured. To keep their permissions off the shared automation identity, give the sweep a named
 identity of its own (ADR-014) and grant the scopes below to it:
@@ -190,10 +194,12 @@ identity of its own (ADR-014) and grant the scopes below to it:
 | `probes.sharepoint-file-round-trip` | Uploads a 16 KB JSON file to the test site's default library, downloads it from SharePoint, deletes it  | A test site; its Graph id in `AF_SYNTHETIC_SITE_ID` (`GET /v1.0/sites/<tenant>.sharepoint.com:/sites/<path>?$select=id`). **Sites.Selected** (granted by `provision entra`, no opt-in: it reaches nothing by itself) plus write on that site only, by a SharePoint admin: `Grant-PnPAzureADAppSitePermission -AppId <automation app id> -DisplayName "AdminForge automation" -Site <site url> -Permissions Write` (or Graph `POST /sites/{id}/permissions` with `roles: ["write"]`) — `write`, never `fullcontrol`, which could manage the site's permissions. |
 | `probes.teams-online-meeting`       | Creates a Teams meeting for the test user an hour ahead (no invitation), checks the join link, deletes  | A Teams-licensed test user (`AF_SYNTHETIC_USER_ID`, object id). **OnlineMeetings.ReadWrite.All** — an application write permission, granted only with `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true` — limited to that user by a Teams application access policy: `New-CsApplicationAccessPolicy -Identity AdminForge-Synthetic -AppIds <automation app id>`, `Grant-CsApplicationAccessPolicy -PolicyName AdminForge-Synthetic -Identity <test user object id>` (takes up to 30 minutes).                                                                       |
 
-Check them once before relying on them (writes only to the test objects, and removes them):
+Check them once before relying on them (writes only to the test objects, and removes them). The script uses the dev
+database, which records the results and the audit events: without one (`--no-store`) a one-shot can't read the
+emergency stop or keep an audit record, so the transactions make no change.
 
 ```sh
-pnpm exec tsx tests/live/scripts/run-schedule-once.ts --no-store \
+pnpm exec tsx tests/live/scripts/run-schedule-once.ts \
   --probe probes.exchange-mail-flow --probe probes.sharepoint-file-round-trip --probe probes.teams-online-meeting
 ```
 
@@ -202,8 +208,10 @@ id; `forbidden` — the message names the role, grant or policy that's missing; 
 arrive within the wait (critical); `junk` — it arrived in Junk Email (degraded: check the sender's SPF/DKIM/DMARC and
 anti-spam policies); `cleanup_failed` — the check worked but its test item stayed (degraded; the next run removes
 leftovers it recognises); `expectation_failed` — SharePoint returned another file or no download address, or Teams no
-join link; `writes_paused` — the emergency stop is on (transactions pause with every other change). Probe results are
-the record of these runs; they don't add audit events.
+join link; `writes_paused` — the emergency stop is on (transactions pause with every other change); `automation_paused`
+— a one-shot didn't run it because automation is paused; `database_required` — a one-shot without the database
+(`--no-store`) refused its writes. Probe results are the record of each check; the audit log has an event per run
+that acted (`schedule.run`, or `probe.run` for a one-shot).
 
 ## Azure Billing
 

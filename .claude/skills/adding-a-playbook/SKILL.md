@@ -34,11 +34,14 @@ Markdown sections, manual steps and executable steps.
    waits for can supply its values.
 4. **Steps:** read first (look up the target, `assert` preconditions so a stale screen can't act on the wrong object),
    then writes. Every write step: `mode: write`, `describe` (plain language — shown in the dry-run plan), `compensate`
-   where an undo exists. PUT/PATCH/DELETE must be `write`; POST must declare a mode.
+   where an undo exists. PUT/PATCH/DELETE must be `write`, and so must a `type: playbook` step whose child writes and
+   any step with `compensate` (`validate` refuses them otherwise: the engine places the approval gate and the armed
+   checks by the steps that write); POST must declare a mode.
    - **`idempotent: false`** on every write whose repeat would hurt (a message sent twice, a second object created).
      It matters on every restart, not only after a crash: a step still in flight 10 s after a stop is retried unless
      it says `idempotent: false` — then the run ends `needs_review` instead. Checks run again before the retry, but
-     they can't tell whether the first send took effect.
+     they can't tell whether the first send took effect. Its request is sent at most once (no automatic HTTP resend
+     except after a 429), and it may not have `retry:`.
    - **Guards are `assert` steps** — not a branch `if`, a forEach's `items` filter or a read's `when`. A run that
      paused (an approval, input, write access, a sign-in, a `wait`, a restart) runs its asserts and the reads they use
      again right before its next write; what it decided before the pause (branch arms, forEach items, the `when` of

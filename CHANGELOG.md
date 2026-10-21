@@ -11,7 +11,9 @@ All notable changes to AdminForge are recorded here. The format follows
 The SQLite-on-Kubernetes build was reviewed for security, functionality, design and organization
 (`docs/plans/2026-10-21-platform-review-*.md`; ids in parentheses: S security, F functionality, D design, O
 organization). There was no critical or high security finding; the fixes are below, and what remains is in
-`docs/backlog.md`.
+`docs/backlog.md`. Whole-branch security, design and content reviews of the fixes followed (no critical or high
+security finding, no content blocker); their fixes are below too, with the reviews' own ids: M1, M2 and L1–L4 security,
+H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
 
 #### Added
 
@@ -221,6 +223,17 @@ organization). There was no critical or high security finding; the fixes are bel
   session left without any AdminForge role (403 `no_portal_role`), as Entra sign-in does. Only under mock sign-in
   does the fixture fetch accept a write no fixture describes, and never a POST the request policy lists as a read;
   with Entra sign-in on fixtures an unfixtured write stays a 404.
+- **Fixture data never reaches the PowerShell runner** (M2): with `DATA_MODE=fixtures` a playbook's PowerShell steps
+  answer from the runner fixtures, as PowerShell datasources do, with either sign-in. With Entra sign-in and a runner
+  configured they went to the runner with real Exchange tokens while every other step read fixtures. Write scripts
+  still pass the emergency stop and the protected-object guard; one no fixture describes is accepted only with mock
+  sign-in.
+- **Scheduler one-shots follow the emergency stop** (L1): a synthetic transaction a `--probe` / `--once` one-shot ran
+  that acted is audited as a write (`probe.run`); none runs while automation is paused, and a `--schedule` run is
+  recorded as skipped then. `--schedule` refuses a turned-off schedule that runs synthetic transactions, as Run now
+  does (`schedule_disabled`). Without the database (`--no-store`) a one-shot refuses every write its probes would send
+  and `--schedule` runs only on fixture data (`database_required`): it can read neither switch nor keep an audit
+  record.
 - **A new session id at every arm** (S-08): turning on write access gives the session a new id and CSRF token and
   moves its unfinished runs, approval decisions, pending sign-in round trips and Microsoft token partitions (sealed
   again) with it in one transaction; held show-once secrets follow once it commits, and the Write app's tokens go
@@ -235,12 +248,23 @@ organization). There was no critical or high security finding; the fixes are bel
   assert's message and a hint that the run had paused); a write that may already have gone out ends `needs_review`
   instead. Before, `avd.log-off-user-session` checked that the session belonged to the expected person, waited for
   write access, and up to 24 hours later signed out whoever held that session number by then.
+- **A change whose outcome is unknown is never sent again** (L2): an `idempotent: false` step's request (any method but
+  GET, HEAD and OPTIONS) is not resent by the HTTP client after a server error (a 503 with Retry-After included), a
+  network failure or a timeout — only a 429 is waited out — and validate refuses `retry` on such a step. A sign-in
+  (claims) challenge after Microsoft accepted a change — on an Azure long-running operation's poll, or a `$batch`
+  chunk after one was processed — fails the step (`accepted_unconfirmed`) instead of sending the change again.
+  Before, `avd.log-off-user-session`'s DELETE was resent after a 500, or after such a challenge on its poll.
 - **Confirming a manual step with write steps after it needs write access**, as approving such a gate does (403
   `not_armed`, "Arm write access, then confirm."): the steps after it run as the person who confirms. The step card
   says so up front and keeps **Mark done** locked until write access is armed. Declining needs nothing, and a step
   with no writes after it confirms read-only.
 - **An approval can't be stepped over:** `validate` refuses `onError: continue` on an approval, and a rejected,
   expired or unworkable approval always stops the run.
+- **A step that starts a writing child playbook is a write** (M1): validate refuses a `type: playbook` step whose child
+  writes unless it says `mode: write`, and any step with a `compensate` block unless it says `mode: write`; in a write
+  playbook the engine also counts such steps as writes when it places the implicit approval gate and decides whether
+  whoever approves or confirms a manual step must be armed. Before, a critical playbook whose only step started a
+  writing child without `mode: write` got no approval gate. Every shipped playbook already declared it.
 - **Someone else's run shows what ran, not what it found** (S-25): a delegated run's inputs, outputs, step requests
   and outputs, plan, logs, error messages, task messages and comments are shown only to its initiator (of that run or
   one above it), its approvers (while a gate they may decide is pending and not expired, or once they decided), the
@@ -288,6 +312,10 @@ organization). There was no critical or high security finding; the fixes are bel
   `$guid`, numbers and literal allowlists). A whole path/url may come straight only from a guid or entity param; a
   whole KQL query from a param needs `/* adminforge: user-query */`. Enum params count as allowlists. `$x := …` is
   allowed only as a block statement, the whole expression or a function body. All shipped definitions stay clean.
+- **Entity params are the ids they name** (L3): `user`, `group`, `device`, `app`, `resource` and `subscription` page
+  params take a GUID (also a UPN for a user, a whole `/subscriptions/…` id with no empty or dot segment for a
+  resource), as playbook inputs do, in the API and the browser alike; validation lets a whole request path come from
+  one.
 - **Size caps** (S-34): `&` is size-checked like `$join`, and the encoders (`$encodeUrl`, `$encodeUrlComponent`,
   `$base64encode`, `$encode`, `$odata`, `$odataSearch`, `$kql`) refuse an input whose result could pass 10 million
   characters, like the other string built-ins. `$__af…` names are refused as `@`/`#` bindings too.

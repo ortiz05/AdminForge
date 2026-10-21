@@ -57,12 +57,111 @@ export const noPortalRole = () =>
     hint: 'Ask a portal administrator to add you to an AdminForge group: Reader to view, Operator to make changes.',
   });
 
-/** Parses a request body with zod, throwing a 400 ApiErrorBody on failure. */
+/** Plain words for the type zod expected (`invalid_type`). */
+const TYPE_WORDS: Record<string, string> = {
+  string: 'text',
+  number: 'a number',
+  int: 'a whole number',
+  bigint: 'a whole number',
+  boolean: 'true or false',
+  array: 'a list',
+  object: 'an object',
+  date: 'a date',
+  null: 'empty',
+};
+
+/** Plain words for the string formats zod checks (`invalid_format`). */
+const FORMAT_WORDS: Record<string, string> = {
+  email: 'an email address',
+  url: 'a web address (URL)',
+  uuid: 'a GUID',
+  guid: 'a GUID',
+  datetime: 'a date and time (ISO 8601)',
+  date: 'a date (YYYY-MM-DD)',
+  time: 'a time (HH:MM)',
+  duration: 'a duration like PT1H',
+  ipv4: 'an IPv4 address',
+  ipv6: 'an IPv6 address',
+};
+
+const listOf = (values: readonly unknown[]) => {
+  const words = values.slice(0, 10).map((v) => (typeof v === 'string' ? v : JSON.stringify(v)));
+  if (values.length > 10) words.push('…');
+  return words.length <= 2 ? words.join(' or ') : `one of ${words.join(', ')}`;
+};
+const items = (n: number) => (n === 1 ? 'one item' : `${n} items`);
+
+/**
+ * What a zod issue says about its field, in plain words ("must be csv or xlsx", "is missing"), for the zod checks a
+ * person can meet. Only zod's own wording is replaced: a message the schema wrote itself is kept (zod gives a
+ * schema's own message precedence over this per-parse one).
+ */
+function plainIssue(iss: z.core.$ZodRawIssue): string {
+  switch (iss.code) {
+    case 'invalid_type':
+      if (iss.input === undefined) return 'is missing';
+      return `must be ${TYPE_WORDS[iss.expected] ?? `a ${iss.expected}`}`;
+    case 'invalid_value':
+      return iss.input === undefined ? `is missing (${listOf(iss.values)})` : `must be ${listOf(iss.values)}`;
+    case 'too_small': {
+      const min = Number(iss.minimum);
+      if (iss.origin === 'string') return min <= 1 ? 'can’t be empty' : `must be at least ${min} characters`;
+      if (iss.origin === 'array' || iss.origin === 'set') return `needs at least ${items(min)}`;
+      if (iss.origin === 'number' || iss.origin === 'bigint')
+        return iss.inclusive === false ? `must be more than ${min}` : `must be at least ${min}`;
+      return 'is too small';
+    }
+    case 'too_big': {
+      const max = Number(iss.maximum);
+      if (iss.origin === 'string') return `must be at most ${max} characters`;
+      if (iss.origin === 'array' || iss.origin === 'set') return `can have at most ${items(max)}`;
+      if (iss.origin === 'number' || iss.origin === 'bigint')
+        return iss.inclusive === false ? `must be less than ${max}` : `must be at most ${max}`;
+      return 'is too large';
+    }
+    case 'invalid_format':
+      return FORMAT_WORDS[iss.format]
+        ? `must be ${FORMAT_WORDS[iss.format]}`
+        : 'isn’t in the expected format';
+    case 'not_multiple_of':
+      return `must be a multiple of ${String(iss.divisor)}`;
+    case 'unrecognized_keys':
+      return iss.keys.length === 1 ? 'isn’t accepted' : 'aren’t accepted';
+    default:
+      return 'isn’t valid';
+  }
+}
+
+/** `items[0].id`; the whole body is "the body". */
+const fieldLabel = (path: readonly PropertyKey[]) =>
+  path.length
+    ? path.map((p, i) => (typeof p === 'number' ? `[${p}]` : `${i ? '.' : ''}${String(p)}`)).join('')
+    : 'the body';
+
+/** Parses a request body with zod, throwing a 400 ApiErrorBody (plain words, with a hint) on failure. */
 export function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
-  const parsed = schema.safeParse(body ?? {});
+  // Messages produced here (zod's own wording replaced) are predicates for the field; others are the schema's own.
+  const plain = new Set<string>();
+  const parsed = schema.safeParse(body ?? {}, {
+    error: (iss) => {
+      const phrase = plainIssue(iss);
+      plain.add(phrase);
+      return phrase;
+    },
+  });
   if (!parsed.success) {
-    const detail = parsed.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ');
-    throw new AppError(400, 'invalid_request', `The request is not valid. ${detail}`);
+    const issues = parsed.error.issues;
+    const phrases = issues.slice(0, 3).map((i) => {
+      const message = i.message.trim().replace(/\.$/, '');
+      if (i.code === 'unrecognized_keys' && plain.has(message))
+        return `${i.keys.map((k) => fieldLabel([...i.path, k])).join(', ')} ${message}`;
+      if (plain.has(message)) return `${fieldLabel(i.path)} ${message}`;
+      return i.path.length ? `${fieldLabel(i.path)}: ${message}` : message;
+    });
+    const more = issues.length > 3 ? `, and ${issues.length - 3} more` : '';
+    throw new AppError(400, 'invalid_request', `The request isn’t valid: ${phrases.join('; ')}${more}.`, {
+      hint: 'Correct it and try again. If you didn’t enter it yourself, reload the page.',
+    });
   }
   return parsed.data;
 }
@@ -94,6 +193,26 @@ function upstreamError(err: ApiError): AppError {
   });
 }
 
+const RELOAD =
+  'Reload the page and try again. If it keeps happening, give a portal administrator the reference.';
+const unreadableBody = () =>
+  new AppError(400, 'invalid_request', 'AdminForge couldn’t read what this page sent.', { hint: RELOAD });
+
+/** Fastify's body-parsing refusals, in our codes and words (its own texts name headers and parser details). */
+const FASTIFY_ERRORS: Record<string, () => AppError> = {
+  FST_ERR_CTP_BODY_TOO_LARGE: () =>
+    new AppError(413, 'body_too_large', 'This request is larger than AdminForge accepts (256 KB).', {
+      hint: 'Send less at once — fewer items or shorter text — then try again.',
+    }),
+  FST_ERR_CTP_INVALID_MEDIA_TYPE: () =>
+    new AppError(415, 'unsupported_media_type', 'AdminForge didn’t understand the format of this request.', {
+      hint: RELOAD,
+    }),
+  FST_ERR_CTP_INVALID_JSON_BODY: unreadableBody,
+  FST_ERR_CTP_EMPTY_JSON_BODY: unreadableBody,
+  FST_ERR_CTP_INVALID_CONTENT_LENGTH: unreadableBody,
+};
+
 /** Normalises anything thrown by a route into an AppError. */
 export function toAppError(err: unknown): AppError {
   if (err instanceof AppError) return err;
@@ -120,26 +239,48 @@ export function toAppError(err: unknown): AppError {
     return new AppError(429, 'rate_limited', 'Too many requests from your browser this minute.', {
       hint: 'Wait a minute, then try again.',
     });
-  if (fe?.validation) return new AppError(400, 'invalid_request', fe.message ?? 'The request is not valid.');
+  if (fe?.validation) return new AppError(400, 'invalid_request', 'The request isn’t valid.');
   if (status >= 400 && status < 500) {
+    const known = fe?.code ? FASTIFY_ERRORS[fe.code] : undefined;
+    if (known) return known();
+    // Fastify's own text can name headers or parser internals: the code (lower-cased) stays, the words are ours.
     const code = (fe?.code ?? 'bad_request').replace(/^FST_(ERR_)?/, '').toLowerCase();
-    return new AppError(status, code, fe?.message ?? 'Bad request.');
+    return new AppError(status, code, 'AdminForge couldn’t handle this request.', { hint: RELOAD });
   }
   return new AppError(500, 'internal', 'AdminForge hit an unexpected problem and didn’t finish this.', {
     hint: 'Try again. If it keeps happening, give a portal administrator the reference below.',
   });
 }
 
-export function sendError(request: FastifyRequest, reply: FastifyReply, err: AppError) {
-  const body: ApiErrorBody = {
-    error: {
-      code: err.code,
-      message: err.message,
-      ...Object.fromEntries(Object.entries(err.extras).filter(([, v]) => v !== undefined)),
-      correlationId: request.id,
-    },
+/**
+ * Hints for codes thrown in many places, where the person can act but the thrower gave none: used only when the
+ * error has no hint of its own.
+ */
+export const DEFAULT_HINTS: Readonly<Record<string, string>> = {
+  not_found: 'Check the address, or open the page from the navigation.',
+  invalid_cursor: 'Reload the list to start again from the top.',
+  run_not_found:
+    'Open Runs to find it. You see the runs you started; Operators, Approvers and Admins see every run.',
+  datasource_not_found:
+    'The page may have changed since you opened it. Reload it; if it keeps happening, give a portal administrator the reference.',
+  invalid_request: 'Check what you entered and try again. If you didn’t enter anything, reload the page.',
+  body_too_large: 'Send less at once — fewer items or shorter text — then try again.',
+};
+
+/** The ApiErrorBody for `err`: its code, message and extras, a default hint where it has none, and the reference. */
+export function errorBody(err: AppError, correlationId: string): ApiErrorBody {
+  const extras = Object.fromEntries(Object.entries(err.extras).filter(([, v]) => v !== undefined));
+  const hint = err.extras.hint ?? DEFAULT_HINTS[err.code];
+  return {
+    error: { code: err.code, message: err.message, ...extras, ...(hint ? { hint } : {}), correlationId },
   };
-  return reply.status(err.status).type('application/json; charset=utf-8').send(body);
+}
+
+export function sendError(request: FastifyRequest, reply: FastifyReply, err: AppError) {
+  return reply
+    .status(err.status)
+    .type('application/json; charset=utf-8')
+    .send(errorBody(err, String(request.id)));
 }
 
 /**

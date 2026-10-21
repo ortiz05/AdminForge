@@ -300,7 +300,9 @@ export async function buildApp(
     return sendError(
       request,
       reply,
-      new AppError(404, 'not_found', `No route for ${request.method} ${request.url.split('?')[0]}.`),
+      new AppError(404, 'not_found', 'AdminForge has nothing at this address.', {
+        hint: 'Check the address, or open the page from the navigation.',
+      }),
     );
   });
 

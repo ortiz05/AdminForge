@@ -94,8 +94,12 @@ and `adminforge validate` lists them; remove it once it works live. The full pro
   active points at retired content (`tests/content/retired-content.test.ts`); probe groups name a navigation section;
   every active page, dashboard and report renders from the fixtures and every KQL probe has its `af:` fixture variant
   (`tests/content/fixtures-complete.test.ts`); `status` columns carry a tone that says fine or not, categories are
-  `enum` (`tests/content/status-tones.test.ts`); high- and critical-risk playbooks and runbooks, and bulk actions from
-  risk medium up, confirm by typing (`tests/content/high-risk-typed-confirm.test.ts`).
+  `enum` (`tests/content/status-tones.test.ts`) — table columns and keyValue fields alike
+  (`tests/content/key-value-status-tones.test.ts`); a person's sign-in is "Sign-in: Allowed / Blocked" (crit), a sync
+  source "Source: Cloud / Synced from AD" (`tests/content/account-sign-in-wording.test.ts`); high- and critical-risk
+  playbooks and runbooks, and bulk actions from risk medium up, confirm by typing
+  (`tests/content/high-risk-typed-confirm.test.ts`). Not checked by a test: keep a list's default columns within
+  about 1,130 px at 1440 and hide the rest (`docs/widgets.md` › table).
 - **In the browser:** every widget renders inside its own error boundary, so a block that can't be shown says so
   with a reference and the rest of the page keeps working; links templated from data open only safe addresses
   (`safeUrl`) and otherwise stay text.

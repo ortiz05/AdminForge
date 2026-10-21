@@ -40,9 +40,12 @@ You review AdminForge content changes. Read `CLAUDE.md`, the skill in `.claude/s
      message; every KQL probe is in `CONFIG_CHECKS` (and `OPERATIONAL` if it runs on a faster sweep).
    - **Browser expressions:** no `env.` in widget, header or action templates (`when`, `href`, `text`, `hint`) —
      always empty there; configuration comes through a `source: static` datasource.
-   - **Tables and KPIs:** `kind: status` only for values that are fine or not, categories are `kind: enum`; `rowKey`
-     unique (composite key when grouped by several columns); KPI labels fit two lines (`docs/widgets.md` › kpi), no
-     hint after a status pill.
+   - **Tables and KPIs:** `kind: status` only for values that are fine or not, categories are `kind: enum` — table
+     columns and keyValue fields alike (`tests/content/key-value-status-tones.test.ts`); a person's sign-in is
+     "Sign-in: Allowed / Blocked" (crit), a sync source "Source: Cloud / Synced from AD"
+     (`tests/content/account-sign-in-wording.test.ts`); a list's default columns fit within about 1,130 px at 1440 and
+     the rest are hidden; `rowKey` unique (composite key when grouped by several columns); KPI labels fit two lines
+     (`docs/widgets.md` › kpi), no hint after a status pill.
    - **Declarations:** `requires.scopes` exact and minimal; `requires.licences` present where a licence is needed, with
      keys from `portal/apps/api/src/capabilities/features.ts`;
      schedules use the automation identity and application permissions; write schedules need approval.

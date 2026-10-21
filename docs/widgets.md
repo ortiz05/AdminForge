@@ -43,7 +43,7 @@ KPI that shows a status.
 
 Consecutive KPIs share one strip. Every cell is as tall as its row — a drill-down (`href`) cell too — and its number
 sits at the foot, so the figures line up however long the labels are. A cell that can't be shown keeps its place: its
-label, the reference and **Try again**, then "—" and "Couldn't be shown" in line with the other figures.
+label, the reference and a **Try again** icon, then "—" and "Couldn't be shown" in line with the other figures.
 
 ## table
 

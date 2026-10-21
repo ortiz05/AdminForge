@@ -40,6 +40,11 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
 - **`enum` table column kind** (D-16): a category shown as plain text with its label
   (`map: { AzureAd: Entra joined }`) and a facet filter, in tables and exports; `status` is for values that are fine
   or not. 43 category columns moved from neutral status pills to `enum`. `wrap: true` gives a text column two lines.
+  **keyValue fields** take `enum` too (M4), with the table's map and lookup, so a list and its entity page say the same
+  thing: nine fields moved from neutral pills (user type, group membership, session-host hosting, device ownership, CA
+  grant operator, host-pool validation, mailbox litigation hold, auto-reply state and audience), and `validate` refuses
+  a tone in an `enum` map and a bare label in a `status` map (`tests/content/key-value-status-tones.test.ts`). An
+  entity header's `neutral` status is an outline badge.
 - **`entity:` on pages** (D-08; `user|group|device|app|resource`): the command palette opens that kind of search
   result on the declaring page. `validate` allows one active page per kind, and that page needs an `id` param.
 - **Write playbooks run end to end in mock mode** (F-02): with mock sign-in on fixtures, a write no fixture describes
@@ -91,12 +96,18 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
 - **Retired content says so** (F-05): a retired page, report or playbook answers 409 `definition_retired` with its
   retirement note, shown only to people who may open it, instead of 404; an unknown key's hint is worded for the
   person.
-- **Navigation rail** (D-14, F-16): section rows are full size with their hidden-page count. Each section with probes
-  ends with its check status (a dot when healthy, a ring with no result yet, a warning or cross when degraded or
-  failing; its name and tooltip give the counts), linking to Synthetic monitoring for that section
-  (`/monitoring?group=<key>`). The eight "Service checks" items are gone (navigation 1.5.0). Only Readers' rails ask
-  for probe status. The "N new breaking" pill in the top bar uses the info tone, without a pulse or an outline, and
-  its name starts with what it shows (D-13); the News page keeps its own tones.
+- **Navigation rail** (D-14, F-16, M5): section rows are full size with their hidden-page count. Each section with
+  probes ends with its check status (Synthetic monitoring's status icon at 12 px — check, warning or cross — once one
+  of its probes has a result, in place of the closed section's page count; its name and tooltip give the counts),
+  linking to Synthetic monitoring for that section (`/monitoring?group=<key>`). The eight "Service checks" items are
+  gone (navigation 1.5.0). Only Readers' rails ask for probe status. The "N new breaking" pill in the top bar uses the
+  info tone, without a pulse or an outline, and its name starts with what it shows (D-13); the News page keeps its own
+  tones.
+- **Session rail on small screens** (H2): it fits every window from a 360 px phone up. Below `xl` the tenant moves into
+  the account menu and the breaking pill and PIM show their short form; below `lg` the mode pill drops its icon, Arm
+  write access reads "Arm" and the armed pill shows the time left (Extend stays in the command palette and the
+  five-minute warning); below `sm` jump-to is a 32 px icon button. PIM's name starts with what it shows ("PIM
+  (privileged roles): …").
 - **Probe drawer** (D-17): "What to do" appears only for degraded or failing results; healthy probes keep their link
   under "What this checks". The history is under "Last 24 hours" and says why there is no chart. Tile messages wrap
   to two lines, and times are never cut. **Token probes** (1.0.4) say what the administrator checks and where renewal
@@ -107,12 +118,35 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
 - **List pages put more rows above the fold** (D-11): actions on the title row, a one-line description with More, a
   KPI strip that folds to one line (remembered per page; its warnings stay visible) and a filter bar that stays at the
   top while the list scrolls. The inspector is 920 px wide and stays beside the list at 1440 and 1920 px (D-10).
+- **KPI strips and failed figures** (M3, L11): every cell is as tall as its row (drill-down cells too), so the numbers
+  line up; a cell that can't be shown keeps its place — its label, its reference and a Try again icon, then "—" in
+  line with the other figures. On a phone the cells' narrower sides keep a status's words.
+- **Lists at 1440 px** (L17): columns that need more room than the table has scroll sideways under the row-actions
+  column, which stays at the right edge with a hairline, and the focus ring stays whole; headers wrap to two lines
+  before they are cut off. The Users list hides Job title by default (the column chooser and exports still have it;
+  `identity.users` 1.3.0). The Microsoft 365 overview names its chart series (Any service, Exchange, Teams, OneDrive,
+  SharePoint) and drops a hint that was cut off beside its status (1.1.2).
+- **List headers** (M8): Runs, Audit, Schedules and Reports use the list page header (actions on the title row, the
+  description on one line with "More"). **Facts** (M7) put the label above the value on a phone; Settings' fresh
+  sign-in step-up is a short pill with what to do under it. The key figures fold points right when closed and down
+  when open, like the navigation (L15).
 - **Content write actions show the lock** (D-18): buttons and "More actions" that run a write playbook show a lock and
   "Arm write access to run this; previewing it doesn't need it" while unarmed (without the Operator role: "Running
-  this needs the Portal Operator role") and the ember dot once armed; they stay clickable, to preview. Table row and
-  bulk actions don't show it yet.
-- A widget with a broken configuration names the part for the reader and keeps the details "For the content author";
-  the user page's copy is plain (D-19).
+  this needs the Portal Operator role") and the ember dot once armed; they stay clickable, to preview. So do a table's
+  row menu and bulk bar (H1), whose links are judged by their evaluated target with `safeUrl` (a templated Entra link
+  says it opens a new tab; an unsafe one is a disabled item that says why); a bulk action over its row limit is inert
+  and shows no ember dot.
+- A block with a broken configuration, or one that fails while it renders, is "<name> couldn't be shown" — its title,
+  a KPI's label, a timeline's heading; untitled, "This part of the page couldn't be shown" — never a widget type (L10),
+  and keeps the details "For the content author"; the user page's copy is plain (D-19).
+- **One wording for the same fact** (L18, N4): a person's sign-in is "Sign-in: Allowed / Blocked" (Blocked in crit) on
+  the Users list, the user and group pages and the inactive-users, password-age and privileged-role-assignment
+  reports, and a directory sync source is "Source: Cloud / Synced from AD" wherever it shows
+  (`tests/content/account-sign-in-wording.test.ts`; the Microsoft 365 team, distribution-list and licence pages still
+  say "Enabled / Disabled", `docs/backlog.md`). A group's header shows a status only when the group is
+  role-assignable.
+- **The provenance line never widens a phone page** (L13): it stays one line, cuts the path first, leaves out the
+  request time below `sm`, and drops whole parts that don't fit.
 - **One check for params and inputs** (D-06, D-15, D-21): page params, query-builder values and run inputs are
   checked by the same code in the browser and the API (`@adminforge/schemas`, which has a browser entry without
   `yaml`); page-param messages read after the label. Exports read `[n]` column paths and the table's labels and tags.
@@ -209,12 +243,18 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
   refused (409 `preview_required`). A runbook still starts without write access — its write steps wait for it — but
   needs the Portal Operator role, and the start button says so.
 - A run started before its session last armed write access says so on its page ("Paused: check this run is yours,
-  then resume it", with when it started; the status reads "Waiting to be resumed") and asks its person to check it is
-  theirs, then resume it — or cancel it if they don't recognise it.
+  then resume it", with when it started) and asks its person to check it is theirs, then resume it — or cancel it if
+  they don't recognise it. It reads "Waiting to be resumed" on its run page, its runbook page, the Runs list and the
+  run dock (M6; `GET /api/runs` gives `waitingReason: 'prearm'`), and the runbook page shows the run page's parked-run
+  banner (arm, sign in, resume, needs review). A parked run no longer says it is running, and resuming refreshes the
+  dock and the Runs list.
 - `m365.licence` 2.1.1 declares the Entra ID P1 licence its holders list needs for the Last sign-in column: without P1
   the list says which licence it needs instead of failing (S2).
 - `azure.resource` and `azure.role-assignments` quote ids, scopes and role names with `$kql()`; resource groups with
   non-ASCII letters were found by nothing (S3).
+- The not-found page's button fits a phone (no Ctrl K hint there, L12); "Chain verified" has one check mark (L16);
+  waiting text on runbooks and the run timeline carries the waiting glyph (L14); an expired preview says "Select Start
+  runbook (or Run) to preview again and confirm" (M9); the Runs list's Duration is whole at 1440 px.
 
 #### Removed
 

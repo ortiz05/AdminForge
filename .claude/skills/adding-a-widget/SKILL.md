@@ -33,14 +33,17 @@ twice: its config schema in `src/schemas.ts` (`WIDGET_SCHEMAS`, which `registerW
 3. `index.ts`: the `WidgetDefinition` (`type`, `schema`, `component`, default `span`, `needsData`).
 4. Register it: add the schema to `WIDGET_SCHEMAS` (and the re-export list) in `src/schemas.ts`, the definition to
    `WIDGETS` in `src/registry.ts`, and export the config type and `<type>Fixtures` from `src/index.ts`. The registry
-   wraps the component with `withWidgetBoundary` (named by its type): a block that fails while it renders shows
-   "<name> couldn't be shown" with a reference and Try again, and the rest of the page keeps working. If the block's
-   label key isn't `title`, add it to `LABEL_KEY` there.
+   wraps the component with `withWidgetBoundary` (named by the block's `title`, or the key in `LABEL_KEY`; an untitled
+   block is "This part of the page", never its type — `cantBeShownTitle`, `blockLabel`): a block that fails while it
+   renders shows "<name> couldn't be shown" with a reference and Try again, and the rest of the page keeps working. If
+   the block's label key isn't `title`, add it to `LABEL_KEY` there.
 5. `Widget.tsx`: loading / empty / error states, `ProvenanceFooter`, keyboard access, status = icon + label (never
    colour alone). Values that may contain HTML are shown as text. A templated link target (`href` from data or
    content) goes through `safeUrl` (`@adminforge/ui`, `portal/packages/ui/src/lib/links.ts`) before `runtime.Link`:
    only `https://`, `http://`, `mailto:`, an in-app `/path` or `#anchor` becomes a link; anything else stays text.
-   Charts follow the dataviz rules: one y-axis, ≤ 6 series, legend for ≥ 2, table toggle.
+   Charts follow the dataviz rules: one y-axis, ≤ 6 series, legend for ≥ 2, table toggle. Content actions use
+   `ActionButton`, `PlaybookButton` and `ActionMenuItem` from `src/lib/actions.tsx`, so write playbooks show the lock or
+   the ember dot.
 6. Document the keys in `docs/widgets.md` (with a YAML example).
 7. Tests: `tests/component/widgets/<type>.test.tsx` (render, keyboard, `axe` = 0 violations, an unsafe `href` that
    stays text); add the type to the list in `tests/component/widgets/registry.test.tsx`; a content example in

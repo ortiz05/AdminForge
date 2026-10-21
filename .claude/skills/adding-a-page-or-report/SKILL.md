@@ -63,7 +63,12 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
    `export` (reports require it).
    - `kind: status` is for a value that is fine or not (at least one value maps to `ok`, `warn` or `crit`); a plain
      category — a type, a source, a computed `'true'`/`'false'` flag with no good or bad — is `kind: enum`
-     (`map: { "true": "On", "false": "Off" }`; `tests/content/status-tones.test.ts`).
+     (`map: { "true": "On", "false": "Off" }`; `tests/content/status-tones.test.ts`) — table columns and keyValue
+     fields alike (`tests/content/key-value-status-tones.test.ts`).
+   - One wording for the same fact: a person's sign-in is "Sign-in: Allowed / Blocked" (Blocked in `crit`), a
+     directory sync source "Source: Cloud / Synced from AD" (`tests/content/account-sign-in-wording.test.ts`).
+   - Keep a list's default columns within about 1,130 px at 1440 (beside the navigation) and hide the rest
+     (`hidden: true`: still in the column chooser and exports).
    - `rowKey` is unique per row: a table grouped by several columns gets a composite key in the query.
    - KPI labels wrap to two lines and are cut after that — about 22 characters a line at `span: 2`; a hint after a
      status pill is cut off — keep it to two or three words or leave it out (`docs/widgets.md` › kpi).

@@ -301,6 +301,20 @@ describe('preflight.sh', () => {
     expect(r.calls.map((x) => x.args.join(' '))).not.toContainEqual(expect.stringMatching(/create/));
   });
 
+  it.each([
+    ['--namespace', 'adminforge\nkind: Secret'],
+    ['--storage-class', 'managed-csi\n  dataSource: {}'],
+    ['--pull-secret', 'Registry_Pull'],
+    ['--namespace', 'x'.repeat(254)],
+  ])(
+    'refuses %s %j before asking the cluster anything: only a Kubernetes name goes into a query',
+    (opt, val) => {
+      const r = run(goodCluster(), [opt, val]);
+      expect(r.code).toBe(2);
+      expect(r.calls).toEqual([]);
+    },
+  );
+
   it('passes --context to every call, and refuses unknown options', () => {
     const r = run(goodCluster(), ['--context', 'staging']);
     expect(r.calls.filter((x) => x.args[0] !== '--context' && x.args[0] !== 'config')).toEqual([]);

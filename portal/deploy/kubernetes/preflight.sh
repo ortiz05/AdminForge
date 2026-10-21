@@ -30,9 +30,12 @@ value() {
     exit 2
   fi
 }
+# Only a Kubernetes name (DNS-1123, at most 253 characters) goes into a query or the dry run's YAML. The whole value
+# must match — a newline can't smuggle in a second line.
+is_name() { [ "${#1}" -le 253 ] && [[ "$1" =~ $NAME_RE ]]; }
 name() {
-  if ! printf '%s' "$2" | grep -Eq "$NAME_RE"; then
-    echo "✗ $1: \"$2\" is not a Kubernetes name" >&2
+  if ! is_name "$2"; then
+    echo "✗ $1: that is not a Kubernetes name (lower-case letters, digits, - and .)" >&2
     exit 2
   fi
 }
@@ -115,6 +118,7 @@ DEFAULT_NOTE=""
 if [ -z "$CLASS" ]; then
   if run get storageclass -o 'jsonpath={range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.storageclass\.kubernetes\.io/is-default-class}{"\n"}{end}'; then
     CLASS="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 == "true" { print $1; exit }')"
+    is_name "$CLASS" || CLASS=""
     DEFAULT_NOTE=" (the default)"
     [ -n "$CLASS" ] || bad "no default storage class — name the database volume's class with --storage-class (block storage: README.md → Requirements › Storage)"
   else

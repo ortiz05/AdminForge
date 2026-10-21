@@ -1,0 +1,26 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(id,appId,displayName,appRoles)/$entity",
+  "id": "00000000-0000-4000-8000-00000000040b",
+  "appId": "00000003-0000-0ff1-ce00-000000000000",
+  "displayName": "Office 365 SharePoint Online",
+  "appRoles": [
+    {
+      "id": "678536fe-1083-478a-9c59-b99265e6b0d3",
+      "value": "Sites.FullControl.All",
+      "displayName": "Have full control of all site collections",
+      "allowedMemberTypes": [
+        "Application"
+      ],
+      "isEnabled": true
+    },
+    {
+      "id": "d13f72ca-a275-4b96-b789-48ebcc4da984",
+      "value": "Sites.Read.All",
+      "displayName": "Read items in all site collections",
+      "allowedMemberTypes": [
+        "Application"
+      ],
+      "isEnabled": true
+    }
+  ]
+}

@@ -7779,6 +7779,216 @@
       },
       {
         "match": {
+          "bodyIncludes": "af:probes.storage-public-blob-access"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.Storage/storageAccounts/stexampledata",
+              "name": "stexampledata",
+              "resourceGroup": "rg-example-data",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope",
+              "kind": "StorageV2",
+              "allowBlobPublicAccess": true
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Storage/storageAccounts/stexampledev",
+              "name": "stexampledev",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "location": "westeurope",
+              "kind": "StorageV2",
+              "allowBlobPublicAccess": null
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.storage-insecure-transport"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Storage/storageAccounts/stexampledev",
+              "name": "stexampledev",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "location": "westeurope",
+              "httpsOnly": true,
+              "minimumTlsVersion": "TLS1_0"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.key-vault-purge-protection"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.KeyVault/vaults/kv-example-app",
+              "name": "kv-example-app",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope",
+              "softDelete": true,
+              "purgeProtection": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-web/providers/Microsoft.KeyVault/vaults/kv-example-certs",
+              "name": "kv-example-certs",
+              "resourceGroup": "rg-example-web",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope",
+              "softDelete": true,
+              "purgeProtection": null
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.nsg-open-management-ports"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Network/networkSecurityGroups/nsg-example-jumpbox",
+              "name": "nsg-example-jumpbox",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "location": "westeurope",
+              "ruleName": "allow-rdp-anywhere",
+              "priority": 300,
+              "ports": [
+                "3389"
+              ],
+              "sources": [
+                "*"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.policy-non-compliance"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "policyAssignmentName": "30000000-0000-4000-8000-000000000442",
+              "policyDefinitionName": "30000000-0000-4000-8000-000000000443",
+              "policyDefinitionAction": "deny",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "nonCompliantResources": 12
+            },
+            {
+              "policyAssignmentName": "30000000-0000-4000-8000-000000000444",
+              "policyDefinitionName": "30000000-0000-4000-8000-000000000445",
+              "policyDefinitionAction": "audit",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "nonCompliantResources": 4
+            },
+            {
+              "policyAssignmentName": "30000000-0000-4000-8000-000000000444",
+              "policyDefinitionName": "30000000-0000-4000-8000-000000000445",
+              "policyDefinitionAction": "audit",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "nonCompliantResources": 3
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.resources-missing-required-tags"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Web/sites/func-example-dev",
+              "name": "func-example-dev",
+              "type": "microsoft.web/sites",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "location": "westeurope",
+              "missingTags": [
+                "owner"
+              ]
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.OperationalInsights/workspaces/log-example-sandbox",
+              "name": "log-example-sandbox",
+              "type": "microsoft.operationalinsights/workspaces",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "location": "westeurope",
+              "missingTags": [
+                "owner"
+              ]
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.Storage/storageAccounts/stexampledata",
+              "name": "stexampledata",
+              "type": "microsoft.storage/storageaccounts",
+              "resourceGroup": "rg-example-data",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope",
+              "missingTags": [
+                "owner"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.defender-high-severity-recommendations"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "recommendation": "Machines should have vulnerability findings resolved",
+              "assessmentKey": "20000000-0000-4000-8000-000000000301",
+              "unhealthyResources": 3,
+              "subscriptions": 1
+            },
+            {
+              "recommendation": "Storage accounts should restrict network access",
+              "assessmentKey": "20000000-0000-4000-8000-000000000302",
+              "unhealthyResources": 2,
+              "subscriptions": 2
+            }
+          ]
+        }
+      },
+      {
+        "match": {
           "bodyIncludes": "af:probes.arc-agents-outdated"
         },
         "body": {

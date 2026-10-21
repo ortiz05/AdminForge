@@ -764,6 +764,61 @@
       },
       {
         "match": {
+          "bodyIncludes": "af:probes.activity-failed-writes-spike"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "ResourceProviderValue",
+                  "type": "string"
+                },
+                {
+                  "name": "failures",
+                  "type": "long"
+                },
+                {
+                  "name": "baselinePerHour",
+                  "type": "real"
+                },
+                {
+                  "name": "callers",
+                  "type": "long"
+                },
+                {
+                  "name": "operations",
+                  "type": "dynamic"
+                }
+              ],
+              "rows": [
+                [
+                  "MICROSOFT.STORAGE",
+                  6,
+                  0.4,
+                  2,
+                  [
+                    "MICROSOFT.STORAGE/STORAGEACCOUNTS/WRITE"
+                  ]
+                ],
+                [
+                  "MICROSOFT.WEB",
+                  2,
+                  0.1,
+                  1,
+                  [
+                    "MICROSOFT.WEB/SITES/WRITE",
+                    "MICROSOFT.WEB/SITES/CONFIG/WRITE"
+                  ]
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
           "bodyIncludes": "af:identity.ca-report-only-impact#kqltotal"
         },
         "body": {

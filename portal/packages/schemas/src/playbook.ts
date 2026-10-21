@@ -541,6 +541,14 @@ function checkAutomation(
             path: [...at, 'mode'],
             message: 'POST requests must declare mode: read or mode: write explicitly.',
           });
+        // A gate that can be stepped over is no gate (the engine stops on a rejection whatever this says).
+        if (step.type === 'approval' && step.onError === 'continue')
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'onError'],
+            message:
+              'An approval that is rejected, expires or can’t be worked out stops the run: onError: continue is not allowed on an approval.',
+          });
         if (step.type === 'notify' && mode !== 'write')
           ctx.addIssue({
             code: 'custom',

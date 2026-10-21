@@ -34,8 +34,24 @@ Example: `pnpm --filter @adminforge/tests exec vitest run --project component co
 API tests use in-memory stores by default. The DB-backed suites (`*-db.test.ts`, `db-stores`, part of `views`) each run
 on a migrated SQLite file of their own in a fresh temporary directory (`api/db.ts` `testDatabasePath()`), never your
 dev database or a deployment's, so test rows never reach a real audit chain. They need nothing running and never skip.
-The one exception is `import-postgres.test.ts` (the one-time importer): it needs a Postgres to create a throwaway
-database in — `TEST_POSTGRES_URL`, or the `DATABASE_URL` an older env file still has — and skips without one.
+The one exception is `import-postgres.test.ts` (the one-time importer): it creates and drops a throwaway database on
+the Postgres server that `TEST_POSTGRES_URL` names — only that variable, never an env file's `DATABASE_URL`, so a test
+run can't touch a dev or deployment database. Without it the suite skips locally and **fails** under `CI=true` (the CI
+workflow sets it to its `postgres` service). To run it yourself, against a scratch server of your own:
+
+```bash
+docker run -d --rm --name af-test-pg -e POSTGRES_PASSWORD=scratch -p 127.0.0.1:55499:5432 postgres:18-alpine
+TEST_POSTGRES_URL=postgres://postgres:scratch@127.0.0.1:55499/postgres \
+  pnpm --filter @adminforge/tests exec vitest run --project api api/import-postgres.test.ts
+docker stop af-test-pg
+```
+
+### Timeouts
+
+The `unit`, `component` and `content` projects run many files in parallel and allow 15 s per test (vitest's 5 s
+default failed tests that load the whole content tree, spawn processes or drive `userEvent` whenever the machine was
+busy). A test whose work is long by nature (a whole-tree sweep, a PowerShell run) sets its own `timeout`; the `api`
+project runs one file at a time and keeps the default.
 
 ## Shared helpers
 

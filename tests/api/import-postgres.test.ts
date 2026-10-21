@@ -4,37 +4,34 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import BetterSqlite3 from 'better-sqlite3';
 import pg from 'pg';
-import { loadEnv, repoRoot } from '@adminforge/config';
+import { repoRoot } from '@adminforge/config';
 import { chainHash, GENESIS } from '@adminforge/api/src/audit/chain';
 import { importPostgres } from '@adminforge/cli/src/commands/db';
 
 // `adminforge db import-postgres`: the one-time move from the Postgres releases (ADR-016). A throwaway Postgres
 // database gets the last release's schema (tests/fixtures/postgres) and synthetic rows of every kind; the import must
 // copy them faithfully into a new SQLite file — the audit chain still verifying, decided approvals intact, key order
-// kept, credentials left behind. Needs a Postgres to create that database in: TEST_POSTGRES_URL, or the DATABASE_URL
-// an older dev env file still has; the suite skips without one.
+// kept, credentials left behind.
+//
+// It needs a Postgres server to create that database in, named only by TEST_POSTGRES_URL — never the env file's
+// DATABASE_URL, so a test run can't create and drop databases on a dev or deployment server. Without it the suite
+// skips, except in CI (CI=true), where a skip would hide that the importer went untested: there it fails.
 const SCHEMA = readFileSync(
   path.join(repoRoot, 'tests', 'fixtures', 'postgres', 'last-release-schema.sql'),
   'utf8',
 );
 
-async function serverUrl(): Promise<string | null> {
-  const base = process.env.TEST_POSTGRES_URL ?? loadEnv().DATABASE_URL;
-  if (!base?.startsWith('postgres')) return null;
-  const c = new pg.Client({ connectionString: base, connectionTimeoutMillis: 3_000 });
-  c.on('error', () => undefined);
-  try {
-    await c.connect();
-    await c.query('select 1');
-    return base;
-  } catch {
-    return null;
-  } finally {
-    await c.end().catch(() => undefined);
-  }
-}
+const server = process.env.TEST_POSTGRES_URL || null;
+const inCi = !!process.env.CI && process.env.CI !== 'false' && process.env.CI !== '0';
 
-const server = await serverUrl();
+if (!server && inCi)
+  it('has a Postgres to import from (TEST_POSTGRES_URL)', () => {
+    expect.fail(
+      'TEST_POSTGRES_URL is not set: in CI the importer test must run, not skip. Point it at a Postgres server the ' +
+        'test may create and drop a scratch database on (the CI workflow provides a postgres service).',
+    );
+  });
+
 const T0 = Date.parse('2026-10-15T08:00:00.000Z');
 const RUN1 = '00000000-0000-4000-8000-000000000001';
 

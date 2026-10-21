@@ -18,6 +18,13 @@ const SCALE = [
   'unit/api/datasource-scale.test.ts',
 ];
 
+/**
+ * Per-test limit for the projects that run many files in parallel (unit, component, content). Vitest's 5 s default
+ * failed tests that load the whole content tree, spawn processes or drive `userEvent` through jsdom whenever the
+ * machine was busy (they took 3.5–5 s); 15 s absorbs that load and still stops a test that hangs.
+ */
+const PARALLEL_TEST_TIMEOUT = 15_000;
+
 // Every AdminForge test lives under tests/. Projects map to the folders in tests/README.md.
 export default defineConfig({
   plugins: [react()],
@@ -26,7 +33,13 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: 'unit', include: ['unit/**/*.test.ts'], exclude: SCALE, environment: 'node' },
+        test: {
+          name: 'unit',
+          include: ['unit/**/*.test.ts'],
+          exclude: SCALE,
+          environment: 'node',
+          testTimeout: PARALLEL_TEST_TIMEOUT,
+        },
       },
       {
         extends: true,
@@ -35,6 +48,7 @@ export default defineConfig({
           include: ['component/**/*.test.tsx'],
           environment: 'jsdom',
           setupFiles: ['./component/setup.ts'],
+          testTimeout: PARALLEL_TEST_TIMEOUT,
         },
       },
       {
@@ -54,6 +68,7 @@ export default defineConfig({
           include: ['content/**/*.test.ts'],
           exclude: SCALE,
           environment: 'node',
+          testTimeout: PARALLEL_TEST_TIMEOUT,
         },
       },
       {

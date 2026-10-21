@@ -10,9 +10,12 @@ const { definitions } = await loadContentDir(path.join(repoRoot, 'portal/content
 type Def = any;
 const datasources = (definitions.find((d) => d.def.id === 'm365.overview')!.def as Def).datasources;
 
+// The scope's clock: `$now`, `$daysUntil` and the urgency classes count from it, never from the machine's clock.
+const NOW = '2026-10-17T12:00:00Z';
+
 const run = async (ds: string, value: unknown[]) =>
   (await renderString(datasources[ds].transform as string, {
-    now: '2026-10-17T12:00:00Z',
+    now: NOW,
     user: {},
     env: {},
     params: {},
@@ -55,8 +58,8 @@ describe('m365.overview sorts', () => {
   });
 
   it('lists messages to act on soonest first and drops those more than a week overdue', async () => {
-    // $daysUntil counts from the real clock.
-    const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
+    // $daysUntil counts from the scope's `now` (scopeNow), so the dates are relative to NOW.
+    const inDays = (n: number) => new Date(Date.parse(NOW) + n * 86_400_000).toISOString();
     const msg = (id: string, actionRequiredByDateTime: string | null) => ({
       id,
       title: id,

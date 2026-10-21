@@ -174,9 +174,10 @@ session holding that role). Every non-GET `/api` call additionally needs the CSR
 
 ## Endpoint index
 
-**66 routes**: 2 health, 9 auth (`/auth/mock/state` exists only with `AUTH_MODE=mock`; `/auth/callback` and
-`/auth/arm/callback` only with `AUTH_MODE=entra`), and 55 under `/api`. The SPA's public pages `/signed-out` and
-`/sign-in-problem` are client routes served by the SPA fallback.
+**70 routes**: 2 health, 10 auth (`/auth/mock/state` exists only with `AUTH_MODE=mock`; `/auth/callback`,
+`/auth/arm/callback` and `/auth/schedule-consent` only with `AUTH_MODE=entra`), and 58 under `/api`. The SPA's public
+pages `/signed-out` and `/sign-in-problem` are client routes served by the SPA fallback. `tests/api/api-doc-index.test.ts`
+builds the app in both modes and fails when this index misses or invents a route, or the counts drift.
 
 | Method   | Path                              | Who                    | Section                                             |
 | -------- | --------------------------------- | ---------------------- | --------------------------------------------------- |
@@ -188,6 +189,7 @@ session holding that role). Every non-GET `/api` call additionally needs the CSR
 | `GET`    | `/auth/arm/callback`              | Session (same browser) | [Session & auth](#get-autharmcallback)              |
 | `POST`   | `/auth/arm/extend`                | Session (armed)        | [Session & auth](#post-autharmextend)               |
 | `POST`   | `/auth/disarm`                    | Session                | [Session & auth](#post-authdisarm)                  |
+| `POST`   | `/auth/schedule-consent`          | Portal.Operator        | [Session & auth](#post-authschedule-consent)        |
 | `POST`   | `/auth/mock/state`                | Session (mock only)    | [Session & auth](#post-authmockstate)               |
 | `GET`    | `/api/me`                         | Session                | [Session & auth](#get-apime)                        |
 | `PUT`    | `/api/me/prefs`                   | Session                | [Session & auth](#put-apimeprefs)                   |
@@ -273,7 +275,7 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
 
 #### `GET /auth/login`
 
-- **Who:** Public. 30/min.
+- **Who:** Public. 300/min per address.
 - **Query:** `returnTo` — same-origin path to land on (absolute URLs, `//host`, backslashes, control characters and
   `/auth/*` fall back to `/`; ≤ 2048 chars). `claims` — base64url JSON claims challenge from a CAE `reauth` (ignored if
   invalid or > 4096 chars). `account=choose` — show Entra's account picker (`prompt=select_account`); otherwise the
@@ -284,7 +286,7 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
 
 #### `GET /auth/callback`
 
-- **Who:** Public — Entra's redirect (Entra mode only). 30/min.
+- **Who:** Public — Entra's redirect (Entra mode only). 300/min per address.
 - **Query:** `code`, `state`, or `error` + `error_description`.
 - **Response:** 302 to the pending `returnTo`; a **fresh** session id and cookie (an earlier session in this browser
   ends). Fetches the tenant name/default domain (best effort). Audited `session.signin` (success and failure).

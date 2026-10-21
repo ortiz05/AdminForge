@@ -1,5 +1,5 @@
 import { z } from 'zod';
-// @adminforge/design-tokens is not (yet) an api dependency; it is dependency-free TypeScript, so import it by path.
+// The token values and contrast maths the browser uses, so an override is checked against the real themes.
 import {
   contrastRatio,
   DEFAULT_THEME,

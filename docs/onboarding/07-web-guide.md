@@ -44,8 +44,8 @@ tests/e2e/reports.spec.ts + __screenshots__ end-to-end and visual baselines (moc
 
 ## Under the security policy
 
-The API serves the app with `script-src 'self'` and no `unsafe-eval` (`SECURITY.md` › Host and network); Firefox and
-Chrome log every violation in the console, where it hides real problems.
+The API serves the app with `script-src 'self'` and no `unsafe-eval` (`SECURITY.md` › Deployment, storage and
+network); Firefox and Chrome log every violation in the console, where it hides real problems.
 
 - No `eval`, `new Function`, `setTimeout` with a string, inline `<script>` or `javascript:` URLs — and no library that
   needs them. Before you adopt a dependency, search its built output for `new Function(`, a bare `Function(` and

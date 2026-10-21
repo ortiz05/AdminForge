@@ -6,18 +6,18 @@ happen. Each kind has a Claude Code skill with the detailed rules — this page 
 
 ## The kinds
 
-| Kind       | Folder                                                           | What it is                                                                              | Skill                        |
-| ---------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------- |
-| page       | `pages/<section>/`                                               | A list, entity view or tool page rendered at `/p/<id>`                                  | `adding-a-page-or-report`    |
-| dashboard  | `dashboards/`                                                    | KPIs and charts                                                                         | `adding-a-page-or-report`    |
-| report     | `reports/<section>/`                                             | An exportable page; appears in the Reports catalogue automatically                      | `adding-a-page-or-report`    |
-| playbook   | `playbooks/<section>/`                                           | A change: inputs → dry-run preview → confirm → steps (read and write)                   | `adding-a-playbook`          |
-| runbook    | `runbooks/<section>/`                                            | A guided procedure of playbooks and manual steps                                        | `adding-a-playbook`          |
-| schedule   | `schedules/<job group>/` (`reports/`, `probes/`, `maintenance/`) | Something that runs unattended as the automation identity                               | `adding-a-schedule-or-probe` |
-| probe      | `probes/`                                                        | A synthetic check or KQL configuration check, run by schedules                          | `adding-a-schedule-or-probe` |
-| connection | `connections/`                                                   | Your own Entra-secured API or Azure Function AdminForge may call (not Microsoft's APIs) | `adding-a-service-connector` |
-| feed       | `feeds/`                                                         | A source for News and changes                                                           | `add-news-feed`              |
-| navigation | `navigation.yaml`                                                | Section order, labels, icons and coded items of the navigation rail                     | —                            |
+| Kind       | Folder                                                                       | What it is                                                                              | Skill                        |
+| ---------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------- |
+| page       | `pages/<section>/`                                                           | A list, entity view or tool page rendered at `/p/<id>`                                  | `adding-a-page-or-report`    |
+| dashboard  | `dashboards/`                                                                | KPIs and charts                                                                         | `adding-a-page-or-report`    |
+| report     | `reports/<section>/`                                                         | An exportable page; appears in the Reports catalogue automatically                      | `adding-a-page-or-report`    |
+| playbook   | `playbooks/<section>/`                                                       | A change: inputs → dry-run preview → confirm → steps (read and write)                   | `adding-a-playbook`          |
+| runbook    | `runbooks/<section>/`                                                        | A guided procedure of playbooks and manual steps                                        | `adding-a-playbook`          |
+| schedule   | `schedules/<job group>/` (`reports/`, `probes/`, `maintenance/`, `billing/`) | Something that runs unattended as the automation identity                               | `adding-a-schedule-or-probe` |
+| probe      | `probes/`                                                                    | A synthetic check or KQL configuration check, run by schedules                          | `adding-a-schedule-or-probe` |
+| connection | `connections/`                                                               | Your own Entra-secured API or Azure Function AdminForge may call (not Microsoft's APIs) | `adding-a-service-connector` |
+| feed       | `feeds/`                                                                     | A source for News and changes                                                           | `add-news-feed`              |
+| navigation | `navigation.yaml`                                                            | Section order, labels, icons and coded items of the navigation rail                     | —                            |
 
 PowerShell scripts (`scripts/<service>/*.ps1`) live in content too, but they are files the runner pins by SHA-256,
 not YAML definitions (`adding-a-runner-script`).
@@ -54,8 +54,9 @@ requires:
 ```
 
 - **Scaffold, don't copy-paste:** `pnpm adminforge new <kind> <section>/<name>` (kinds: page, dashboard, report,
-  playbook, runbook, connection, probe, schedule; pages also take `--template list-detail|dashboard|report|entity`)
-  writes the file, a fixture stub and the right `$schema` line. Feeds and scripts are added by hand with their skills.
+  playbook, runbook, connection, probe, schedule, feed; pages also take
+  `--template list-detail|dashboard|report|entity`) writes the file, a fixture stub and the right `$schema` line.
+  Runner scripts are added by hand with their skill (`adding-a-runner-script`).
 - **Reuse first:** search (`rg -l "<topic>" portal/content`) and extend an existing definition before adding a
   near-duplicate.
 - **Installation values** are `${ env.X }` with the key documented in `config/example.env` — never literal tenant

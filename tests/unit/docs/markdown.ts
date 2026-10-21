@@ -157,7 +157,7 @@ export function headingChainProblem(rest: string, targetHeadings: readonly strin
       if (!known.includes(normalHeading(quoted[1]!))) return `no heading "${quoted[1]}"`;
       used = quoted[0].length;
     } else {
-      const clause = text.split(/[()|;]|\s[—–-]\s|\.(?:\s|$)|[›→]/)[0]!;
+      const clause = text.split(/[()[\]|;]|\s[—–-]\s|\.(?:\s|$)|[›→]/)[0]!;
       const words = clause.trim().split(/\s+/).filter(Boolean);
       for (let n = words.length; n >= 1 && used === undefined; n--) {
         if (names(normalHeading(words.slice(0, n).join(' ')), n)) {

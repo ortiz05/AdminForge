@@ -136,7 +136,7 @@ export function createSchedulesModule(
     now: ctx.now,
     spoTenantName: ctx.config.AF_SPO_TENANT_NAME,
     fetch: offline?.fetch ?? ctx.fetch,
-    ...(offline ? { lookup: offline.lookup, dns: offline.dns, tls: offline.tls } : {}),
+    ...(offline ? { lookup: offline.lookup, dns: offline.dns, tls: offline.tls, fixtures: true } : {}),
     audit: ctx.audit,
     ...opts.probeDeps,
   };

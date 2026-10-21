@@ -97,6 +97,12 @@ export interface ProbeDeps {
   audit?: Pick<AuditWriter, 'verify' | 'verifyIncremental'>;
   /** Host → addresses for the HTTP probe SSRF guard (tests, DATA_MODE=fixtures); default: the system resolver. */
   lookup?: HostLookup;
+  /**
+   * DATA_MODE=fixtures: Microsoft is answered from the fixtures, so a request they have no answer for (404
+   * `FixtureNotFound`) means the probe could not evaluate (`fixture_not_found`) — never a crit or a pass. Live, the code
+   * means nothing special.
+   */
+  fixtures?: boolean;
   /** Tests: the resolver an HTTP probe's pinned connection uses (default: the system resolver). Forces the pinning. */
   connectLookup?: HostLookup;
   /** Waits between polls in synthetic transactions (tests); default a timer that stops on abort. */
@@ -380,7 +386,11 @@ async function service(
     // An expected non-2xx status (e.g. expect: { status: 404 }) is a pass, not an error — but a missing fixture
     // (DATA_MODE=fixtures) is no answer at all.
     const wanted = c.expect?.status === undefined ? [] : [c.expect.status].flat();
-    if (err instanceof ApiError && wanted.includes(err.status) && err.code !== FIXTURE_NOT_FOUND)
+    if (
+      err instanceof ApiError &&
+      wanted.includes(err.status) &&
+      !(x.deps.fixtures && err.code === FIXTURE_NOT_FOUND)
+    )
       return expectResult(
         c.kind === 'graph' ? 'Microsoft Graph' : 'Azure Resource Manager',
         err.status,
@@ -996,6 +1006,7 @@ export function probeFailure(
   kind: ProbeCheck['kind'],
   timeoutMs: number,
   timedOut: boolean,
+  opts: { fixtures?: boolean } = {},
 ): Pick<ProbeOutcome, 'status' | 'code' | 'message'> {
   const name = (err as Error)?.name;
   if (timedOut || name === 'TimeoutError')
@@ -1003,7 +1014,7 @@ export function probeFailure(
   if (err instanceof OutboundError || err instanceof ApiError) {
     // DATA_MODE=fixtures with no fixture for the request: the probe could not evaluate, like the HTTP, DNS and TLS
     // checks' missing fixtures — never a crit, and never the fixture fetch's message (it names the file to create).
-    if (err.code === FIXTURE_NOT_FOUND)
+    if (opts.fixtures && err.code === FIXTURE_NOT_FOUND)
       return probeFailure(fixtureNotFound('Microsoft request'), kind, timeoutMs, false);
     const hint = err instanceof OutboundError ? ` ${err.hint}` : '';
     if (err instanceof OutboundError && err.licence)
@@ -1143,7 +1154,9 @@ export async function runProbe(
       details: r.details ?? null,
     };
   } catch (err) {
-    const f = probeFailure(err, probe.check.kind, timeoutMs, timeout.aborted && !opts.signal?.aborted);
+    const f = probeFailure(err, probe.check.kind, timeoutMs, timeout.aborted && !opts.signal?.aborted, {
+      fixtures: deps.fixtures,
+    });
     return { ...base, ...f, metric: null, durationMs: ms(t0), details: null };
   }
 }

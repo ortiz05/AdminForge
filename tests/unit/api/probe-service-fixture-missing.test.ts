@@ -72,6 +72,8 @@ function deps(auth: 'mock' | 'entra'): ProbeDeps {
     fetch: async () => {
       throw new Error('no network in this test');
     },
+    // As schedules/module.ts sets it with DATA_MODE=fixtures.
+    fixtures: true,
   };
 }
 
@@ -97,6 +99,14 @@ describe('Graph and ARM probes without a fixture', () => {
         expect(out.message).toMatch(/^The synthetic data has no answer for this /);
         expect(out.message).not.toMatch(/\.json|fixtures directory|graph\/v1\.0|Create /i);
       });
+
+  it('outside fixtures mode the code means nothing special: a 404 is the target missing', async () => {
+    const live = { ...deps('entra'), fixtures: false };
+    expect(await runProbe('probes.x', probe({ kind: 'graph', path: '/organization' }), live)).toMatchObject({
+      status: 'crit',
+      code: 'not_found',
+    });
+  });
 
   it('a fixture that answers 404 is still the target missing (crit not_found)', async () => {
     put('graph/v1.0/groups/missing/GET.json', {

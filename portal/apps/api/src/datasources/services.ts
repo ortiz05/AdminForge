@@ -1,4 +1,10 @@
-import { createFixtureFetch, evaluate, fixtureKey, type ServiceId } from '@adminforge/connectors';
+import {
+  createFixtureFetch,
+  evaluate,
+  FIXTURE_NOT_FOUND,
+  fixtureKey,
+  type ServiceId,
+} from '@adminforge/connectors';
 import type { Connection } from '@adminforge/schemas';
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { MemorySettingsStore, SqliteSettingsStore, type SettingsStore } from '../admin/settings-store';
@@ -153,7 +159,7 @@ export const MOCK_NO_FIXTURE =
 
 type FixtureError = { error?: { code?: string; message?: string } };
 const isFixtureMissing = (body: unknown): body is FixtureError =>
-  (body as FixtureError | null)?.error?.code === 'FixtureNotFound';
+  (body as FixtureError | null)?.error?.code === FIXTURE_NOT_FOUND;
 
 /** A POST that only reads (Resource Graph, KQL, `getByIds`, …: the request policy's list) is not a write to accept. */
 function readsOnly(method: string, url: URL): boolean {
@@ -229,14 +235,14 @@ export function fixtureFetch(
           continue;
         }
         missing(subMethod, subUrl.href);
-        r.body = { error: { code: 'FixtureNotFound', message: MOCK_NO_FIXTURE } };
+        r.body = { error: { code: FIXTURE_NOT_FOUND, message: MOCK_NO_FIXTURE } };
       }
       return new Response(JSON.stringify(body), { status: res.status, headers: res.headers });
     }
     if (!isFixtureMissing(body)) return res;
     if (!readsOnly(method, url)) return new Response(null, { status: 204, headers: res.headers });
     missing(method, url.href);
-    return new Response(JSON.stringify({ error: { code: 'FixtureNotFound', message: MOCK_NO_FIXTURE } }), {
+    return new Response(JSON.stringify({ error: { code: FIXTURE_NOT_FOUND, message: MOCK_NO_FIXTURE } }), {
       status: 404,
       headers: res.headers,
     });

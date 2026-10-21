@@ -134,9 +134,12 @@ class Rotations {
   moveTx(move: SessionMove, tx: Tx | null) {
     for (const m of this.movers) {
       const result: unknown = m.moveSessionTx?.(move, tx);
-      // An async mover would write after the commit, outside the transaction: refuse it loudly.
-      if (result && typeof (result as { then?: unknown }).then === 'function')
+      // An async mover would write after the commit, outside the transaction: refuse it loudly (its own rejection,
+      // if any, is a programming error already reported by this throw — it must not also end the process).
+      if (result && typeof (result as { then?: unknown }).then === 'function') {
+        void (result as Promise<unknown>).catch?.(() => undefined);
         throw new Error('A session mover must be synchronous');
+      }
     }
   }
 

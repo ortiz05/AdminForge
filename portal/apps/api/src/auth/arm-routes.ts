@@ -322,11 +322,14 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         // Nothing moved (one transaction): the session stays read-only, and the Write tokens just redeemed go. The
         // logger's serializers keep a failed query's bound values (CSRF token, sealed blobs) out of the line.
         request.log.error({ err }, 'arming could not move the session to its new id');
-        throw await reject(
-          new AppError(500, 'arm_failed', 'AdminForge couldn’t turn on write access.', {
-            hint: 'You’re still signed in with read-only access. Arm again. If it keeps happening, give a portal administrator the reference below.',
-          }),
-        );
+        const failed = new AppError(500, 'arm_failed', 'AdminForge couldn’t turn on write access.', {
+          hint: 'You’re still signed in with read-only access. Arm again. If it keeps happening, give a portal administrator the reference below.',
+        });
+        // The database may still be busy: the clean-up is best effort (an orphaned partition is purged after a day).
+        throw await reject(failed).catch((cleanup: unknown) => {
+          request.log.warn({ err: cleanup }, 'clean-up after a failed arm did not finish');
+          return failed;
+        });
       }
       // Signed out (in another tab) while verifying: nothing to arm.
       if (!updated) throw await reject(unauthenticated());

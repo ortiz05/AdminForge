@@ -17,6 +17,9 @@ import { identityCacheKey, type ExecutionIdentity } from './types';
  * `@odata.id` naming one) is refused outright (S-15): content resolves the user's object id first (`$guid()`, which
  * `adminforge validate` requires on `/users/` write paths). The refusal, not a UPN lookup, keeps the guard free of
  * another Graph dependency.
+ * A delegated permission grant (`/oauth2PermissionGrants/{id}`) has an id that is not a GUID and names nobody, so a
+ * write to one is checked by reading the grant (its `clientId`, the service principal holding it): a grant held by one
+ * of the apps above is refused, and a grant that can't be read is refused too (fail closed).
  *
  * The directory part is read through the executor itself (automation identity first; otherwise the caller's own Read
  * sign-in) and cached for 10 minutes. When it can't be read, the ids from configuration (and the last answer) are
@@ -77,6 +80,7 @@ const SENSITIVE_GRAPH = [
   /\/(appRoleAssignments|appRoleAssignedTo)(\/|\(|$)/i,
   /^\/users\/[^/]+\/authentication(\/|$)/i,
   /^\/directoryObjects\/[^/]+\/?$/i,
+  /^\/oauth2PermissionGrants(\/|\(|$)/i,
 ];
 
 /** "a, b c" → lower-case GUIDs. */
@@ -202,6 +206,30 @@ export const userNotById = () =>
     },
   );
 
+/**
+ * `/oauth2PermissionGrants/{id}` (group 1) or `oauth2PermissionGrants('{id}')` (group 2): a delegated permission grant,
+ * matched after runs of `/` are collapsed.
+ */
+const GRANT_REF = /(?:^|\/)oauth2PermissionGrants(?:\/([^/?#()]+)|\(\s*(?:id\s*=\s*)?'?([^)']*)'?\s*\))/gi;
+
+/**
+ * The delegated permission grants a Graph write deletes or changes (their ids: base64url, not GUIDs, so
+ * `referencedIds` can't tell whose grant it is). Creating one (`POST /oauth2PermissionGrants`) names its `clientId` in
+ * the body, which `referencedIds` checks.
+ */
+export function permissionGrantIds(t: Pick<WriteTarget, 'service' | 'path'>): string[] {
+  if (t.service !== 'graph') return [];
+  const path = decode(t.path.split('?')[0]!)
+    .replace(/\/{2,}/g, '/')
+    .replace(/^\/(v1\.0|beta)(?=\/)/, '');
+  const out = new Set<string>();
+  for (const m of path.matchAll(GRANT_REF)) {
+    const id = (m[1] ?? m[2] ?? '').trim();
+    if (id) out.add(id);
+  }
+  return [...out];
+}
+
 /** Whether a write is one that must not go ahead without the protected set. */
 export function isSensitiveWrite(t: WriteTarget): boolean {
   if (t.service !== 'graph') return false;
@@ -287,6 +315,43 @@ export class ProtectedObjects {
     const { ids, complete } = await this.current(identity, correlationId);
     for (const id of named) if (ids.has(id)) throw protectedObjectRefused();
     if (!complete && targets.some(isSensitiveWrite)) throw protectedObjectsUnavailable();
+    // Delegated permission grants: whose grant it is, read from Graph (the protected set is complete here, since
+    // grant writes are sensitive ones).
+    for (const grantId of new Set(targets.flatMap(permissionGrantIds))) {
+      const clientId = await this.grantClient(identity, grantId, correlationId);
+      if (clientId !== null && ids.has(clientId)) throw protectedObjectRefused();
+    }
+  }
+
+  /**
+   * The service principal holding a delegated permission grant (lower-case object id), read through the executor
+   * like the rest of the protected set: the automation identity first, then the caller's own Read sign-in. Null when
+   * Graph doesn't know the grant (404: the write will get the same answer). Throws `protected_objects_unavailable`
+   * when no reader can read it, or the answer names no client (fail closed). Not cached: grants come and go.
+   */
+  private async grantClient(
+    identity: ExecutionIdentity,
+    grantId: string,
+    correlationId?: string,
+  ): Promise<string | null> {
+    for (const who of this.readers(identity)) {
+      let data: unknown;
+      try {
+        data = await this.o.read(
+          who,
+          `/oauth2PermissionGrants/${encodeURIComponent(grantId)}`,
+          { $select: 'id,clientId' },
+          { correlationId },
+        );
+      } catch {
+        continue; // the next reader may have the permission this one lacks
+      }
+      if (data === null) return null;
+      const clientId = (data as { clientId?: unknown }).clientId;
+      if (typeof clientId === 'string' && GUID.test(clientId)) return clientId.toLowerCase();
+      break;
+    }
+    throw protectedObjectsUnavailable();
   }
 
   /** The protected set; `complete` = read from Graph within the TTL. */

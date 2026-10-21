@@ -164,9 +164,9 @@ export function ArmControl({
 
   if (arm.armed) {
     return (
-      <div className="flex items-center gap-2 max-lg:gap-1.5">
+      <div className="flex items-center gap-2 max-lg:gap-1.5 max-sm:gap-1">
         <span
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill bg-on-armed px-3 font-mono text-xs font-bold whitespace-nowrap text-armed tabular-nums max-lg:px-2"
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill bg-on-armed px-3 font-mono text-xs font-bold whitespace-nowrap text-armed tabular-nums max-lg:px-2 max-sm:px-1.5"
           aria-live="off"
         >
           <LightningIcon size={13} weight="fill" aria-hidden />
@@ -195,7 +195,7 @@ export function ArmControl({
           size="sm"
           pending={busy === 'disarm'}
           onClick={() => void run('disarm')}
-          className="shrink-0 border-transparent bg-on-armed text-armed hover:not-aria-disabled:bg-on-armed hover:not-aria-disabled:opacity-90"
+          className="shrink-0 border-transparent bg-on-armed text-armed max-sm:px-1.5 hover:not-aria-disabled:bg-on-armed hover:not-aria-disabled:opacity-90"
         >
           Disarm
         </Button>
@@ -204,14 +204,14 @@ export function ArmControl({
   }
 
   return (
-    <div className="flex items-center gap-2 max-lg:gap-1.5">
-      <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-accent px-2.5 text-xs font-semibold whitespace-nowrap text-accent max-lg:px-2">
+    <div className="flex items-center gap-2 max-lg:gap-1.5 max-sm:gap-1">
+      <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-accent px-2.5 text-xs font-semibold whitespace-nowrap text-accent max-lg:px-2 max-sm:px-1.5">
         <EyeIcon size={14} weight="bold" aria-hidden className="max-lg:hidden" />
         Read-only
       </span>
       {canArm && (
         <>
-          <Button size="sm" onClick={() => onDialogOpenChange(true)} className="shrink-0">
+          <Button size="sm" onClick={() => onDialogOpenChange(true)} className="shrink-0 max-sm:px-1.5">
             <LockKeyOpenIcon size={14} aria-hidden />
             {/* Below `lg` "Arm"; the name stays "Arm write access" (it starts with what's shown). */}
             <span className="max-lg:sr-only">Arm write access</span>

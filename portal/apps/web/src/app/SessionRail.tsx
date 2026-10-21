@@ -17,7 +17,8 @@ const rail = tv({
     tenant: 'flex min-w-0 shrink-0 flex-col justify-center pr-4 pl-5 leading-tight max-xl:hidden',
     tenantName: 'truncate text-sm font-semibold text-fg armed:text-on-armed',
     tenantDomain: 'truncate font-mono text-2xs text-fg-3 armed:text-on-armed',
-    searchZone: 'flex min-w-0 flex-1 px-4 max-lg:px-2 max-sm:min-w-10 max-sm:px-1',
+    // A phone: the icon button sits with the controls, as far from the brand as they are from each other.
+    searchZone: 'flex min-w-0 flex-1 px-4 max-lg:px-2 max-sm:min-w-10 max-sm:justify-end max-sm:px-1',
     search: [
       'mx-auto flex h-8 w-full max-w-md min-w-0 items-center gap-2 rounded-md border border-line bg-sunken px-2.5 text-left text-fg-3',
       // A phone: a fixed 32 px icon button, never squeezed by the controls beside it.
@@ -25,9 +26,9 @@ const rail = tv({
       'transition-colors duration-(--af-motion-fast) hover:border-line-strong hover:text-fg-2',
       'armed:border-on-armed/30 armed:bg-on-armed/10 armed:text-on-armed armed:hover:border-on-armed/60 armed:hover:text-on-armed',
     ],
-    right: 'flex shrink-0 items-center gap-3 pr-3 pl-4 max-lg:gap-1.5 max-lg:pr-2 max-lg:pl-0',
+    right: 'flex shrink-0 items-center gap-3 pr-3 pl-4 max-lg:gap-1.5 max-lg:pr-2 max-lg:pl-0 max-sm:gap-1',
     pim: [
-      'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-fg-3 hover:bg-hover hover:text-fg-2 max-lg:px-1.5',
+      'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-fg-3 hover:bg-hover hover:text-fg-2 max-lg:px-1.5 max-sm:px-1',
       'armed:text-on-armed armed:hover:bg-on-armed/15 armed:hover:text-on-armed',
     ],
     divider: 'h-6 w-px bg-line armed:bg-on-armed/25 max-lg:hidden',
@@ -45,8 +46,9 @@ export interface SessionRailProps {
 
 /**
  * The 48 px session rail: brand, tenant, jump-to, indicators (breaking news), PIM, mode (read / armed), and you. It fits
- * every width down to a 390 px phone: below `xl` there is no tenant, below `lg` (where the navigation starts collapsed)
- * the controls show their short form (see each one) and below `sm` jump-to is a 32 px icon button.
+ * every width down to a 360 px phone: below `xl` there is no tenant and the breaking pill and PIM show their short form,
+ * below `lg` (where the navigation starts collapsed) so do the mode and Arm (see each one), and below `sm` jump-to is a
+ * 32 px icon button.
  */
 export function SessionRail({ me, onOpenPalette, armControl, userMenu, indicators }: SessionRailProps) {
   const s = rail();
@@ -75,8 +77,9 @@ export function SessionRail({ me, onOpenPalette, armControl, userMenu, indicator
         >
           <MagnifyingGlassIcon size={15} aria-hidden className="shrink-0" />
           <span className="min-w-0 flex-1 truncate text-sm max-sm:sr-only">Jump to a page or action…</span>
-          {/* No shortcut to show on a phone, and the hint would run into the indicators beside it. */}
-          <Kbd keys={[modKey(), 'K']} className="armed:opacity-80 max-sm:hidden" />
+          {/* No shortcut to show on a phone; and from `lg` to `xl`, where the navigation opens beside a full set of
+              controls, the label needs the room more than the hint does. */}
+          <Kbd keys={[modKey(), 'K']} className="armed:opacity-80 max-sm:hidden lg:max-xl:hidden" />
         </button>
       </div>
       <div className={s.right()}>

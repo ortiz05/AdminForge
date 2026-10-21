@@ -23,7 +23,9 @@ describe('PIM indicator', () => {
 
   it('shows counts and opens identity.pim-activate for an eligible role', async () => {
     renderApp({ path: '/', handlers: [capabilities(ROLES)] });
-    const button = await screen.findByRole('button', { name: 'Privileged roles: 1 active · 1 eligible' });
+    const button = await screen.findByRole('button', {
+      name: 'PIM (privileged roles): 1 active · 1 eligible',
+    });
     await userEvent.click(button);
     expect(await screen.findByRole('menuitem', { name: 'Directory Readers' })).toHaveAttribute(
       'aria-disabled',
@@ -41,7 +43,7 @@ describe('PIM indicator', () => {
   it('explains when PIM can’t be read', async () => {
     renderApp({ path: '/', handlers: [capabilities({ roles: { active: null, eligible: null } })] });
     expect(
-      await screen.findByRole('button', { name: /Privileged roles: .*Entra ID P2/ }),
+      await screen.findByRole('button', { name: /^PIM \(privileged roles\): .*Entra ID P2/ }),
     ).toBeInTheDocument();
   });
 });

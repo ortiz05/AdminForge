@@ -22,7 +22,8 @@ type SearchPatch = Record<string, unknown>;
 /**
  * Privileged roles in the session rail: how many Entra roles are active and eligible for you right now, and a menu that
  * opens the activation playbook for an eligible role. Hidden detail when PIM can't be read (no licence or permission).
- * Below `lg` only the word shows, so the session rail fits a phone.
+ * Below `xl` only the word shows, so the session rail fits a phone and jump-to keeps its room on a small laptop. The
+ * name starts with that word (label in name, WCAG 2.5.3).
  */
 export function PimIndicator({ className }: { className?: string }) {
   const caps = useQuery(capabilitiesQuery);
@@ -39,8 +40,13 @@ export function PimIndicator({ className }: { className?: string }) {
         : 'Privileged roles can’t be read: PIM needs Microsoft Entra ID P2 and permission to read role schedules.';
     return (
       <Tooltip content={why} side="bottom">
-        <button type="button" className={className} aria-label={`Privileged roles: ${why}`} aria-disabled>
-          <ShieldStarIcon size={15} aria-hidden className="max-lg:hidden" />
+        <button
+          type="button"
+          className={className}
+          aria-label={`PIM (privileged roles): ${why}`}
+          aria-disabled
+        >
+          <ShieldStarIcon size={15} aria-hidden className="max-xl:hidden" />
           PIM
         </button>
       </Tooltip>
@@ -60,11 +66,11 @@ export function PimIndicator({ className }: { className?: string }) {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <button type="button" className={className} aria-label={`Privileged roles: ${summary}`}>
-          {/* Below `lg` the word only; the menu lists the roles and the name gives the counts. */}
-          <ShieldStarIcon size={15} aria-hidden className="max-lg:hidden" />
+        <button type="button" className={className} aria-label={`PIM (privileged roles): ${summary}`}>
+          {/* Below `xl` the word only; the menu lists the roles and the name gives the counts. */}
+          <ShieldStarIcon size={15} aria-hidden className="max-xl:hidden" />
           <span>PIM</span>
-          <span className="font-mono tabular-nums max-lg:hidden">
+          <span className="font-mono tabular-nums max-xl:hidden">
             {active.length}·{eligible.length}
           </span>
         </button>

@@ -167,7 +167,7 @@ layout:
     id: domains
     title: Top home domains (inactive guests)
     type: bar
-    span: 6
+    span: 12
     rows: 1
     data: guests.domains
     x: domain

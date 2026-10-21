@@ -95,6 +95,10 @@ they cover:
   volume, a locked-down pod and the runner on the pod's loopback.
 - `tests/guards/no-deep-imports.test.ts` — runtime code reaches other packages only through their declared `exports`,
   never `@adminforge/<pkg>/src/…`. Tests may import internals.
+- `tests/guards/guid-literal.test.ts` — runtime code checks GUIDs with `isGuid` / `GUID_RE` / `GUID_PATTERN` from
+  `@adminforge/schemas`; the regex appears only there and in the guard's allow-list.
+- `tests/guards/file-size.test.ts` — no runtime file under `portal/` past 800 lines; the listed files may only shrink,
+  and an entry is lowered when its file shrinks by more than 50 lines.
 - `tests/guards/test-file-names.test.ts` — keeps the names honest: a `content-at-scale` test or one that starts `pwsh`
   without its suffix fails, and `*.scale` / `*.pwsh` files live in `unit/`, `content/` or `api/`.
 - `tests/unit/docs/` — every backticked path, link and heading reference (a doc's name, then › and a heading) in

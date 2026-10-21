@@ -41,7 +41,7 @@ test library.
 | Package                     | What it is                                                                     | Depends on                                                                                        |
 | --------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
 | `@adminforge/schemas`       | zod schemas: every content kind and the API contracts; emits JSON schemas      | —                                                                                                 |
-| `@adminforge/expressions`   | the `${ … }` expression language (JSONata-based), helpers, limits, validation  | —                                                                                                 |
+| `@adminforge/expressions`   | the `${ … }` expression language (JSONata-based), helpers, limits, validation  | schemas                                                                                           |
 | `@adminforge/connectors`    | Graph / ARM / Resource Graph / Log Analytics clients, request policy, fixtures | —                                                                                                 |
 | `@adminforge/config`        | env file loading and overlays                                                  | —                                                                                                 |
 | `@adminforge/design-tokens` | the design system's tokens → CSS variables and Tailwind theme                  | —                                                                                                 |

@@ -129,6 +129,17 @@ organization). There was no critical or high security finding; the fixes are bel
   the names honest and keep runtime code to other packages' declared entry points.
 - **Tooling** (O-11, O-13): `pnpm typecheck` no longer builds packages first (no `dist/` written). Commit scope `plan`
   is retired and `dev` is renamed `tooling`.
+- **One GUID check, one byte format** (O-07): `isGuid` / `GUID_RE` / `GUID_PATTERN` from `@adminforge/schemas` (its
+  browser entry too) replace 27 copies of the GUID regex in schemas, expressions, api, web and cli — the same answer
+  everywhere (hyphenated 8-4-4-4-12, either case, no braces); `tests/guards/guid-literal.test.ts` keeps the pattern
+  written out in the shared module only (connectors' Log Analytics check and the Microsoft app id families are listed
+  exceptions). File sizes on the schedule and report pages use the widgets' `formatBytes`: from 10 MB without a
+  decimal ("12 MB"), from 1 GB in GB. The scheduled jobs' and transaction probes' abortable waits are one
+  `abortableDelay` in `@adminforge/connectors`.
+- **File-size ratchet** (O-04): `tests/guards/file-size.test.ts` holds runtime files under `portal/` to 800 lines. The
+  eleven already over it are listed at their size when the review ended (`engine.ts` at 2,401, 533 lines of it the
+  resume re-check) and may only shrink; an entry is lowered when its file shrinks by more than 50 lines. Splitting
+  them stays in the backlog.
 - **Claude Code kit** (O-08): every skill follows one template (Overview, When not to use, Steps, Done when, Common
   mistakes, See also); new skills for coded screens, configuration keys, expression helpers, CLI commands and ADRs;
   `docs/content-recipes.md` holds the expression helpers, quoting rules, Microsoft quirks, fixtures and lifecycle the

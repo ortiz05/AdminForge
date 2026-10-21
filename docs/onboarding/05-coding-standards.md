@@ -96,6 +96,8 @@ throw new AppError(400, 'cron_too_frequent', 'Reports can run at most once an ho
   `@adminforge/api/tooling` and `@adminforge/api/tooling/scheduler` — never `@adminforge/api/src/...` (tests may, they
   test internals).
 - Reuse before adding: search for an existing helper (`rg "export function <verb>" portal`) before writing one.
+  GUIDs: `isGuid` from `@adminforge/schemas` (a guard refuses a new regex); byte sizes: `formatBytes` from
+  `@adminforge/widgets`; abortable waits: `abortableSleep` / `abortableDelay` from `@adminforge/connectors`.
 
 ## Performance habits
 

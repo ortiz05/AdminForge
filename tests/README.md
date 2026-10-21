@@ -19,17 +19,17 @@ suffix, in any of `unit/`, `content/` and `api/` (which leave those files out):
 `guards/test-file-names.test.ts` keeps the names honest (a `content-at-scale` test or one that starts `pwsh` without
 its suffix fails).
 
-| Project     | Files                      | Environment                                    | What it covers                                                                                                                        |
-| ----------- | -------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `unit`      | `unit/<package>/`          | node                                           | Pure logic per package: api, cli, connectors, design-tokens, engine, expressions, runner, scheduler, …                                |
-| `component` | `component/<area>/`        | jsdom (`component/setup.ts`)                   | React components: `ui` primitives, widgets, web pages, Query Studio; `axe` checks via `component/axe.ts`                              |
-| `api`       | `api/`                     | node (`api/setup.ts`), files run one at a time | BFF routes through Fastify `inject` with a mock session; DB-backed suites (see below)                                                 |
-| `content`   | `content/`                 | node                                           | Every definition in `portal/content` validates; widget configs; focused tests for content-specific logic                              |
-| `guards`    | `guards/`                  | node                                           | No secrets or tenant data in committable files; design tokens only; SQLite-only runtime; no deep imports; Kubernetes manifests; names |
-| `pwsh`      | `*.pwsh.test.ts`           | node                                           | Real PowerShell: runner workers end to end, worker inputs and settings, the Pester suite — part of `pnpm test`, or `test:pwsh` alone  |
-| `live`      | `live/**/*.test.ts` (none) | node                                           | Reserved; the live suite is Playwright (`live/README.md`)                                                                             |
-| `scale`     | `*.scale.test.ts`          | node, one file at a time                       | Transforms and native helpers at enterprise size under the 250 ms wall-clock budget — run by `pnpm test` after the others             |
-| `perf`      | `perf/**/*.test.ts`        | node                                           | Enterprise-scale budgets against a synthetic 100k-user tenant — `pnpm test:perf` only ([`perf/README.md`](perf/README.md))            |
+| Project     | Files                      | Environment                                    | What it covers                                                                                                                                                             |
+| ----------- | -------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unit`      | `unit/<package>/`          | node                                           | Pure logic per package: api, cli, connectors, design-tokens, engine, expressions, runner, scheduler, …                                                                     |
+| `component` | `component/<area>/`        | jsdom (`component/setup.ts`)                   | React components: `ui` primitives, widgets, web pages, Query Studio; `axe` checks via `component/axe.ts`                                                                   |
+| `api`       | `api/`                     | node (`api/setup.ts`), files run one at a time | BFF routes through Fastify `inject` with a mock session; DB-backed suites (see below)                                                                                      |
+| `content`   | `content/`                 | node                                           | Every definition in `portal/content` validates; widget configs; focused tests for content-specific logic                                                                   |
+| `guards`    | `guards/`                  | node                                           | No secrets or tenant data in committable files; design tokens only; SQLite-only runtime; no deep imports; Kubernetes manifests; names; one GUID pattern; file-size ceiling |
+| `pwsh`      | `*.pwsh.test.ts`           | node                                           | Real PowerShell: runner workers end to end, worker inputs and settings, the Pester suite — part of `pnpm test`, or `test:pwsh` alone                                       |
+| `live`      | `live/**/*.test.ts` (none) | node                                           | Reserved; the live suite is Playwright (`live/README.md`)                                                                                                                  |
+| `scale`     | `*.scale.test.ts`          | node, one file at a time                       | Transforms and native helpers at enterprise size under the 250 ms wall-clock budget — run by `pnpm test` after the others                                                  |
+| `perf`      | `perf/**/*.test.ts`        | node                                           | Enterprise-scale budgets against a synthetic 100k-user tenant — `pnpm test:perf` only ([`perf/README.md`](perf/README.md))                                                 |
 
 ```bash
 pnpm test                       # unit, component, api, content, guards, pwsh; then scale (one file at a time)
@@ -145,7 +145,11 @@ shape (one replica, `Recreate`, a ReadWriteOncePod volume, non-root, read-only r
 pod's loopback, nothing installation-specific in the base); `guards/no-deep-imports.test.ts` keeps runtime code in
 `portal/` on other workspace packages' declared entry points (their `exports`: `@adminforge/api/tooling`, never
 `@adminforge/<pkg>/src/…` or a relative path into another package — tests may import internals);
-`guards/test-file-names.test.ts` keeps the `*.scale` and `*.pwsh` suffixes honest. They run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` sets `core.hooksPath`, or run
+`guards/test-file-names.test.ts` keeps the `*.scale` and `*.pwsh` suffixes honest; `guards/guid-literal.test.ts` keeps
+the GUID regex written out only in `@adminforge/schemas`' `guid.ts` (use `isGuid` / `GUID_RE` / `GUID_PATTERN`) plus a
+short allow-list; `guards/file-size.test.ts` holds runtime files under `portal/` to 800 lines, with the files already
+over it listed at their size (they may shrink, never grow; lower an entry when a file shrinks by more than 50 lines).
+They run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` sets `core.hooksPath`, or run
 `git config core.hooksPath .githooks`). Never bypass them with `--no-verify`.
 
 ## Fixtures

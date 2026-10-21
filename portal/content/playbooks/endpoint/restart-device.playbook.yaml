@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: endpoint.restart-device
-version: 1.0.0
+version: 1.0.1
 title: Restart Intune device
 summary: >-
   Restarts an Intune-managed Windows, macOS or supervised iOS/iPadOS device the next time it checks in. The user gets
@@ -44,9 +44,12 @@ steps:
          or (steps.device.output.operatingSystem in ['iOS', 'iPadOS'] and steps.device.output.isSupervised = true) }
     message: ${ 'Remote restart is not supported for ' & steps.device.output.operatingSystem & ' devices like ' & steps.device.output.deviceName & '.' }
 
+  # Not retried after a restart: a second reboot could come after the person is back at work and lose it again. A
+  # restart in flight when the worker stopped ends `needs_review` instead.
   - id: restart
     type: graph
     mode: write
+    idempotent: false
     describe: ${ 'Restart ' & steps.device.output.deviceName }
     request:
       method: POST

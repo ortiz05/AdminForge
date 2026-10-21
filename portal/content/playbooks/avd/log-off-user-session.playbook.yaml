@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: avd.log-off-user-session
-version: 1.0.0
+version: 1.0.1
 title: Sign a user out of Azure Virtual Desktop
 summary: >-
   Signs a user out of one Azure Virtual Desktop session (log off), active or disconnected — for a stuck or frozen
@@ -63,9 +63,12 @@ steps:
     message: >-
       ${ 'That session now belongs to ' & (steps.lookup.output.properties.userPrincipalName ? steps.lookup.output.properties.userPrincipalName : 'nobody') & ', not ' & inputs.expectedUser & ' (session numbers are reused on a host). Nothing was signed out: refresh the list and try again.' }
 
+  # Not retried after a restart: the retry would reuse `sameUser` from before it, and the session number may belong to
+  # someone else by then. A logOff in flight when the worker stopped ends `needs_review` instead.
   - id: logOff
     type: arm
     mode: write
+    idempotent: false
     describe: >-
       ${ 'Sign ' & steps.lookup.output.properties.userPrincipalName & ' out of ' & $split(inputs.userSessionId, '/')[10] }
     request:

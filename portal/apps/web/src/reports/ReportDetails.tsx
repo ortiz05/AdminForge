@@ -17,11 +17,12 @@ import {
   Skeleton,
   StatusPill,
 } from '@adminforge/ui';
+import { formatBytes } from '@adminforge/widgets';
 import { AppLink } from '../lib/links';
 import { formatInZone, nextRuns } from '../ops/cron';
 import { DeleteScheduleButton, RunNowButton, ScheduleToggle } from '../ops/ScheduleControls';
 import { lastRunView, scheduleRunsPage, type ScheduleItem } from '../ops/schedules';
-import { Facts, formatBytes, QueryError } from '../ops/ui';
+import { Facts, QueryError } from '../ops/ui';
 import {
   SCHEDULE_FORM_DESCRIPTION,
   ScheduleFormFields,

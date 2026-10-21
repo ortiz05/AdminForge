@@ -23,6 +23,7 @@ import {
   useToast,
   WarningCircleIcon,
 } from '@adminforge/ui';
+import { formatBytes } from '@adminforge/widgets';
 import { RouterLink } from '../app/RouterLink';
 import { ApiRequestError } from '../lib/api';
 import { browser } from '../lib/browser';
@@ -42,7 +43,7 @@ import {
   type ScheduleItem,
   type ScheduleRun,
 } from './schedules';
-import { Callout, elapsed, Facts, formatBytes, QueryError, useDocumentTitle } from './ui';
+import { Callout, elapsed, Facts, QueryError, useDocumentTitle } from './ui';
 
 const TRIGGER_LABEL: Record<string, string> = {
   cron: 'Scheduled',

@@ -6,9 +6,9 @@ import { newDefinition } from '@adminforge/cli/src/commands/new';
 import { validateContent } from '@adminforge/cli/src/commands/validate';
 import { repoRoot } from '../../lib/repo';
 
-// F-11: `adminforge validate` lists the definitions flagged `preview: true` (not yet run against a live tenant, or on
-// Microsoft Graph beta) after its summary, so the list never hides in a dated backlog section. Retired ones aren't
-// listed; previews never fail validation.
+// F-11: `adminforge validate` lists the definitions flagged `preview: true` (not yet confirmed to work against a live
+// tenant; the older `status: preview` too, with a nudge) after its summary, so the list never hides in a dated
+// backlog section. Retired ones aren't listed; previews never fail validation.
 const NAV = `kind: navigation
 id: core.navigation
 version: 1.0.0
@@ -46,17 +46,19 @@ describe('adminforge validate lists previews', () => {
       { name: 'settled' },
       { name: 'old-preview', extra: 'preview: true\nstatus: retired\n' },
       { name: 'also-beta', extra: 'preview: true\n' },
+      { name: 'status-preview', extra: 'status: preview\n' },
     ]);
     try {
       expect(await validateContent(w.ctx)).toBe(true);
       const at = w.lines.findIndex((l) => l.startsWith('Preview'));
       expect(at).toBeGreaterThan(w.lines.findIndex((l) => l.startsWith('✓')));
       expect(w.lines[at]).toBe(
-        'Preview — not yet run against a live tenant, or on Microsoft Graph beta (2; the page header says so):',
+        'Preview — not yet confirmed to work against a live tenant (3; the page header says so):',
       );
-      expect(w.lines.slice(at + 1, at + 3)).toEqual([
+      expect(w.lines.slice(at + 1, at + 4)).toEqual([
         '  · identity.also-beta  pages/identity/also-beta.page.yaml',
         '  · identity.beta-thing  pages/identity/beta-thing.page.yaml',
+        '  · identity.status-preview  pages/identity/status-preview.page.yaml  (status: preview — prefer preview: true)',
       ]);
       expect(w.lines.join('\n')).not.toContain('old-preview');
     } finally {

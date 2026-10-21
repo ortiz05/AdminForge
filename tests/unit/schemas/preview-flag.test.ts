@@ -1,9 +1,9 @@
 import { jsonSchemas, type Definition } from '@adminforge/schemas';
 import { ENVELOPE, errors, ok } from './helpers';
 
-// F-11 (platform review 2026-10-21): content that hasn't run against a live tenant yet, or reads Microsoft Graph
-// beta endpoints, says so with `preview: true` on any definition; the page header shows a quiet "Preview" badge and
-// `adminforge validate` lists them.
+// F-11 (platform review 2026-10-21): content not yet confirmed to work against a live tenant says so with
+// `preview: true` on any definition; the page header shows a quiet "Preview" badge and `adminforge validate` lists
+// them.
 const PAGE = `${ENVELOPE('page', 'test.preview')}template: dashboard\nlayout:\n  - { widget: markdown, text: Hello }\n`;
 const PLAYBOOK = `${ENVELOPE('playbook', 'test.preview-run')}risk: low\nmode: read\nsteps:\n  - { id: me, type: graph, request: { path: /me } }\n`;
 

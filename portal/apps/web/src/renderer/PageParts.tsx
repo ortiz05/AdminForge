@@ -57,7 +57,7 @@ export const hasDefinitionBadges = (def: Pick<PageDefinition, 'status' | 'previe
   def.preview === true || Boolean(def.status && def.status !== 'active');
 
 export const PREVIEW_HINT =
-  'Not yet checked against a live tenant, or built on a Microsoft beta API — what it shows may differ from what Microsoft returns.';
+  'Not yet confirmed to work against a live tenant: what it shows may differ from what Microsoft returns.';
 
 /**
  * Badges beside a page's title from its definition: a quiet "Preview" (`preview: true`, or `status: preview`) and the
@@ -72,7 +72,8 @@ export function DefinitionBadges({ def }: { def: Pick<PageDefinition, 'status' |
     <>
       {preview && (
         <Tooltip content={PREVIEW_HINT}>
-          <Badge tone="outline" data-badge="preview">
+          {/* Focusable so keyboard users can open the tooltip too; screen readers get the text inside. */}
+          <Badge tone="outline" data-badge="preview" tabIndex={0}>
             Preview
             <span className="sr-only">: {PREVIEW_HINT}</span>
           </Badge>

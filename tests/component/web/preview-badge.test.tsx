@@ -29,7 +29,7 @@ describe('preview badge', () => {
     const h1 = await screen.findByRole('heading', { level: 1, name: 'People' });
     const badge = within(badgeIn(h1)).getByText('Preview');
     expect(badge.closest('[data-badge="preview"]')).toHaveTextContent(
-      /Preview.*not yet checked against a live tenant/i,
+      /Preview.*not yet confirmed to work against a live tenant/i,
     );
     // Quiet: an outline badge, not a warning, critical or armed colour.
     expect(badge.closest('[data-badge="preview"]')!.className).not.toMatch(/warn|crit|armed/);

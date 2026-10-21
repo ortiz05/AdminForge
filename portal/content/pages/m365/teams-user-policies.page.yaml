@@ -10,7 +10,8 @@ owner: m365-team
 tags: [m365, teams, policies, users]
 template: list-detail
 # Not yet working live: Get-CsOnlineUser fails inside the Teams PowerShell module with real tokens (docs/backlog.md,
-# "Teams PowerShell in read mode"). It stays reachable and explains the error; the header shows "Preview".
+# "Teams PowerShell in read mode"), and the script reports that as the person not being found. The page stays
+# reachable with a "Preview" badge until the read works live.
 preview: true
 nav: { section: teams, label: User policies, icon: user-gear, order: 20 }
 requires:

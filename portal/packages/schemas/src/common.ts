@@ -159,12 +159,13 @@ export const envelopeShape = {
   requires: Requires.optional(),
   status: ContentStatus.optional(),
   /**
-   * Not yet run against a live tenant (fixtures only), or reads Microsoft Graph beta endpoints: the page header shows
-   * a quiet "Preview" badge and `adminforge validate` lists it. Remove it once the definition has run live on v1.0.
+   * Not yet confirmed to work against a live tenant (fixtures only, or a known live problem): the page header shows a
+   * quiet "Preview" badge and `adminforge validate` lists it. Display only: it changes nothing about how the definition
+   * runs (it is not a playbook's dry-run preview). Remove it (and bump the version) once it works live.
    */
   preview: z.boolean().optional().meta({
     description:
-      'Not yet run against a live tenant, or reads Microsoft Graph beta: pages show a "Preview" badge. Remove once it has run live.',
+      'Not yet confirmed to work against a live tenant: pages show a "Preview" badge (display only; it changes nothing about how the definition runs). Remove it once it works live.',
   }),
 };
 

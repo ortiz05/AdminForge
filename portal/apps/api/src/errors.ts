@@ -143,8 +143,9 @@ export function sendError(request: FastifyRequest, reply: FastifyReply, err: App
 }
 
 /**
- * Refusals that say something about who is trying what — missing roles, CSRF, the request policy, self-approval,
- * confirmations that don't match, protected objects, paused writes — as opposed to ordinary mistakes (validation, not
+ * Refusals that say something about who is trying what — missing roles, CSRF, the request policy, self-approval
+ * (including approving one's own access) and someone else's step, confirmations that don't match, protected objects,
+ * paused writes — as opposed to ordinary mistakes (validation, not
  * found). Each is appended to the audit log as `request.denied`.
  */
 export const AUDITED_DENIALS: ReadonlySet<string> = new Set([
@@ -153,6 +154,9 @@ export const AUDITED_DENIALS: ReadonlySet<string> = new Set([
   'policy_denied',
   'own_run',
   'own_request',
+  // An approver whom the change grants access to, and anyone completing a step that waits for another engineer.
+  'own_access',
+  'not_your_step',
   'confirmation_mismatch',
   'preview_required',
   'preview_stale',

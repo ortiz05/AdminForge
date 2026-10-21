@@ -40,13 +40,20 @@ export const runOutdated = (details: Record<string, unknown> = {}): RunError => 
   details,
 });
 
-/** Whether any run in the tree has sent (or may have sent) a write. */
+/**
+ * Whether any run in the tree has sent (or may have sent) a write. A write that failed before it went out (its `when`,
+ * building its request, access) has no request on its record and doesn't count — as in the engine's re-check.
+ */
 export async function wroteAnything(repo: RunRepository, tree: readonly RunRow[]): Promise<boolean> {
   const notSent: readonly string[] = ['waiting', 'planned', 'skipped', 'cancelled'];
   for (const r of tree)
     if (
       (await repo.listSteps(r.id)).some(
-        (x) => x.mode === 'write' && x.type !== 'playbook' && !notSent.includes(x.status),
+        (x) =>
+          x.mode === 'write' &&
+          x.type !== 'playbook' &&
+          !notSent.includes(x.status) &&
+          !(x.status === 'failed' && x.request == null),
       )
     )
       return true;

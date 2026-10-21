@@ -279,7 +279,8 @@ function KpiGroup({
           className="-ml-2"
           onClick={() => flip(false)}
         >
-          <CaretDownIcon size={12} weight="bold" aria-hidden className="text-fg-3" />
+          {/* Like every disclosure (the navigation's sections, Show output): right when closed, down when open. */}
+          <CaretDownIcon size={12} weight="bold" aria-hidden className="-rotate-90 text-fg-3" />
           Show key figures
         </Button>
         <span className="text-xs text-fg-3">{items.length} hidden</span>
@@ -298,7 +299,7 @@ function KpiGroup({
       className="-ml-2"
       onClick={() => flip(true)}
     >
-      <CaretDownIcon size={12} weight="bold" aria-hidden className="rotate-180 text-fg-3" />
+      <CaretDownIcon size={12} weight="bold" aria-hidden className="text-fg-3" />
       Hide key figures
     </Button>
   );

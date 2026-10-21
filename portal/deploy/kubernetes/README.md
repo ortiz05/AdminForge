@@ -196,7 +196,10 @@ volumes replicated synchronously over a slow link (e.g. Longhorn replicas on dis
   against the images' own trust stores. IPv4: the policy allows no IPv6 egress.
 - **Private addresses are refused** by the base policy (10/8, 172.16/12, 192.168/16, 100.64/10, link-local with the
   cloud metadata service, Azure's WireServer). Name the private addresses you need — the Ingress for the
-  portal-readiness probe, a Private Link endpoint — in `overlays/example/networkpolicy-private-egress.yaml`.
+  portal-readiness probe, a Private Link endpoint — in `overlays/example/networkpolicy-private-egress.yaml`; through
+  the ingress controller the pod reaches every site that controller serves, so keep internal-only sites on another
+  controller. A network that uses other ranges internally (public addresses used privately) adds them to the base
+  policy's `except` list with a patch in the overlay.
 
 | Host (TCP 443)                                                                                                                                              | What for                                                                                                                     | Where it comes from                                                                                    |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |

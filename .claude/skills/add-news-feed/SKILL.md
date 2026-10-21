@@ -12,6 +12,14 @@ A feed is content: `portal/content/feeds/<name>.feed.yaml` (`kind: feed`, id `fe
 `/news` shows the items with a citation. **First-party sources only** — your tenant (Graph, Resource Graph) or
 Microsoft's own public feeds. Read `docs/news.md` first.
 
+## When not to use
+
+- Your tenant's own state on a page (service health, Message Center as a list) → `adding-a-page-or-report`.
+- A check that should alert when something breaks → `adding-a-schedule-or-probe`.
+- A news site, aggregator, community blog or scraped HTML page — never: first-party RSS/Atom or Microsoft's documented
+  API only. A source on a host outside `NEWS_FEED_HOSTS` needs a security-reviewed code change first (step 3).
+- A new schedule for feeds — `maintenance.news-refresh-hourly` already collects every active feed.
+
 ## Steps
 
 1. **Reuse first.** `rg -l "<product>" portal/content/feeds` — most changes are a new `classify` rule on an existing
@@ -46,8 +54,16 @@ Microsoft's own public feeds. Read `docs/news.md` first.
     `pnpm guard`; update the sources table in `docs/news.md`. Then remove `status: draft`.
 11. **Try it once live:** against your dev database,
     `pnpm --filter @adminforge/scheduler exec tsx src/main.ts --schedule maintenance.news-refresh-hourly` (in a
-    deployment, after publishing: `node portal/apps/scheduler/dist/main.js --schedule …` in the pod), then check the
-    feed's status on `/news` (counts only in anything you paste).
+    deployment, after publishing, a code owner runs the same flags in the pod — `portal/apps/scheduler/README.md`),
+    then check the feed's status on `/news` (counts only in anything you paste).
+
+## Done when
+
+- [ ] The feed answered 200 live without an off-host redirect, from a host in `NEWS_FEED_HOSTS`
+- [ ] `pnpm adminforge validate` and the content project's feed tests are clean; `feeds.test.ts` lists the id and
+      `feeds-classify.test.ts` has a kept item and a dropped look-alike
+- [ ] The fixture is synthetic (Example Org), `status: draft` is gone and `docs/news.md` lists the source
+- [ ] One live collection showed the feed's status on `/news` (counts only in anything you paste)
 
 ## Common mistakes
 
@@ -61,3 +77,9 @@ Microsoft's own public feeds. Read `docs/news.md` first.
 | Raising `excerptChars` to show "the whole thing"           | Link back; the excerpt is a quote, not a copy                                          |
 | Polling a 2 MB feed with no ETag every hour                | `pollMinutes: 360`                                                                     |
 | A Learn search feed without `linkPrefixes`                 | Search results include Q&A posts and unrelated pages; keep only the what's-new page(s) |
+
+## See also
+
+- `docs/news.md` (sources, classification, politeness), `portal/packages/schemas/src/news.ts` (`NEWS_FEED_HOSTS`,
+  `NEWS_LINK_DOMAINS`), ADR-013 (news feed egress)
+- `docs/content-recipes.md` › Fixtures; `adding-a-schedule-or-probe`

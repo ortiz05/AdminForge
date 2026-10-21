@@ -13,6 +13,8 @@ import {
 } from '@adminforge/ui';
 import {
   TONE_LABEL,
+  blockLabel,
+  cantBeShownTitle,
   getPath,
   getWidget,
   parseWidgetConfig,
@@ -90,13 +92,15 @@ function ConfigProblem({
   problems: Array<{ path: string; message: string }>;
 }) {
   const authorId = useId();
-  // For the reader: what can't be shown and that the rest works. The widget type, the problems and the CLI command
-  // are for whoever maintains the page, labelled so (rule 10: no tooling advice addressed to the reader).
+  // For the reader: what can't be shown (in the words every block that can't be shown uses, by the block's name, never
+  // its widget type) and that the rest works. The widget type, the problems and the CLI command are for whoever
+  // maintains the page, labelled so (rule 10: no tooling advice addressed to the reader).
+  const label = blockLabel(block as Block & Record<string, unknown>);
   return (
-    <Panel aria-label={`${block.title ?? block.widget} configuration`}>
+    <Panel aria-label={label ? `${label} configuration` : 'Configuration problem'}>
       <ErrorState
         compact
-        title={block.title ? `“${block.title}” can’t be shown` : 'This part of the page can’t be shown'}
+        title={cantBeShownTitle(label)}
         message="Its definition has a mistake, so it is left out. The rest of the page works."
         hint={
           <div

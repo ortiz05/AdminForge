@@ -274,11 +274,13 @@ act (the probe's `link`).
 
 ## When a block can't be shown
 
-Every widget renders inside its own error boundary. A block that fails while it renders shows "<title> couldn't be
+Every widget renders inside its own error boundary. A block that fails while it renders shows "<name> couldn't be
 shown" with a reference and **Try again**, only in that block; the rest of the page keeps working, and new data renders
 it again. The reference is made in the browser and logged to its console with the error (no server request carries
-one). A block whose configuration doesn't validate is left out the same way, with "For the content author" naming the
-problems.
+one). A block whose configuration doesn't validate is left out the same way, in the same words, with "For the content
+author" naming the widget type and the problems. The name is the one the page gives the block — its `title`, a KPI's
+`label`, a timeline's `heading` — and a block without one is "This part of the page"; the reader never sees a widget
+type (`cantBeShownTitle` and `blockLabel` in `@adminforge/widgets`).
 
 ## Partial data
 

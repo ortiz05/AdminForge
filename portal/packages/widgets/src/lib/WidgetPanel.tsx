@@ -47,6 +47,18 @@ function DefaultSkeleton() {
   );
 }
 
+/** What a block without a name of its own is called in messages (never its widget type). */
+export const UNNAMED_BLOCK = 'This part of the page';
+
+/**
+ * The title of a block that can't be shown — it crashed while rendering, or its definition doesn't validate: one
+ * wording everywhere, by the name the page gives the block ("Profile couldn’t be shown"), else "This part of the
+ * page couldn’t be shown". Never the widget type.
+ */
+export function cantBeShownTitle(label: string | undefined): string {
+  return `${label || UNNAMED_BLOCK} couldn’t be shown`;
+}
+
 /** A reference for a crash in the browser (no server request to carry one): shown, and logged with the error. */
 function localReference(): string {
   try {
@@ -57,10 +69,8 @@ function localReference(): string {
 }
 
 interface BoundaryProps {
-  /** The block's title or KPI label: "Sign-ins couldn’t be shown". */
+  /** The block's title or KPI label: "Sign-ins couldn’t be shown" (none: "This part of the page …"). */
   label?: string;
-  /** What to call the block when it has no label ("Status grid"); names an untitled panel for assistive tech. */
-  name: string;
   /** New data clears the error and renders the block again. */
   resetKey: unknown;
   /**
@@ -116,8 +126,8 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
   private readonly retry = () => this.setState({ failed: false, retried: true });
 
   render() {
-    const { label, name, layout, children } = this.props;
-    const shown = label ?? name;
+    const { label, layout, children } = this.props;
+    const shown = label || UNNAMED_BLOCK;
     // Present from the first failure on, so the outcome of Try again is announced in the same live region.
     const live = (
       <span key="live" className="sr-only" aria-live="polite">
@@ -154,7 +164,7 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
       ) : (
         <ErrorState
           compact
-          title={`${shown} couldn’t be shown`}
+          title={cantBeShownTitle(label)}
           message="Something in its data couldn’t be displayed. The rest of the page still works, and nothing was changed."
           hint="If Try again doesn’t help, send a portal administrator the reference and this page’s address."
           correlationId={this.state.reference}
@@ -163,7 +173,7 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
       );
     return [
       layout === 'panel' ? (
-        <Panel key="block" title={label} aria-label={label ? undefined : name}>
+        <Panel key="block" title={label}>
           {view}
         </Panel>
       ) : (
@@ -177,19 +187,18 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
 /**
  * Every widget renders inside a `WidgetBoundary` (the registry wraps them), so a crash in the widget itself — not
  * only in the parts `WidgetPanel` draws — costs that block only. KPI cells keep their place and shape in the strip.
- * `name` stands in for an untitled block ("Status grid"); `labelKey` is the config key that names the block on the
- * page — `title` for most widgets, `label` for a KPI, `heading` for a timeline (whose `title` is per event).
+ * `labelKey` is the config key that names the block on the page — `title` for most widgets, `label` for a KPI,
+ * `heading` for a timeline (whose `title` is per event); an untitled block is "This part of the page".
  */
 export function withWidgetBoundary<C>(
   Inner: ComponentType<WidgetProps<C>>,
-  { name, labelKey = 'title' }: { name: string; labelKey?: string },
+  { labelKey = 'title' }: { labelKey?: string } = {},
 ): ComponentType<WidgetProps<C>> {
   function Guarded(props: WidgetProps<C>) {
     const given = (props.config as Record<string, unknown>)[labelKey];
     return (
       <WidgetBoundary
         label={typeof given === 'string' && given ? given : undefined}
-        name={name}
         resetKey={props.data.value}
         layout={props.variant === 'cell' ? 'cell' : 'panel'}
       >
@@ -316,7 +325,7 @@ export function WidgetPanel({
         )
       }
     >
-      <WidgetBoundary label={label} name={name} resetKey={data.value} layout="body">
+      <WidgetBoundary label={title} resetKey={data.value} layout="body">
         {body}
       </WidgetBoundary>
     </Panel>

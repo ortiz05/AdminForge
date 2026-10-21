@@ -161,7 +161,7 @@ describe('widget error boundary', () => {
     expect(screen.queryByText('Risky apps is shown again')).toBeNull();
   });
 
-  it('an untitled block that fails is named after its widget type', async () => {
+  it('an untitled block that fails is "this part of the page", never its widget type', async () => {
     const config = WIDGETS.statusGrid!.schema.parse({
       widget: 'statusGrid',
       data: 'items.value',
@@ -176,7 +176,8 @@ describe('widget error boundary', () => {
         instanceId="s0"
       />,
     );
-    expectDesignedError(screen.getByRole('region', { name: 'Status grid' }), 'Status grid');
+    expectDesignedError(container as HTMLElement, 'This part of the page');
+    expect(container).not.toHaveTextContent(/status grid/i);
     expect(await axeViolations(container)).toEqual([]);
   });
 

@@ -2,7 +2,7 @@
 // @adminforge/schemas), Widget.tsx (built only from @adminforge/ui primitives and tokens), fixtures.ts, index.ts.
 
 export * from './types';
-export { WIDGETS, getWidget, parseWidgetConfig, type ConfigProblem } from './registry';
+export { WIDGETS, blockLabel, getWidget, parseWidgetConfig, type ConfigProblem } from './registry';
 export { WIDGET_SCHEMAS, WIDGET_TYPES, registerWidgetSchemas, type WidgetType } from './schemas';
 export {
   ActionBarConfig,
@@ -47,7 +47,7 @@ export { VALUE_FORMATS, formatBytes, formatValue, type ValueFormat } from './lib
 export { asRows, getPath, humanize, splitDataRef } from './lib/path';
 export { mapStatus, TONE_LABEL, type Status, type StatusMap } from './lib/status';
 export { contentHref, createWidgetRuntime } from './lib/runtime';
-export { WidgetPanel } from './lib/WidgetPanel';
+export { UNNAMED_BLOCK, WidgetPanel, cantBeShownTitle } from './lib/WidgetPanel';
 export { ActionSpec, EmptySpec } from './lib/schema-common';
 export { FEATURE_INFO, LicenceGatePanel, type MissingFeature } from './widgets/licence-gate/Widget';
 export { Markdown, parseBlocks, safeHref } from './widgets/markdown/markdown';

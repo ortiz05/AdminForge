@@ -27,7 +27,7 @@ describe('configuration problem card', () => {
     renderPage('/p/test.broken', { definitions: { 'page/test.broken': PAGE }, results: RESULTS });
     const card = await screen.findByRole('region', { name: 'Profile configuration' });
     const alert = within(card).getByRole('alert');
-    expect(alert).toHaveTextContent('“Profile” can’t be shown');
+    expect(alert).toHaveTextContent('Profile couldn’t be shown');
     expect(alert).toHaveTextContent(/The rest of the page works/);
 
     // The widget type, the problems and the command are under the author label.

@@ -20,7 +20,8 @@ import type { DnsResolver, PeerCertificate, TlsInspector } from './checks';
  *           "subject", "issuer" }` — dates relative to the probe's clock, so a fixture never expires. The portal's own
  *           host is answered as `tls/portal.example.com/<port>.json`.
  * Host names are lower-cased; characters outside [a-z0-9._-] become "_". A check without a fixture fails with
- * `fixture_not_found` (status `error`: the probe could not evaluate) — never a made-up crit — and names no file.
+ * `fixture_not_found`, one whose fixture isn't JSON with `fixture_invalid` (status `error`: the probe could not
+ * evaluate) — never a made-up crit — and neither names a file.
  */
 
 /** The host the portal's own origin is answered as. */
@@ -45,8 +46,13 @@ const segment = (s: string) => {
 };
 
 const missing = (what: string) =>
-  new AppError(404, 'fixture_not_found', `Mock mode has no synthetic answer for this ${what}.`, {
+  new AppError(404, 'fixture_not_found', `The synthetic data has no answer for this ${what}.`, {
     hint: 'Add a fixture for it (Testing guide › Fixtures), or turn the probe off.',
+  });
+/** A fixture that isn't valid JSON: the check could not evaluate (never a crit), and the message names no file. */
+const invalid = (what: string) =>
+  new AppError(500, 'fixture_invalid', `The synthetic answer for this ${what} is not valid JSON.`, {
+    hint: 'Fix the fixture you added for it (Testing guide › Fixtures).',
   });
 
 /** The fixture network over `dir`. `publicBaseUrl` is the portal's own origin (answered as PORTAL_FIXTURE_HOST). */
@@ -65,17 +71,23 @@ export function createFixtureNetwork(opts: {
   })();
   const fixtures = createFixtureFetch(root);
 
-  /** `<kind>/<name>/<file>` (the name sanitised, the file as given: `MX.json`, `443.json`). */
+  /** `<kind>/<name>/<file>` (the name sanitised; the file a record type or a port: `MX.json`, `443.json`). */
   async function load(kind: 'dns' | 'tls', name: string, leaf: string): Promise<unknown> {
+    if (!/^[A-Za-z0-9]+\.json$/.test(leaf)) return undefined;
     const file = path.resolve(root, kind, segment(name), leaf);
     if (!file.startsWith(root + path.sep)) return undefined;
+    let text: string;
     try {
-      return JSON.parse(await readFile(file, 'utf8'));
+      text = await readFile(file, 'utf8');
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-      throw new Error(`Fixture ${path.relative(root, file)} is not valid JSON: ${(err as Error).message}`, {
-        cause: err,
-      });
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'EISDIR') return undefined;
+      throw err;
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw invalid(kind === 'dns' ? 'DNS check' : 'certificate check');
     }
   }
 
@@ -83,7 +95,12 @@ export function createFixtureNetwork(opts: {
     let url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     if (own && url.origin === own.origin)
       url = new URL(`${url.pathname}${url.search}`, `https://${PORTAL_FIXTURE_HOST}`);
-    const res = await fixtures(url.href, init);
+    let res: Response;
+    try {
+      res = await fixtures(url.href, init);
+    } catch {
+      throw invalid('HTTP check'); // the fixture fetch refuses a file that isn't JSON (its message names the file)
+    }
     if (res.status === 404) {
       const body = (await res
         .clone()

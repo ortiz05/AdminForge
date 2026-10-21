@@ -21,7 +21,7 @@ export const pageHeader = tv({
     /** list layout: the title row with the actions at its end. */
     titleBar: 'flex flex-wrap items-center justify-between gap-x-6 gap-y-2',
     /** list layout: the one-line description and its More / Less. */
-    summary: 'flex min-w-0 max-w-3xl items-baseline gap-2',
+    summary: 'flex min-w-0 items-baseline gap-2',
     summaryText: 'min-w-0 text-fg-2',
     more: 'shrink-0 rounded-sm text-sm font-semibold text-accent underline-offset-2 hover:underline',
   },

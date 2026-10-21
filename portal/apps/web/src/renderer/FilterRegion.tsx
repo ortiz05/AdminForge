@@ -456,7 +456,7 @@ export function FilterRegion({
         s.root(),
         sticky &&
           'lg:sticky lg:top-(--af-layout-rail-h) lg:z-(--af-z-sticky) lg:-mx-8 lg:-my-2 lg:border-b lg:border-transparent lg:bg-canvas lg:px-8 lg:py-2',
-        stuck && 'lg:border-line',
+        stuck && 'lg:border-line-strong',
       )}
       role="search"
       aria-label="Filters"

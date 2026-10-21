@@ -47,20 +47,25 @@ describe('list-detail header economics', { timeout: 20_000 }, () => {
     expect(actions.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('shows the description on one line, with "More" only when it is cut off', async () => {
+  it('shows the description on one line, with "More" only when it is cut off; focus stays on the toggle', async () => {
     layoutText(900, 400);
     renderPage('/p/test.users', { definitions, results: RESULTS });
-    const description = await screen.findByText('Synthetic people for renderer tests.');
-    expect(description).toHaveClass('truncate');
+    const text = 'Synthetic people for renderer tests.';
+    expect(await screen.findByText(text)).toHaveClass('truncate');
     const more = await screen.findByRole('button', { name: 'Show more of the description' });
     expect(more).toHaveTextContent('More');
     expect(more).toHaveAttribute('aria-expanded', 'false');
-    await userEvent.click(more);
-    expect(description).not.toHaveClass('truncate');
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    // Open: the whole text with "Less" right after it, and focus on "Less".
     const less = screen.getByRole('button', { name: 'Show less of the description' });
     expect(less).toHaveAttribute('aria-expanded', 'true');
-    await userEvent.click(less);
-    expect(description).toHaveClass('truncate');
+    expect(less).toHaveFocus();
+    expect(less.closest('p')).toHaveTextContent(text);
+    expect(less.closest('p')).not.toHaveClass('truncate');
+    await userEvent.keyboard('{Enter}');
+    expect(screen.getByRole('button', { name: 'Show more of the description' })).toHaveFocus();
+    expect(screen.getByText(text)).toHaveClass('truncate');
     expect(await axeViolations()).toEqual([]);
   });
 
@@ -71,14 +76,19 @@ describe('list-detail header economics', { timeout: 20_000 }, () => {
     expect(screen.queryByRole('button', { name: /more of the description/ })).toBeNull();
   });
 
-  it('folds the key figures to one line and remembers it for this page', async () => {
+  it('folds the key figures to one line, keeps their warnings and focus, and remembers it for this page', async () => {
     const { calls } = renderPage('/p/test.users', { definitions, results: RESULTS });
     expect(await screen.findByRole('region', { name: 'Key figures' }, SLOW)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Hide key figures' }));
+    screen.getByRole('button', { name: 'Hide key figures' }).focus();
+    await userEvent.keyboard('{Enter}');
     expect(screen.queryByRole('region', { name: 'Key figures' })).toBeNull();
     const show = screen.getByRole('button', { name: 'Show key figures' });
     expect(show).toHaveAttribute('aria-expanded', 'false');
+    expect(show).toHaveFocus();
     expect(screen.getByText('2 hidden')).toBeInTheDocument();
+    // A folded KPI that needs attention still says so (Guests: 1, status warn).
+    expect(await screen.findByText('Guests: Needs review', {}, SLOW)).toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
     expect(getPrefs().kpiCollapsed).toEqual(['test.users']);
     await waitFor(
       () =>
@@ -89,8 +99,9 @@ describe('list-detail header economics', { timeout: 20_000 }, () => {
         ).toMatchObject({ kpiCollapsed: ['test.users'] }),
       SLOW,
     );
-    await userEvent.click(show);
+    await userEvent.keyboard('{Enter}');
     expect(await screen.findByRole('region', { name: 'Key figures' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide key figures' })).toHaveFocus();
     expect(getPrefs().kpiCollapsed).toEqual([]);
   });
 
@@ -108,6 +119,36 @@ describe('list-detail header economics', { timeout: 20_000 }, () => {
     expect(readLocalPrefs().kpiCollapsed).toEqual(kept);
     setKpiCollapsed('identity.page-3', false);
     expect(getPrefs().kpiCollapsed).not.toContain('identity.page-3');
+  });
+
+  it('never stores a key the API would refuse (one bad entry would fail every later preferences save)', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}')),
+    );
+    setKpiCollapsed(`identity.${'x'.repeat(130)}`, true);
+    setKpiCollapsed('Not A Key', true);
+    expect(getPrefs().kpiCollapsed ?? []).toEqual([]);
+    localStorage.setItem('adminforge.prefs', JSON.stringify({ kpiCollapsed: ['identity.users', '<b>', 7] }));
+    expect(readLocalPrefs().kpiCollapsed).toEqual(['identity.users']);
+  });
+
+  it('a folded KPI hidden by its `when` stays quiet', async () => {
+    const page = {
+      ...USERS_PAGE,
+      id: 'test.quiet',
+      layout: USERS_PAGE.layout.map((b) =>
+        b.widget === 'kpi' && b.label === 'Guests' ? { ...b, when: false } : b,
+      ),
+    };
+    renderPage('/p/test.quiet', {
+      definitions: { 'page/test.quiet': page },
+      results: RESULTS,
+      session: me({ prefs: { kpiCollapsed: ['test.quiet'] } }),
+    });
+    expect(await screen.findByRole('button', { name: 'Show key figures' }, SLOW)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('2 hidden')).toBeInTheDocument(), SLOW);
+    expect(screen.queryByText(/Guests: Needs review/)).toBeNull();
   });
 
   it('opens folded when the preferences say so', async () => {

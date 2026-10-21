@@ -14,6 +14,9 @@ const DENSITIES: readonly DensityPref[] = ['comfortable', 'compact'];
 
 /** List pages whose KPI strip is collapsed: the most recent first, at most this many (the API allows 100). */
 export const KPI_COLLAPSED_MAX = 50;
+/** A page key the API accepts in `kpiCollapsed` (one bad entry would make every later preferences save fail). */
+const isPageKey = (x: unknown): x is string =>
+  typeof x === 'string' && x.length <= 120 && /^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/.test(x);
 
 function sanitize(input: unknown): UserPrefs {
   const p = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
@@ -33,7 +36,7 @@ function sanitize(input: unknown): UserPrefs {
     newsSeenAt:
       typeof p.newsSeenAt === 'string' && !Number.isNaN(Date.parse(p.newsSeenAt)) ? p.newsSeenAt : undefined,
     kpiCollapsed: Array.isArray(p.kpiCollapsed)
-      ? p.kpiCollapsed.filter((x): x is string => typeof x === 'string').slice(0, KPI_COLLAPSED_MAX)
+      ? p.kpiCollapsed.filter(isPageKey).slice(0, KPI_COLLAPSED_MAX)
       : undefined,
   };
 }
@@ -131,8 +134,9 @@ export function hydratePrefs(server: UserPrefs | undefined): void {
 
 /** Collapses or expands a list page's key figures (KPI strip), remembered per page. */
 export function setKpiCollapsed(page: string, collapsed: boolean): void {
-  const rest = (current.kpiCollapsed ?? []).filter((k) => k !== page);
-  updatePrefs({ kpiCollapsed: (collapsed ? [page, ...rest] : rest).slice(0, KPI_COLLAPSED_MAX) });
+  const rest = (current.kpiCollapsed ?? []).filter((k) => k !== page && isPageKey(k));
+  const next = collapsed && isPageKey(page) ? [page, ...rest] : rest;
+  updatePrefs({ kpiCollapsed: next.slice(0, KPI_COLLAPSED_MAX) });
 }
 
 /** Remembers a visited page for the command palette. */

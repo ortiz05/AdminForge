@@ -1,7 +1,14 @@
-import { useId, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { CaretRightIcon } from '@phosphor-icons/react';
 import { pageHeader } from '../recipes/page-header';
-import { cn } from '../recipes/tv';
 
 export interface Crumb {
   label: string;
@@ -85,23 +92,44 @@ function OneLineSummary({ children }: { children: ReactNode }) {
     observer.observe(el);
     return () => observer.disconnect();
   }, [open, children]);
+  // More and Less sit in different places: keep keyboard focus on the one now shown.
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    buttonRef.current?.focus();
+  }, [open]);
+  const toggle = (
+    <button
+      ref={buttonRef}
+      type="button"
+      className={s.more()}
+      aria-expanded={open}
+      aria-controls={id}
+      aria-label={open ? 'Show less of the description' : 'Show more of the description'}
+      onClick={() => {
+        refocus.current = true;
+        setOpen((o) => !o);
+      }}
+    >
+      {open ? 'Less' : 'More'}
+    </button>
+  );
+  // Folded: one line as wide as the header, "More" at its end when it is cut off. Open: a readable measure with
+  // "Less" right after the text.
+  if (open)
+    return (
+      <p id={id} className={s.summaryText({ className: 'max-w-3xl' })}>
+        {children} {toggle}
+      </p>
+    );
   return (
     <div className={s.summary()}>
-      <p id={id} ref={ref} className={cn(s.summaryText(), !open && 'truncate')}>
+      <p id={id} ref={ref} className={s.summaryText({ className: 'truncate' })}>
         {children}
       </p>
-      {(clipped || open) && (
-        <button
-          type="button"
-          className={s.more()}
-          aria-expanded={open}
-          aria-controls={id}
-          aria-label={open ? 'Show less of the description' : 'Show more of the description'}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {open ? 'Less' : 'More'}
-        </button>
-      )}
+      {clipped && toggle}
     </div>
   );
 }

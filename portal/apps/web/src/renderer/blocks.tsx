@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, useRef } from 'react';
 import type { WidgetBlock } from '@adminforge/schemas';
 import {
   Button,
@@ -7,12 +7,16 @@ import {
   KpiStrip,
   Panel,
   ProvenanceFooter,
+  StatusPill,
   cn,
   type Provenance,
 } from '@adminforge/ui';
 import {
+  TONE_LABEL,
+  getPath,
   getWidget,
   parseWidgetConfig,
+  useTemplate,
   useWhen,
   type WidgetData,
   type WidgetRuntime,
@@ -192,6 +196,34 @@ export interface KpiCollapse {
   onToggle: (collapsed: boolean) => void;
 }
 
+/**
+ * A folded KPI that needs attention says so in the one-line bar (its label and status: "Sign-in blocked: Needs
+ * review"), so folding the strip never hides a warning. The status is the KPI's own `status` / `statusLabel`.
+ */
+function HiddenKpiStatus({ block, runtime, data }: { block: Block; runtime: WidgetRuntime; data: PageData }) {
+  // The KPI as the strip would show it: a valid configuration, and only while its `when` holds.
+  const parsed = useMemo(() => parseWidgetConfig(block as Block & Record<string, unknown>), [block]);
+  const shown = useWhen(block.when, runtime.scope, { sticky: true });
+  const cfg = (parsed.ok ? parsed.config : {}) as {
+    label?: string;
+    field?: string;
+    status?: unknown;
+    statusLabel?: unknown;
+  };
+  const d = block.data ? data.resolve(block.data) : EMPTY;
+  const ready = d.status === 'ready';
+  const raw = ready ? d.value : undefined;
+  const value =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? getPath(raw, cfg.field ?? 'value') : raw;
+  const scope = useMemo(() => ({ ...runtime.scope, value }), [runtime.scope, value]);
+  const status = useTemplate<unknown>(cfg.status, scope, ready && cfg.status !== undefined);
+  const label = useTemplate<unknown>(cfg.statusLabel, scope, ready && cfg.statusLabel !== undefined);
+  const tone = status.value === 'warn' || status.value === 'crit' ? status.value : undefined;
+  if (!parsed.ok || !shown || !tone || value === undefined || value === null || value === '') return null;
+  const words = typeof label.value === 'string' && label.value ? label.value : TONE_LABEL[tone];
+  return <StatusPill status={tone}>{cfg.label ? `${cfg.label}: ${words}` : words}</StatusPill>;
+}
+
 /** Consecutive KPIs share one strip; its foot names each distinct source once. */
 function KpiGroup({
   items,
@@ -207,6 +239,18 @@ function KpiGroup({
   collapse?: KpiCollapse;
 }) {
   const stripId = useId();
+  // Folding swaps the toggle for another button: keep keyboard focus on whichever one is shown.
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    toggleRef.current?.focus();
+  }, [collapse?.collapsed]);
+  const flip = (collapsed: boolean) => {
+    refocus.current = true;
+    collapse?.onToggle(collapsed);
+  };
   const provenances = useMemo(() => {
     const seen = new Map<string, Provenance>();
     for (const { block } of items) {
@@ -226,28 +270,33 @@ function KpiGroup({
   const wideFillers = compact ? fillersFor(items.length, wide) : 0;
   if (collapse?.collapsed)
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
+          ref={toggleRef}
           size="sm"
           intent="ghost"
           aria-expanded={false}
           className="-ml-2"
-          onClick={() => collapse.onToggle(false)}
+          onClick={() => flip(false)}
         >
           <CaretDownIcon size={12} weight="bold" aria-hidden className="text-fg-3" />
           Show key figures
         </Button>
         <span className="text-xs text-fg-3">{items.length} hidden</span>
+        {items.map(({ block, index }) => (
+          <HiddenKpiStatus key={blockId(block, index)} block={block} runtime={runtime} data={data} />
+        ))}
       </div>
     );
   const toggle = collapse && (
     <Button
+      ref={toggleRef}
       size="sm"
       intent="ghost"
       aria-expanded
       aria-controls={stripId}
-      className="-ml-2 self-start"
-      onClick={() => collapse.onToggle(true)}
+      className="-ml-2"
+      onClick={() => flip(true)}
     >
       <CaretDownIcon size={12} weight="bold" aria-hidden className="rotate-180 text-fg-3" />
       Hide key figures

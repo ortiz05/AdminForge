@@ -445,7 +445,15 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
     [listPage, kpiCollapsedPages, def.id],
   );
   const grid = (b: readonly Block[]) => (
-    <WidgetGrid blocks={notGated(b)} runtime={runtime} data={data} inspector={inspector} kpis={kpis} />
+    <WidgetGrid
+      blocks={notGated(b)}
+      runtime={runtime}
+      data={data}
+      inspector={inspector}
+      kpis={kpis}
+      // Its own stacking context: sticky table headers inside stay under the sticky filter bar.
+      className={listPage ? 'isolate' : undefined}
+    />
   );
 
   // Entity: identity header, page actions, optional blocks above tabs, then tabs.

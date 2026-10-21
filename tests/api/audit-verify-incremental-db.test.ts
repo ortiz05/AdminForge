@@ -163,6 +163,37 @@ describe('incremental audit-chain verification (SQLite)', () => {
     });
   });
 
+  it('a chain rewritten from the start re-hashes cleanly, but not onto the checkpoint already verified', async () => {
+    await append(3);
+    await writer.verifyIncremental();
+    const checkpoint = seqs().at(-1)!;
+    // Everything removed and new events written: a consistent chain of its own, from the genesis hash.
+    tamper('delete from audit_events');
+    await append(2);
+    expect(await writer.verify()).toMatchObject({ ok: false, seq: checkpoint, brokenAt: 2 });
+    // Another process (no checkpoint of its own) sees a chain that verifies: the shipped checkpoints are the anchor.
+    expect(await new SqliteAuditWriter(database.db, () => new Date(now), null).verify()).toMatchObject({
+      ok: true,
+      count: 2,
+    });
+  });
+
+  it('a break another walk found meanwhile is not papered over by a walk that started before it', async () => {
+    await append(3);
+    await writer.verifyIncremental();
+    await append(10);
+    tamper(`update audit_events set result = 'failure' where seq = ?`, seqs()[0]);
+    now += HOUR;
+    // The hourly check walks the new events in batches (yielding between them); the Audit page's full walk finds the
+    // change before it while it is under way.
+    const hourly = writer.verifyIncremental();
+    const page = writer.verify();
+    expect(await page).toMatchObject({ ok: false, seq: seqs()[0] });
+    expect(await hourly).toMatchObject({ ok: true, scope: 'incremental' });
+    now += HOUR;
+    expect(await writer.verifyIncremental()).toMatchObject({ ok: false, scope: 'full', seq: seqs()[0] });
+  });
+
   describe('probes.audit-chain', () => {
     const chainProbe = Probe.parse({
       kind: 'probe',

@@ -4,15 +4,16 @@ id: probes.audit-chain
 version: 1.0.3
 title: Audit log integrity
 summary: >-
-  Checks AdminForge's hash-chained audit log — every hour the events added since the last check, every day the whole
-  chain; critical when an event was changed or removed.
+  Checks AdminForge's hash-chained audit log — every hour the events added since the last check, and the whole chain
+  after a restart and once a day; critical when an event was changed or removed.
 owner: portal-admins
 tags: [synthetic, portal, audit, sweep-1h]
 group: platform
 remedy: >-
   AdminForge's audit log failed its integrity check: an entry is missing or changed after it was written. Don't delete
   or edit anything. Tell the security team and the AdminForge administrator straight away, with the time of this
-  result.
+  result. The administrator then verifies the whole chain and compares where it ends with the checkpoints kept in the
+  logs.
 link: { label: Open the audit log, href: "/audit" }
 check:
   kind: auditChain

@@ -142,6 +142,8 @@ export class SqliteAuditWriter implements AuditWriter {
    */
   private verified: Verified | null = null;
   private fullAt: number | null = null;
+  /** Bumped on every break found: a walk that started before it can't save its checkpoint afterwards. */
+  private generation = 0;
 
   constructor(
     private readonly db: Db,
@@ -174,24 +176,49 @@ export class SqliteAuditWriter implements AuditWriter {
 
   /** Walks the whole chain in seq order, `batch` rows at a time (keyset paging), then records the verified tail. */
   async verify(): Promise<VerifyResult> {
-    const { checked: _checked, ...r } = await this.walk(null);
+    const { checked: _checked, ...r } = await this.fullWalk();
     return r;
   }
 
   async verifyIncremental(fullEveryMs = FULL_VERIFY_EVERY_MS): Promise<ChainCheck> {
     const from = this.verified;
     if (!from || this.fullAt === null || this.now().getTime() - this.fullAt >= fullEveryMs)
-      return { ...(await this.walk(null)), scope: 'full' };
+      return { ...(await this.fullWalk()), scope: 'full' };
     // The checkpoint event must still be there, unchanged: removing or rewriting the tail can't hide behind it.
-    if (from.seq > 0) {
-      const row = this.db.select().from(auditEvents).where(eq(auditEvents.seq, from.seq)).get();
-      const ok = !!row && row.hash === from.hash && verifyRows([rowOf(row)], row.prevHash).ok;
-      if (!ok) {
-        this.verified = null;
-        return { ok: false, brokenAt: from.count - 1, seq: from.seq, scope: 'incremental', checked: 1 };
-      }
+    if (!this.holds(from)) {
+      this.broken();
+      return { ok: false, brokenAt: from.count - 1, seq: from.seq, scope: 'incremental', checked: 1 };
     }
     return { ...(await this.walk(from)), scope: 'incremental' };
+  }
+
+  /** Whether the event at a verified checkpoint is still there with the same hash, and still re-hashes to it. */
+  private holds(cp: Verified): boolean {
+    if (cp.seq === 0) return true;
+    const row = this.db.select().from(auditEvents).where(eq(auditEvents.seq, cp.seq)).get();
+    return !!row && row.hash === cp.hash && verifyRows([rowOf(row)], row.prevHash).ok;
+  }
+
+  /**
+   * The whole chain, and then the checkpoint this process verified before: a chain rewritten from the start re-hashes
+   * cleanly, but not onto the hash already verified at that seq (the shipped checkpoints anchor the same across a
+   * restart).
+   */
+  private async fullWalk(): Promise<VerifyResult & { checked: number }> {
+    const before = this.verified;
+    const r = await this.walk(null);
+    if (r.ok && before && !this.holds(before)) {
+      this.broken();
+      return { ok: false, brokenAt: before.count - 1, seq: before.seq, checked: r.checked };
+    }
+    return r;
+  }
+
+  /** A break was found: trust no checkpoint, and walk the whole chain until a walk succeeds again. */
+  private broken() {
+    this.generation++;
+    this.verified = null;
+    this.fullAt = null;
   }
 
   /**
@@ -199,6 +226,7 @@ export class SqliteAuditWriter implements AuditWriter {
    * in between, ships the verified tail as a checkpoint and remembers it for the next incremental check.
    */
   private async walk(from: Verified | null): Promise<VerifyResult & { checked: number }> {
+    const generation = this.generation;
     let prev = from?.hash ?? GENESIS;
     let after = from?.seq ?? 0;
     let count = from?.count ?? 0;
@@ -215,7 +243,7 @@ export class SqliteAuditWriter implements AuditWriter {
       if (!rows.length) break;
       const res = verifyRows(rows.map(rowOf), prev, count);
       if (!res.ok) {
-        this.verified = null;
+        this.broken();
         return { ...res, checked: checked + res.brokenAt - count + 1 };
       }
       count += res.count;
@@ -227,8 +255,11 @@ export class SqliteAuditWriter implements AuditWriter {
       await yieldToLoop();
     }
     if (tail) this.checkpoints?.({ ...tail, count, ts: this.now().toISOString() });
-    this.verified = { seq: tail?.seq ?? 0, hash: tail?.hash ?? GENESIS, count };
-    if (!from) this.fullAt = this.now().getTime();
+    // Another walk found a break meanwhile: this one's checkpoint must not paper over it.
+    if (generation === this.generation) {
+      this.verified = { seq: tail?.seq ?? 0, hash: tail?.hash ?? GENESIS, count };
+      if (!from) this.fullAt = this.now().getTime();
+    }
     return { ok: true, count, checked, ...(tail ? { tail } : {}) };
   }
 }

@@ -166,6 +166,23 @@ Every configuration key is documented in `config/example.env`.
   definitions whose id or file contains it.
 - **Changes:** nothing. **Safe:** yes. **Exit 1:** a test failed.
 
+### `list [--kind <kinds>] [--section <sections>] [--status <statuses>] [--search <text>] [--json]`
+
+- **Does:** lists the definitions in `portal/content` — id, kind, section, status and file, sorted by section — so
+  you find one to extend before adding a near-duplicate (CLAUDE.md rule 4). Folders follow ids, so the section is
+  where a definition shows: `nav.section`, a report's `area`, a probe's `group`, for a schedule the section of the
+  report, playbook or probe it runs (`job.ref`), else the id prefix. `adminforge list --section exchange` finds the
+  Exchange pages and reports filed under `m365/`. Retired definitions are listed too (the status column says so).
+  Files that don't parse are left out with a count (`validate` says why).
+- **Options** (comma-separated values; filters combine): `--kind` (`page` … `feed`, or the folder name `pages`),
+  `--section` (matches the section shown, the id prefix — the folder — or a tag, so the Exchange playbooks, which
+  have no navigation entry, are found by their `exchange` tag), `--status` (`draft`, `preview`, `active` — the
+  default when a definition sets none —, `deprecated`, `retired`), `--search` (every word must appear in the id,
+  title, summary, tags, file or section; any case), `--json` (the rows as JSON, adding title, owner, version, tags
+  and the preview flag).
+- **Reads:** `CONTENT_DIR` (default `portal/content`); never `<env>.admin.env`.
+- **Changes:** nothing. **Safe:** yes. **Exit 1:** an unknown kind or status (no match is not a failure).
+
 ### `publish [--env <name>] [--dry-run] [--allow-unreviewed]`
 
 - **Does:** runs the `validate` and `test` checks; requires reviewed content — committed, and the commit on origin's
@@ -271,7 +288,7 @@ Each layer imports only from the layers below it, so there are no import cycles.
 src/
   index.ts            commander wiring; builds the contexts from the env files; error → one line + exit code
   commands/           one module per command — option handling, output, and the order of steps
-    env.ts  validate.ts  test.ts  publish.ts  new.ts  fixtures.ts  audit.ts
+    env.ts  validate.ts  test.ts  list.ts  publish.ts  new.ts  fixtures.ts  audit.ts
     db.ts             db backup · db sign-out-everyone · db import-postgres (the only module that may use the pg driver)
     provision.ts      provision entra · test-identities · status
     test-fixtures.ts  the opt-in licensed test fixtures within test-identities and status; --remove-fixtures
@@ -353,7 +370,8 @@ pnpm --filter @adminforge/tests exec vitest run --project unit unit/cli
   own tests (`entra-plan`, `identities-plan`, `test-fixtures-plan`, `azure-test-plan`, `privilege-ceilings`,
   `automation-ceiling`, …).
 - **Content commands** run against temporary content directories with injected stores, engines, git state and fetch
-  (`content.test.ts`, `publish-*.test.ts`, `news-feeds.test.ts`, `script-pins.test.ts`, the lint rule tests).
+  (`content.test.ts`, `publish-*.test.ts`, `news-feeds.test.ts`, `script-pins.test.ts`, `content-list.test.ts`, the
+  lint rule tests).
 - **Configuration and plumbing**: `env-check*.test.ts` (`env-check-retired-keys` for the Postgres keys),
   `env-command.test.ts` (temporary env files only — never `~/.config`), `redirect-origins.test.ts`,
   `audit-verify.test.ts`, `review-state-image.test.ts`, `describe-failure.test.ts`.

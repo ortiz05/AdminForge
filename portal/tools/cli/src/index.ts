@@ -24,6 +24,7 @@ import { destroyAzureTestRun, provisionAzureTest } from './commands/azure-test';
 import { dbBackup, dbSignOutEveryone, importPostgres } from './commands/db';
 import { envCheck } from './commands/env';
 import { recordFixtures } from './commands/fixtures';
+import { listContent } from './commands/list';
 import { newDefinition } from './commands/new';
 import {
   provisionEntra,
@@ -179,7 +180,7 @@ provision
     if (!result.ok) process.exitCode = 1;
   });
 
-// ── Content: validate · test · publish · new · fixtures (§7.9–7.10) ──────────────
+// ── Content: validate · test · list · publish · new · fixtures (§7.9–7.10) ───────
 /** `--env <name>` picks ~/.config/adminforge/<name>.env (unless ADMINFORGE_ENV_FILE is set). */
 const useEnv = (name?: string) => {
   if (name && !process.env.ADMINFORGE_ENV_FILE) process.env.ADMINFORGE_ENV = name;
@@ -211,6 +212,31 @@ program
   .action(async (pattern?: string) => {
     if (!(await testContent(content(), { pattern }))) process.exitCode = 1;
   });
+
+program
+  .command('list')
+  .description(
+    'List the content definitions — id, kind, section, status, file — to find one to extend before adding another. The section is where it shows (nav.section, a report’s area, a probe’s group, a schedule’s target), not its folder',
+  )
+  .option(
+    '--kind <kinds>',
+    'only these kinds, comma-separated: page, dashboard, report, playbook, runbook, schedule, probe, connection, navigation, feed',
+  )
+  .option(
+    '--section <sections>',
+    'only these sections, comma-separated (matches the section shown, the id prefix — the folder — or a tag)',
+  )
+  .option(
+    '--status <statuses>',
+    'only these statuses, comma-separated: draft, preview, active, deprecated, retired',
+  )
+  .option('--search <text>', 'only definitions whose id, title, summary, tags or file contain every word')
+  .option('--json', 'print the rows as JSON')
+  .action(
+    async (opts: { kind?: string; section?: string; status?: string; search?: string; json?: boolean }) => {
+      await listContent(content(), opts);
+    },
+  );
 
 const audit = program.command('audit').description('The tamper-evident audit log');
 audit

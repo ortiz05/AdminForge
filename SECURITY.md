@@ -249,7 +249,8 @@ the reason.
 - Group, distribution-list, app-owner and app-assignment playbooks refuse adding yourself — for an app assignment
   also a group you belong to or own; group members must be users, and a mail-enabled security group takes people,
   not other groups — adding to a role-assignable group (which
-  carries directory roles) and making someone an app owner need a second person's approval. Nobody dismisses their own
+  carries directory roles) or to a mail-enabled security group (which grants access like any security group), and
+  making someone an app owner need a second person's approval. Nobody dismisses their own
   sign-in risk, turns on an inbox rule that sends someone else's mail to them, or issues themselves a Temporary
   Access Pass or removes their own MFA methods. The people who approve AdminForge changes (everyone holding
   Playbook Approver or Portal Admin on the Read app, through a group or directly) get no new credential through

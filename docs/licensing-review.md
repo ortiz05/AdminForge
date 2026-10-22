@@ -81,20 +81,20 @@ service plan `AAD_PREMIUM` (`docs/backlog.md`, API).
 
 ## Exchange Online
 
-| Feature                                                  | Needs                                                                                              | Live                        |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------- |
-| Runner connection                                        | Read and Write apps `Exchange.Manage`; an Exchange role on the person (a new one can take an hour) | yes                         |
-| Mailboxes, shared mailboxes, mailbox page                | `exchange`; View-Only Recipients (Global Reader) or higher; `User.Read.All` for the sign-in state  | yes                         |
-| Distribution lists, list page                            | `exchange`; `Group.Read.All`, `GroupMember.Read.All`                                               | yes                         |
-| Forwarding page and report, inbox-rule audit             | `exchange`; `Get-InboxRule` needs Mail Recipients (Exchange Recipient Administrator)               | yes                         |
-| List members; Full Access, Send As, Send on Behalf       | Write app `Exchange.Manage`; Exchange Recipient Administrator (or list owner); `User.Read.All`     | yes                         |
-| Automatic replies, hide from address lists               | as above                                                                                           | yes                         |
-| Forward a mailbox (with approval), clear forwarding      | as above; a second engineer with `Playbook.Approver` approves                                      | up to the approval gate     |
-| Turn an inbox rule off or on, remove it                  | as above                                                                                           | lookup and refusals only    |
-| Convert to shared mailbox                                | as above                                                                                           | refusal path only           |
-| Create shared and room mailboxes and lists; remove them  | as above; sign-in changes: `User.EnableDisableAccount.All` and User Administrator                  | yes (create and re-run)     |
-| Scheduled external forwarding and shared-mailbox sign-in | App-only Exchange in the runner (`Exchange.ManageAsApp`, a certificate, an Exchange role)          | not supported yet           |
-| Mailbox storage and inactivity                           | `Reports.Read.All` (usage reports)                                                                 | not yet (see usage reports) |
+| Feature                                                  | Needs                                                                                                                                                                   | Live                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Runner connection                                        | Read and Write apps `Exchange.Manage`; an Exchange role on the person (a new one can take an hour)                                                                      | yes                         |
+| Mailboxes, shared mailboxes, mailbox page                | `exchange`; View-Only Recipients (Global Reader) or higher; `User.Read.All` for the sign-in state                                                                       | yes                         |
+| Distribution lists, list page                            | `exchange`; `Group.Read.All`, `GroupMember.Read.All`                                                                                                                    | yes                         |
+| Forwarding page and report, inbox-rule audit             | `exchange`; `Get-InboxRule` needs Mail Recipients (Exchange Recipient Administrator)                                                                                    | yes                         |
+| List members; Full Access, Send As, Send on Behalf       | Write app `Exchange.Manage`; Exchange Recipient Administrator (or list owner); `User.Read.All`, `Group.Read.All`; a Playbook Approver for a mail-enabled security group | yes                         |
+| Automatic replies, hide from address lists               | as above                                                                                                                                                                | yes                         |
+| Forward a mailbox (with approval), clear forwarding      | as above; a second engineer with `Playbook.Approver` approves                                                                                                           | up to the approval gate     |
+| Turn an inbox rule off or on, remove it                  | as above                                                                                                                                                                | lookup and refusals only    |
+| Convert to shared mailbox                                | as above                                                                                                                                                                | refusal path only           |
+| Create shared and room mailboxes and lists; remove them  | as above; sign-in changes: `User.EnableDisableAccount.All` and User Administrator                                                                                       | yes (create and re-run)     |
+| Scheduled external forwarding and shared-mailbox sign-in | App-only Exchange in the runner (`Exchange.ManageAsApp`, a certificate, an Exchange role)                                                                               | not supported yet           |
+| Mailbox storage and inactivity                           | `Reports.Read.All` (usage reports)                                                                                                                                      | not yet (see usage reports) |
 
 ## SharePoint and OneDrive
 

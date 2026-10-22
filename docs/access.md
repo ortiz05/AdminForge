@@ -110,8 +110,10 @@ each person's Read sign-in falls back to theirs).
 ## Separation of duties
 
 - Nobody approves their own run or request, or a change that grants them access (the principal getting a directory
-  or Azure role, people added to a role-assignable group, a new app owner).
-- Adding someone to a role-assignable group and making someone an app owner always need a second person's approval;
+  or Azure role, people added to a role-assignable group or a mail-enabled security group, a new app owner).
+- Adding someone to a role-assignable group or a mail-enabled security group, and making someone an app owner, always
+  need a second person's approval (who must not be among those being added — for addresses typed rather than picked,
+  Exchange checks that when the change is made);
   nobody can add themselves to an existing group or distribution list, assign themselves (or a group they belong to
   or own) to an enterprise app, or make themselves an owner through AdminForge. Creating a new group with yourself in
   it is allowed: it grants nothing until access is given to the group, which these rules then refuse.

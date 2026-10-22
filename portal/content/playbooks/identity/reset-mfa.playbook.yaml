@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.reset-mfa
-version: 1.0.0
+version: 1.1.0
 title: Reset MFA methods
 summary: >-
   Removes a user's registered MFA methods (Authenticator, OATH tokens, phone, Temporary Access Pass; optionally FIDO2 keys,
-  passkeys, Windows Hello and platform credentials) so they must register again. The password is kept.
+  passkeys, Windows Hello and platform credentials) so they must register again. The password is kept. Not for your
+  own account or for the people who approve AdminForge changes.
 owner: identity-team
 tags: [identity, users, mfa, incident]
 risk: high
@@ -13,7 +14,7 @@ mode: write
 requires:
   portalRoles: [Portal.Operator]
   scopes:
-    graph: [User.Read.All, UserAuthenticationMethod.ReadWrite.All, User.RevokeSessions.All]
+    graph: [User.Read.All, Directory.Read.All, Application.Read.All, UserAuthenticationMethod.ReadWrite.All, User.RevokeSessions.All]
   # Privileged Authentication Administrator is needed when the target holds an admin role.
   entraRoles: [Authentication Administrator]
 confirm:
@@ -45,6 +46,83 @@ steps:
       path: /users/${ $encode($guid(inputs.userId)) }
       query:
         $select: id,displayName,userPrincipalName,accountEnabled,userType
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.userId) = $lowercase(user.oid)) }
+    message: You can't remove your own MFA methods here. Ask another engineer.
+
+  # The people who approve AdminForge changes — everyone holding Playbook.Approver or Portal.Admin on AdminForge's
+  # Read app, through a group or directly — get no new credential from an engineer through AdminForge: whoever held it
+  # could approve their own changes as a second person. Read from the role assignments, not group names.
+  - id: readAppConfigured
+    type: assert
+    that: ${ $exists(env.AF_READ_CLIENT_ID) and $string(env.AF_READ_CLIENT_ID) != '' }
+    message: >-
+      AdminForge can't check who approves its changes because its Read app isn't configured (AF_READ_CLIENT_ID), so
+      nothing was changed. An administrator sets it with pnpm adminforge provision entra.
+
+  - id: portalApp
+    type: graph
+    mode: read
+    describe: Read AdminForge's portal roles
+    request:
+      method: GET
+      path: /servicePrincipals(appId='${ $guid(env.AF_READ_CLIENT_ID) }')
+      query:
+        $select: id,appRoles
+
+  - id: roleHolders
+    type: graph
+    mode: read
+    describe: Read who holds AdminForge's portal roles
+    paging: all
+    maxItems: 5000
+    request:
+      method: GET
+      path: /servicePrincipals/${ $encode($guid(steps.portalApp.output.id)) }/appRoleAssignedTo
+      query:
+        $select: principalId,principalType,appRoleId
+        $top: 999
+
+  - id: approvers
+    type: transform
+    describe: The groups and people who approve AdminForge changes
+    expression: >-
+      ${ (
+        $roles := [steps.portalApp.output.appRoles[value in ['Playbook.Approver', 'Portal.Admin']].$lowercase(id)];
+        $held := [steps.roleHolders.output.value[$lowercase(appRoleId) in $roles]];
+        {
+          "complete": $not(steps.roleHolders.output.truncated = true),
+          "groups": [$distinct($held[principalType = 'Group'].$lowercase(principalId))],
+          "direct": $lowercase($guid(inputs.userId)) in $held.$lowercase(principalId)
+        }
+      ) }
+
+  - id: approverGroupsReadable
+    type: assert
+    that: ${ steps.approvers.output.complete and $count(steps.approvers.output.groups) <= 20 }
+    message: >-
+      AdminForge couldn't check whether this person approves AdminForge changes (too many groups hold its portal roles),
+      so nothing was changed. Make this change in the Microsoft Entra admin center.
+
+  - id: targetGroups
+    type: graph
+    mode: read
+    describe: Check whether the user belongs to a group that approves AdminForge changes
+    when: ${ $count(steps.approvers.output.groups) > 0 }
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/checkMemberGroups
+      body:
+        groupIds: ${ steps.approvers.output.groups[] }
+
+  - id: notApprover
+    type: assert
+    that: ${ $not(steps.approvers.output.direct) and $count(steps.targetGroups.output.value) = 0 }
+    message: >-
+      ${ steps.lookup.output.userPrincipalName & ' approves AdminForge changes (Playbook Approver or Portal Admin). '
+         & 'Change their MFA methods for them in the Microsoft Entra admin center, by someone other than you, so nobody can act as a second approver for their own change.' }
 
   - id: methods
     type: graph
@@ -121,10 +199,37 @@ outputs:
   removed: ${ [steps.plan.output.label] }
 
 tests:
-  - name: fails when nothing but a password and a kept passkey are registered
+  - name: stops with a setup message when the Read app isn't configured
     inputs: { userId: 00000000-0000-4000-8000-000000000102, includePhishingResistant: false, revokeSessions: true, reason: lost phone ticket 3301 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
     mocks:
       lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+    expect: { status: failed, failedStep: readAppConfigured }
+  - name: refuses your own account
+    inputs: { userId: 00000000-0000-4000-8000-0000000000a1, includePhishingResistant: false, revokeSessions: true, reason: lost phone ticket 3301 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-0000000000a1, userPrincipalName: avery@example.com, accountEnabled: true, userType: Member }
+    expect: { status: failed, failedStep: notSelf }
+  - name: refuses someone who approves AdminForge changes (Playbook Approver or Portal Admin group)
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, includePhishingResistant: false, revokeSessions: true, reason: lost phone ticket 3301 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [00000000-0000-4000-8000-0000000002FA] }
+    expect: { status: failed, failedStep: notApprover }
+  - name: fails when nothing but a password and a kept passkey are registered
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, includePhishingResistant: false, revokeSessions: true, reason: lost phone ticket 3301 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [] }
       methods:
         value:
           - { "@odata.type": "#microsoft.graph.passwordAuthenticationMethod", id: 28c10230-6103-485e-b985-444c60001490 }
@@ -132,8 +237,12 @@ tests:
     expect: { status: failed, failedStep: hasMethods }
   - name: plans removing the Authenticator app and revoking sessions
     inputs: { userId: 00000000-0000-4000-8000-000000000102, includePhishingResistant: false, revokeSessions: true, reason: lost phone ticket 3302 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
     mocks:
       lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [] }
       methods:
         value:
           - { "@odata.type": "#microsoft.graph.passwordAuthenticationMethod", id: 28c10230-6103-485e-b985-444c60001490 }

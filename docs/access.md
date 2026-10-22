@@ -112,7 +112,12 @@ each person's Read sign-in falls back to theirs).
 - Nobody approves their own run or request, or a change that grants them access (the principal getting a directory
   or Azure role, people added to a role-assignable group, a new app owner).
 - Adding someone to a role-assignable group and making someone an app owner always need a second person's approval;
-  nobody can add themselves to a group or make themselves an owner through AdminForge.
+  nobody can add themselves to an existing group or distribution list, assign themselves (or a group they belong to
+  or own) to an enterprise app, or make themselves an owner through AdminForge. Creating a new group with yourself in
+  it is allowed: it grants nothing until access is given to the group, which these rules then refuse.
+- Temporary Access Passes, password resets and MFA resets are never for your own account, and never for the people
+  who approve AdminForge changes (members of the Playbook Approver and Admin groups): change those in the Microsoft
+  Entra admin center, by someone else.
 - Forwarding a mailbox (`m365.set-mailbox-forwarding`) needs a second person's approval, and neither the person who
   receives the mail nor the mailbox's owner can approve it. Nobody forwards a mailbox to themselves or gives
   themselves access to a mailbox or someone's OneDrive through AdminForge.

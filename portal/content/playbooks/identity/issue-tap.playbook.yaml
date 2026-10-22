@@ -1,11 +1,11 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.issue-tap
-version: 1.0.0
+version: 1.1.0
 title: Issue Temporary Access Pass
 summary: >-
   Creates a time-limited Temporary Access Pass so a user can sign in and register MFA or passwordless methods
-  (onboarding, lost device, account recovery). Checks the tenant's TAP policy first; the pass is shown once.
+  (onboarding, lost device, account recovery). Checks the tenant's TAP policy first; the pass is shown once. Not for your own account or for the people who approve AdminForge changes.
 owner: identity-team
 tags: [identity, users, mfa, helpdesk]
 risk: high
@@ -13,7 +13,7 @@ mode: write
 requires:
   portalRoles: [Portal.Operator]
   scopes:
-    graph: [User.Read.All, Policy.Read.All, UserAuthenticationMethod.ReadWrite.All]
+    graph: [User.Read.All, Directory.Read.All, Application.Read.All, Policy.Read.All, UserAuthenticationMethod.ReadWrite.All]
   # Privileged Authentication Administrator is needed when the target holds an admin role.
   entraRoles: [Authentication Administrator]
 confirm:
@@ -42,6 +42,83 @@ steps:
       path: /users/${ $encode($guid(inputs.userId)) }
       query:
         $select: id,displayName,userPrincipalName,accountEnabled,userType
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.userId) = $lowercase(user.oid)) }
+    message: You can't issue a Temporary Access Pass for your own account. Ask another engineer.
+
+  # The people who approve AdminForge changes — everyone holding Playbook.Approver or Portal.Admin on AdminForge's
+  # Read app, through a group or directly — get no new credential from an engineer through AdminForge: whoever held it
+  # could approve their own changes as a second person. Read from the role assignments, not group names.
+  - id: readAppConfigured
+    type: assert
+    that: ${ $exists(env.AF_READ_CLIENT_ID) and $string(env.AF_READ_CLIENT_ID) != '' }
+    message: >-
+      AdminForge can't check who approves its changes because its Read app isn't configured (AF_READ_CLIENT_ID), so
+      nothing was changed. An administrator sets it with pnpm adminforge provision entra.
+
+  - id: portalApp
+    type: graph
+    mode: read
+    describe: Read AdminForge's portal roles
+    request:
+      method: GET
+      path: /servicePrincipals(appId='${ $guid(env.AF_READ_CLIENT_ID) }')
+      query:
+        $select: id,appRoles
+
+  - id: roleHolders
+    type: graph
+    mode: read
+    describe: Read who holds AdminForge's portal roles
+    paging: all
+    maxItems: 5000
+    request:
+      method: GET
+      path: /servicePrincipals/${ $encode($guid(steps.portalApp.output.id)) }/appRoleAssignedTo
+      query:
+        $select: principalId,principalType,appRoleId
+        $top: 999
+
+  - id: approvers
+    type: transform
+    describe: The groups and people who approve AdminForge changes
+    expression: >-
+      ${ (
+        $roles := [steps.portalApp.output.appRoles[value in ['Playbook.Approver', 'Portal.Admin']].$lowercase(id)];
+        $held := [steps.roleHolders.output.value[$lowercase(appRoleId) in $roles]];
+        {
+          "complete": $not(steps.roleHolders.output.truncated = true),
+          "groups": [$distinct($held[principalType = 'Group'].$lowercase(principalId))],
+          "direct": $lowercase($guid(inputs.userId)) in $held.$lowercase(principalId)
+        }
+      ) }
+
+  - id: approverGroupsReadable
+    type: assert
+    that: ${ steps.approvers.output.complete and $count(steps.approvers.output.groups) <= 20 }
+    message: >-
+      AdminForge couldn't check whether this person approves AdminForge changes (too many groups hold its portal roles),
+      so nothing was changed. Make this change in the Microsoft Entra admin center.
+
+  - id: targetGroups
+    type: graph
+    mode: read
+    describe: Check whether the user belongs to a group that approves AdminForge changes
+    when: ${ $count(steps.approvers.output.groups) > 0 }
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/checkMemberGroups
+      body:
+        groupIds: ${ steps.approvers.output.groups[] }
+
+  - id: notApprover
+    type: assert
+    that: ${ $not(steps.approvers.output.direct) and $count(steps.targetGroups.output.value) = 0 }
+    message: >-
+      ${ steps.lookup.output.userPrincipalName & ' approves AdminForge changes (Playbook Approver or Portal Admin). '
+         & 'Issue a pass for them in the Microsoft Entra admin center, by someone other than you, so nobody can act as a second approver for their own change.' }
 
   - id: canSignIn
     type: assert
@@ -130,29 +207,68 @@ outputs:
        ? $fromMillis($toMillis(steps.create.output.startDateTime) + steps.create.output.lifetimeInMinutes * 60000) }
 
 tests:
-  - name: refuses when the TAP method is disabled in policy
+  - name: stops with a setup message when the Read app isn't configured
     inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4401 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
     mocks:
       lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+    expect: { status: failed, failedStep: readAppConfigured }
+  - name: refuses your own account
+    inputs: { userId: 00000000-0000-4000-8000-0000000000A1, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4401 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-0000000000a1, userPrincipalName: avery@example.com, accountEnabled: true, userType: Member }
+    expect: { status: failed, failedStep: notSelf }
+  - name: refuses someone who approves AdminForge changes (Playbook Approver or Portal Admin group)
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4401 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [00000000-0000-4000-8000-0000000002FA] }
+    expect: { status: failed, failedStep: notApprover }
+  - name: refuses when the TAP method is disabled in policy
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4401 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [] }
       policy: { id: TemporaryAccessPass, state: disabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
     expect: { status: failed, failedStep: policyEnabled }
   - name: refuses a lifetime outside the policy
     inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 1440, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4402 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
     mocks:
       lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [] }
       policy: { id: TemporaryAccessPass, state: enabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
     expect: { status: failed, failedStep: lifetimeAllowed }
   - name: refuses to replace an existing pass unless asked
     inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: false, reason: new phone ticket 4403 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
     mocks:
       lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [] }
       policy: { id: TemporaryAccessPass, state: enabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
       existing: { value: [{ id: 00000000-0000-4000-8000-00000000f301, lifetimeInMinutes: 60 }] }
     expect: { status: failed, failedStep: noConflict }
   - name: replaces the existing pass and plans a new one
     inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 120, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4404 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
     mocks:
       lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [] }
       policy: { id: TemporaryAccessPass, state: enabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
       existing: { value: [{ id: 00000000-0000-4000-8000-00000000f301, lifetimeInMinutes: 60 }] }
     expect:
@@ -160,8 +276,12 @@ tests:
       plan: [removePass, create]
   - name: plans a pass when none exists
     inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4405 }
+    env: { AF_READ_CLIENT_ID: 22222222-3333-4444-8555-666666666666 }
     mocks:
       lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      portalApp: { id: 00000000-0000-4000-8000-0000000006a1, appRoles: [{ id: 00000000-0000-4000-8000-0000000006b1, value: Playbook.Approver }, { id: 00000000-0000-4000-8000-0000000006b2, value: Portal.Admin }, { id: 00000000-0000-4000-8000-0000000006b3, value: Portal.Reader }] }
+      roleHolders: { value: [{ principalId: 00000000-0000-4000-8000-0000000002fa, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b1 }, { principalId: 00000000-0000-4000-8000-0000000002f9, principalType: Group, appRoleId: 00000000-0000-4000-8000-0000000006b3 }] }
+      targetGroups: { value: [] }
       policy: { id: TemporaryAccessPass, state: enabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
       existing: { value: [] }
     expect:

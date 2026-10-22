@@ -137,6 +137,11 @@ The schema refuses most mistakes; know the rules so you design for them (`adding
   anyone can choose falls back to the object id in a `confirmAs` step, `adding-a-playbook` step 5); `critical` also
   needs `approval: { required: true }`. Approvals exclude the people a change grants access to (`approval.excludes`),
   and nobody approves their own request.
+- **Nobody benefits from their own change.** A write that grants access or hands over someone's mail refuses the
+  person running it (`notSelf` / `notYou` on `user.oid` and `user.upn`) — for a group principal also a group they
+  belong to or own — and checks pasted ids are what the step adds. A write that issues or removes credentials refuses
+  the people who approve AdminForge changes (the `notApprover` steps in `identity.issue-tap`). Copy those steps;
+  `adding-a-playbook` step 5 and 8 say when.
 - Secrets a step produces (temporary access passes, passwords, app secrets) are listed in `secretOutputs` — shown once,
   never stored in run outputs or the audit log. Inputs that are sensitive are `redact: true`.
 - Make steps safe to re-run or undo: `assert` preconditions, `compensate` where a change can be reversed, and mark

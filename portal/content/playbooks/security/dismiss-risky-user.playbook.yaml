@@ -1,9 +1,9 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: security.dismiss-risky-user
-version: 1.2.0
+version: 1.3.0
 title: Dismiss user risk
-summary: Clears Microsoft Entra ID Protection risk for one user after you have verified the activity was legitimate.
+summary: Clears Microsoft Entra ID Protection risk for one user after you have verified the activity was legitimate. Not for your own account, whose risk someone else reviews.
 owner: security-team
 tags: [security, identity-protection, risk]
 risk: medium
@@ -40,6 +40,12 @@ steps:
       query:
         $filter: ${ 'id eq ' & $odata($guid(inputs.userId)) }
 
+  # Risk-based Conditional Access acts on this risk: nobody clears their own.
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.userId) = $lowercase(user.oid)) }
+    message: You can't dismiss your own risk. Ask another engineer to review it.
+
   # Only this user's row: an answer (or a fixture) holding other users must not stand in for theirs.
   - id: risk
     type: transform
@@ -69,6 +75,12 @@ outputs:
   summary: ${ 'Risk dismissed for ' & steps.risk.output.userPrincipalName }
 
 tests:
+  - name: refuses dismissing your own risk
+    inputs: { userId: 00000000-0000-4000-8000-0000000000A1, reason: travelled to the office in another city }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      lookup: { value: [{ id: 00000000-0000-4000-8000-0000000000a1, userPrincipalName: avery@example.com, riskState: atRisk }] }
+    expect: { status: failed, failedStep: notSelf }
   - name: dismisses risk for a user at risk
     inputs: { userId: 10000000-0000-4000-8000-000000000006, reason: Verified with the user - travel booked in advance. }
     mocks:

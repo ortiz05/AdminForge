@@ -1,13 +1,13 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.set-inbox-rule
-version: 1.0.1
+version: 1.1.0
 title: Disable or remove an inbox rule
 summary: >-
   Turns off, turns back on, or removes one inbox rule of a mailbox — for example a rule that forwards mail outside the
   organization or hides mail after an account compromise. Disabling keeps the rule so it can be looked at and turned on
   again; removing deletes it (the run record keeps what it did). A rule that sends mail outside the organization is
-  never turned on here.
+  never turned on here, nor one in someone else's mailbox that sends their mail to you.
 owner: m365-team
 tags: [m365, exchange, security, inbox-rules, data-loss]
 risk: medium
@@ -120,7 +120,7 @@ steps:
     describe: >-
       ${ (inputs.action = 'Enable' ? 'Turn on' : 'Turn off') & ' the inbox rule "' & steps.rule.output.ruleName & '" in ' & inputs.mailbox }
     script: exchange/Set-InboxRuleState.ps1
-    sha256: f60a7691730d7ff74ed86c1fa45d4e92dd4db7ae19fef2a4d0ede56c6310c6b9
+    sha256: ca1f01bdc594e86ea2b0e44da599b2e04a4bfe2a1375379dde690d584c738933
     services: [exchange]
     timeoutSeconds: 300
     # The object id lets AdminForge's protected-object guard see whose mailbox this is; the script checks it.
@@ -136,7 +136,7 @@ steps:
       describe: >-
         ${ (inputs.action = 'Enable' ? 'Turn the rule off' : 'Turn the rule back on') & ' again' }
       script: exchange/Set-InboxRuleState.ps1
-      sha256: f60a7691730d7ff74ed86c1fa45d4e92dd4db7ae19fef2a4d0ede56c6310c6b9
+      sha256: ca1f01bdc594e86ea2b0e44da599b2e04a4bfe2a1375379dde690d584c738933
       services: [exchange]
       timeoutSeconds: 300
       # Turning a rule that forwards outside back on is refused by the script; the run then needs review.
@@ -161,7 +161,7 @@ steps:
     describe: >-
       ${ 'Remove the inbox rule "' & steps.rule.output.ruleName & '" from ' & inputs.mailbox }
     script: exchange/Set-InboxRuleState.ps1
-    sha256: f60a7691730d7ff74ed86c1fa45d4e92dd4db7ae19fef2a4d0ede56c6310c6b9
+    sha256: ca1f01bdc594e86ea2b0e44da599b2e04a4bfe2a1375379dde690d584c738933
     services: [exchange]
     timeoutSeconds: 300
     parameters:

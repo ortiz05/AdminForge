@@ -1,13 +1,14 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: identity.compromised-account
-version: 3.1.0
+version: 3.1.1
 title: Compromised account response
 summary: >-
   Guided response to a suspected account compromise: confirm and scope the signal, contain (block sign-in, revoke
   sessions, mark the user compromised, remove attacker-registered MFA methods), investigate changes, consents and
   roles, recover access safely and close out. Replaces security.compromised-account-response. Sign-in logs need Entra
-  ID P1 and Identity Protection steps need P2; without them those steps are skipped.
+  ID P1, Identity Protection steps P2. An AdminForge approver's MFA, password and pass are reset in the Entra admin
+  center instead.
 owner: identity-team
 tags: [identity, security, incident, runbook]
 nav: { section: security, label: Compromised account response, icon: first-aid-kit, order: 90 }

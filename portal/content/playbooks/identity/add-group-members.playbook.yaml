@@ -1,12 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.add-group-members
-version: 1.2.0
+version: 1.3.0
 title: Add group members
 summary: >-
   Adds one or more users to a cloud security or Microsoft 365 group. Refuses dynamic groups, groups synced from
-  on-premises AD, distribution lists / mail-enabled security groups (manage those in Exchange Online), and adding
-  yourself. Role-assignable groups carry Microsoft Entra roles, so adding members to one needs a second engineer's
+  on-premises AD, distribution lists / mail-enabled security groups (manage those in Exchange Online), anything
+  that isn't a user (a group added as a member would bring in everyone in it, you included), and adding yourself. Role-assignable groups carry Microsoft Entra roles, so adding members to one needs a second engineer's
   approval, and nobody being added can approve it.
 owner: identity-team
 tags: [identity, groups, bulk]
@@ -15,7 +15,7 @@ mode: write
 requires:
   portalRoles: [Portal.Operator]
   scopes:
-    graph: [Group.Read.All, GroupMember.ReadWrite.All]
+    graph: [Group.Read.All, GroupMember.ReadWrite.All, User.ReadBasic.All]
   # Role-assignable groups also need Privileged Role Administrator.
   entraRoles: [Groups Administrator]
 # Group membership grants access (apps, Azure roles, policies; directory roles for role-assignable groups): type the
@@ -73,6 +73,36 @@ steps:
     type: assert
     that: ${ $not($lowercase(user.oid) in [inputs.userIds].$lowercase($)) }
     message: You can't add yourself to a group. Ask another engineer to add you.
+
+  # The ids are pasted or picked: confirm each one is a user. A group's id would add the whole group as a nested
+  # member, its members (perhaps you) included, past the check above.
+  - id: resolve
+    type: graph
+    mode: read
+    describe: Check that every id is a user
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      body:
+        ids: ${ [inputs.userIds].$guid($)[] }
+        types: [user]
+
+  - id: notUsers
+    type: transform
+    expression: >-
+      ${ (
+        $users := [steps.resolve.output.value.$lowercase(id)];
+        [$distinct([inputs.userIds].$guid($)[])[$not($ in $users)]]
+      ) }
+
+  - id: onlyUsers
+    type: assert
+    that: ${ $count(steps.notUsers.output) = 0 }
+    message: >-
+      ${ 'Only existing users can be added here. ' & $count(steps.notUsers.output)
+         & ' of the selected ids are not users (a group, a device, or an account that no longer exists): '
+         & $join(steps.notUsers.output, ', ')
+         & '. To nest a group, ask another engineer to do it in the Microsoft Entra admin center.' }
 
   # Members of a role-assignable group receive its Microsoft Entra roles: a second engineer approves, and nobody being
   # added may approve it. The additions then run as the approver (who needs Privileged Role Administrator).
@@ -134,6 +164,7 @@ tests:
     inputs: { groupId: 00000000-0000-4000-8000-000000000201, userIds: [00000000-0000-4000-8000-000000000102] }
     mocks:
       group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null, isAssignableToRole: false }
+      resolve: { value: [{ id: 00000000-0000-4000-8000-000000000102 }] }
     expect:
       status: succeeded
       plan: [addMember]
@@ -150,6 +181,7 @@ tests:
     user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
     mocks:
       group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null, isAssignableToRole: false }
+      resolve: { value: [{ id: 00000000-0000-4000-8000-000000000102 }] }
     expect: { status: succeeded, steps: { approve: skipped, addMember: succeeded } }
   - name: waits for a second engineer before adding members to a role-assignable group
     dryRun: false
@@ -157,4 +189,12 @@ tests:
     user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
     mocks:
       group: { id: 00000000-0000-4000-8000-000000000208, displayName: SG-PIM-Identity-Admins, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null, isAssignableToRole: true }
+      resolve: { value: [{ id: 00000000-0000-4000-8000-000000000102 }] }
     expect: { status: awaiting_approval }
+  - name: refuses a group id among the users (it would add everyone in that group, perhaps you)
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, userIds: [00000000-0000-4000-8000-000000000102, 00000000-0000-4000-8000-00000000020B] }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null, isAssignableToRole: false }
+      resolve: { value: [{ id: 00000000-0000-4000-8000-000000000102 }] }
+    expect: { status: failed, failedStep: onlyUsers }

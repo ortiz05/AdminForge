@@ -58,6 +58,25 @@ members` or `/groupſ/{id}/members` was not treated as the sensitive write it is
   batch inside a batch, is refused (`execution/batch.ts`, moved out of `outbound.ts`; `isBatchPath` in
   `@adminforge/schemas`, shared with the engine).
 
+### Nobody benefits from their own change (2026-10-22)
+
+- **Assigning an enterprise app** (`identity.assign-app-access` 1.2.0) refuses yourself and any group you belong to or
+  own; before, an armed engineer could give themselves an app role with no second person.
+- **Adding group members** (`identity.add-group-members` 1.3.0) checks that every id is a user: a group's id passed
+  the self check and nested the whole group, you perhaps included.
+- **Distribution lists** (`m365.add-distribution-list-members` 1.2.0, `Set-DistributionListMembers.ps1`) refuse
+  adding yourself under your sign-in name or any of your Exchange addresses (looked up by object id), and a
+  mail-enabled security group takes people, not other groups or lists. The script fails closed when it can't tell
+  who is running it.
+- **Credentials** (`identity.issue-tap`, `identity.reset-password`, `identity.reset-mfa` 1.1.0) are never issued or
+  removed for the people who approve AdminForge changes (everyone holding Playbook Approver or Portal Admin on the
+  Read app, through any group or directly, read from its role assignments), and a pass or an MFA reset is never for
+  your own account. The central guard protects the role groups, not their members, so
+  an Operator could otherwise make an approver's account a second approver of their own change.
+- **Your own risk and mail:** `security.dismiss-risky-user` (1.3.0) refuses your own account, and `m365.set-inbox-rule`
+  (1.1.0, `Set-InboxRuleState.ps1`) doesn't turn on a rule in someone else's mailbox that sends their mail to you
+  (by address, alias or legacy DN, read from the recipient rather than the display name).
+
 ### SharePoint sharing at scale (2026-10-22)
 
 - **SharePoint sharing at tens of thousands of sites** (still live, with the engineer's own delegated sign-in; no

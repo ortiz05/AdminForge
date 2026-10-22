@@ -64,7 +64,11 @@ Markdown sections, manual steps and executable steps.
    also needs `approval: { required: true }` (two-person; the approver runs the remaining steps as themselves). A change
    that **grants access** (a directory or Azure role, membership of a role-assignable group, app ownership) names who it
    benefits in `approval.excludes` (an expression yielding object ids — the principal, and a group's members when the
-   principal is a group) so they can't approve it, and refuses adding yourself (`notSelf` assert). Approvals expire
+   principal is a group) so they can't approve it, and refuses adding yourself (`notSelf` assert) — for a group
+   principal also a group you belong to (`checkMemberGroups`, as `identity.assign-app-access`), and when ids are
+   pasted, anything that isn't what the step adds (`getByIds` with `types`, as `identity.add-group-members`).
+   Anything that lowers a control on the initiator's own account (dismissing their risk, removing their MFA, a pass for
+   them) refuses them too. Approvals expire
    after 72 hours unless you set `expiresIn`. Don't put `onError: continue` on an approval: `validate` refuses it, and a
    rejected, expired or unworkable approval always stops the run. After an approval the reads before it run again with
    the approver's access before the next write, so the approver needs read access to them (otherwise the run stops). A
@@ -93,7 +97,10 @@ Operator` for drain mode, `Desktop Virtualization User Session Operator` for mes
    `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`: say so in the PR.
    - AdminForge's own access is protected centrally: the executor refuses any write naming its apps, the principals
      holding its app roles (the `SG-AdminForge-*` groups), `AF_PROTECTED_APP_IDS` or `AF_PROTECTED_USER_IDS`
-     (`protected_object`), REST or PowerShell. Add the friendly early asserts (`notPortalGroup`, `notPortalApp` — copy
+     (`protected_object`), REST or PowerShell. The groups' **members** are not covered: a playbook that issues or
+     removes someone's credentials (pass, password, MFA methods) copies the `readAppConfigured` … `notApprover` steps
+     from `identity.issue-tap` (who holds Playbook Approver or Portal Admin, read from the Read app's role
+     assignments, then `checkMemberGroups`) so the people who approve AdminForge changes are refused. Add the friendly early asserts (`notPortalGroup`, `notPortalApp` — copy
      them from `add-group-members` / `add-app-owner`) when a playbook targets groups or apps, so people see why before
      anything runs. PowerShell writes are matched by the object ids in their parameters only: resolve the accounts
      through Graph and pass their ids (`adding-a-runner-script`, step 10).

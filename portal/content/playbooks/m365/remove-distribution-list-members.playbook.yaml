@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.remove-distribution-list-members
-version: 1.1.0
+version: 1.1.1
 title: Remove members from a distribution list
 summary: Removes one or more addresses from a distribution list or mail-enabled security group. Addresses that aren't members are skipped.
 owner: m365-team
@@ -67,7 +67,7 @@ steps:
     mode: write
     describe: ${ 'Remove ' & $count(steps.collect.output.addresses) & ' member(s) from ' & inputs.identity }
     script: exchange/Set-DistributionListMembers.ps1
-    sha256: c81ec602a6f63e4bd0c0965a90fb9912f336c42ab2778885051fac7a161685f4
+    sha256: 6d89533e1c43f2adc5533ddfa41ca98042e20c450f6ae03a558d4ac6f9ca4773
     services: [exchange]
     timeoutSeconds: 600
     parameters:

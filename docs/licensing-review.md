@@ -284,3 +284,4 @@ live tenant. Remove the flag with a version bump once they do.
 | 2026-10-17 | [Azure Virtual Desktop](licensing/findings/2026-10-17-azure-virtual-desktop.md)                                                |
 | 2026-10-21 | [Platform review: requests and permissions not yet checked live](licensing/findings/2026-10-21-platform-review.md)             |
 | 2026-10-22 | [Protected-object guard: Graph path forms checked live](licensing/findings/2026-10-22-protected-guard-paths.md)                |
+| 2026-10-22 | [Self-benefit gates: requests not yet checked live](licensing/findings/2026-10-22-self-benefit-gates.md)                       |

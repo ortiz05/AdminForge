@@ -1,9 +1,9 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.add-distribution-list-members
-version: 1.1.0
+version: 1.2.0
 title: Add members to a distribution list
-summary: Adds people (and any other mail recipients by address) to a distribution list or mail-enabled security group. People who are already members are skipped.
+summary: Adds people (and any other mail recipients by address) to a distribution list or mail-enabled security group. People who are already members are skipped. You can't add yourself; ask another engineer to add you.
 owner: m365-team
 tags: [m365, exchange, distribution-lists]
 risk: medium
@@ -80,6 +80,14 @@ steps:
     message: >-
       ${ 'These are not valid email addresses: ' & $join(steps.collect.output.invalid, ', ') }
 
+  # A mail-enabled security group grants access like any security group: nobody adds themselves. The script also
+  # refuses your other addresses (aliases), which only Exchange knows.
+  - id: notSelf
+    type: assert
+    that: >-
+      ${ $not($lowercase(user.oid) in [inputs.members].$lowercase($)) and $not($lowercase(user.upn) in steps.collect.output.addresses) }
+    message: You can't add yourself to a list or group. Ask another engineer to add you.
+
   - id: somethingToAdd
     type: assert
     that: ${ $count(steps.collect.output.addresses) > 0 }
@@ -90,7 +98,7 @@ steps:
     mode: write
     describe: ${ 'Add ' & $count(steps.collect.output.addresses) & ' member(s) to ' & inputs.identity }
     script: exchange/Set-DistributionListMembers.ps1
-    sha256: c81ec602a6f63e4bd0c0965a90fb9912f336c42ab2778885051fac7a161685f4
+    sha256: 6d89533e1c43f2adc5533ddfa41ca98042e20c450f6ae03a558d4ac6f9ca4773
     services: [exchange]
     timeoutSeconds: 600
     parameters:
@@ -128,6 +136,22 @@ tests:
       outputs:
         summary: Added 3 member(s) to sales-team@example.com.
         added: [alex.wilber@example.com, isaiah.langer@example.com, kim.lee@partner.example]
+  - name: refuses adding yourself, typed
+    inputs:
+      identity: sales-team@example.com
+      addresses: "Avery@example.com\n"
+    user: { oid: 10000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    expect: { status: failed, failedStep: notSelf }
+  - name: refuses adding yourself, picked
+    inputs:
+      identity: sales-team@example.com
+      members: [10000000-0000-4000-8000-0000000000A1]
+    user: { oid: 10000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-0000000000a1, userPrincipalName: avery@example.com, mail: avery.mail@example.com }
+    expect: { status: failed, failedStep: notSelf }
   - name: refuses people without a mailbox
     inputs:
       identity: sales-team@example.com

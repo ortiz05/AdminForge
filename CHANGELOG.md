@@ -6,6 +6,12 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### SharePoint sharing at scale (2026-10-22)
+
+- A page fetched every datasource whose name appeared anywhere in a templated text, prose included: a note saying
+  "10,000 sites are listed" made the browser download a datasource called `sites`. Only the `${ … }` parts count now
+  (`templateExpressions` in the renderer; the perf harness uses the same).
+
 ### Dependencies (2026-10-22)
 
 - **Node.js 26** (from 24): the app image's base and the runner image's build stage (`node:26.11.1-bookworm-slim`, by

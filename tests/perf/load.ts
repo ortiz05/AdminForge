@@ -29,6 +29,7 @@ import { entraConfig, FakeAuthClient } from '../api/helpers';
 import { buildTestApp, sessionFor } from '../api/support/app';
 import { Clock } from '../lib/clock';
 import { repoRoot } from '../lib/repo';
+import { templateExpressions } from '../../portal/apps/web/src/renderer/page-model';
 import { createTenant, SCALES, type SyntheticTenant } from './tenant/generate';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,7 +54,10 @@ function neededDatasources(def: Def): string[] {
     if (typeof v === 'string') {
       const root = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(v.trim())?.[1];
       if (key && ['data', 'delta', 'trend'].includes(key) && root && names.includes(root)) found.add(root);
-      if (v.includes('${')) for (const [n, re] of patterns) if (re.test(v)) found.add(n);
+      if (v.includes('${')) {
+        const code = templateExpressions(v);
+        for (const [n, re] of patterns) if (re.test(code)) found.add(n);
+      }
     } else if (Array.isArray(v)) v.forEach((x) => visit(x));
     else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) visit(x, k);
   };

@@ -58,6 +58,22 @@ describe('$withItemCount', () => {
     expect(() => withItemCount([], 'm', 3)).toThrow('$withItemCount: the count field');
   });
 
+  it('drops the counted field when asked, in the same pass (an expansion only counted)', async () => {
+    const rows = [{ id: 'a', members: [{ id: '1' }, { id: '2' }] }, { id: 'b' }];
+    expect(await evaluate('$withItemCount(rows, "members", "memberCount", true)', { rows })).toEqual([
+      { id: 'a', memberCount: 2 },
+      { id: 'b', memberCount: 0 },
+    ]);
+    expect(rows[0]).toHaveProperty('members');
+    // Only a top-level field can be dropped; a path into a list keeps the row whole.
+    expect(withItemCount([{ m: [{ id: '1' }] }], 'm.id', 'n', undefined, true)).toEqual([
+      { m: [{ id: '1' }], n: 1 },
+    ]);
+    expect(() => withItemCount([], 'm', 'n', undefined, 'yes')).toThrow(
+      '$withItemCount: drop must be true or false',
+    );
+  });
+
   it('stops at the evaluation deadline', () => {
     const many = Array.from({ length: 5000 }, () => ({ m: [1] }));
     expect(() => withItemCount(many, 'm', 'n', Date.now() - 1)).toThrow();

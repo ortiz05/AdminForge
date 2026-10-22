@@ -292,9 +292,13 @@ describe('schedules API', () => {
       '2026-10-15T04:00:00.000Z',
       '2026-10-15T03:00:00.000Z',
     ]);
+    // A Reader sees the code only: the message is for the roles that may see the schedule's data.
     expect(first.items[0]).toMatchObject({
       status: 'failed',
-      error: { code: 'upstream_error', message: 'Graph returned 503' },
+      error: {
+        code: 'upstream_error',
+        message: 'The details are shown only to people with the Portal.Operator role.',
+      },
     });
     const second = (
       await reader.get(`/api/schedules/sweep.every-15-minutes/runs?limit=2&cursor=${first.cursor}`)

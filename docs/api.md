@@ -916,7 +916,8 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
   `POST /api/schedules`.
 - **Errors:** `tenant_value_in_query` 400 (title, summary or inputs hold a configured tenant value, a GUID or an
   `onmicrosoft.com` domain; the message names the kind, never the value), `invalid_cron` 400, `review_required` 400
-  (write playbook without `reviewedBy`), `definition_not_found` 404 (job `ref` not published), `invalid_scaffold` 400,
+  (write playbook without `reviewedBy`), `definition_not_found` 404 (job `ref` not published), `forbidden` 403 (the
+  report or playbook needs a portal role the caller lacks, as `GET /api/definitions/:kind/:key`), `invalid_scaffold` 400,
   `invalid_request` 400.
 - `emailEnv` must be a key named `AF_…RECIPIENTS`, `AF_…EMAIL` or `AF_…ALERTS`; schedule email `to`/`cc` entries must be `${ env.<such key> }`.
 
@@ -950,7 +951,12 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
   schedule that runs with its creator's access: anyone but the creator or a Portal Admin); `runId` links a playbook
   job's run; `reason` says why a `skipped` run didn't happen (overlap, paused, deleted, needs sign-in), and that a
   file-only run (Run now on a disabled schedule) sent nothing. A `skipped` run with `error.code` `schedule_missed` was
-  due while AdminForge wasn't running (more than an hour late); its message says when.
+  due while AdminForge wasn't running (more than an hour late); its message says when. The error's message and hint
+  and `runId` are only for someone who holds the roles the schedule's data needs (its `requires.portalRoles`, default
+  `Portal.Operator`, plus its report's or playbook's own; for a schedule that runs with its creator's access, the
+  creator or a Portal Admin holding those roles): anyone else gets `error {code, message}` with a fixed message naming
+  those roles (or the creator and portal administrators), no `runId` and no `artifact`. Errors the scheduler writes
+  itself (`schedule_missed`, `schedule_not_found`, `interrupted`, `timeout`, and any `skipped` run) keep their message.
 - **Errors:** `schedule_not_found` 404, `invalid_request` 400.
 
 #### `GET /api/probes`
@@ -1230,19 +1236,19 @@ auditChain, apps, tenant}` — `contentSource` is `fs` or `db`; `writeStepUp` is
   (nothing is replayed — refetch on reconnect). When arming rotates the session's id, its streams end without
   `session.ended` and `EventSource` reconnects with the new cookie.
 
-| Event                 | Data                                                                              | Who receives it                                                  |
-| --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `ready`               | `{mode, armedUntil}`                                                              | the connection, on connect                                       |
-| `session.mode`        | `{mode: read or armed, armedUntil}` — armed, disarmed, extended, expired          | the connection                                                   |
-| `session.ended`       | `{}` — signed out or expired; the stream then closes                              | the connection                                                   |
-| `definitions.changed` | `{all: true}` — content published or reloaded; never the keys (refetch)           | everyone                                                         |
-| `run.updated`         | `{v: 1, runId, eventId, type: run or step, status?, initiatorOid?, parentRunId?}` | the run's initiator (or everyone when the payload names no user) |
-| `appearance.changed`  | `{version}`                                                                       | everyone                                                         |
-| `schedule.updated`    | `{key, scheduleRunId?, status?}`                                                  | everyone                                                         |
-| `schedule.failed`     | `{key, title, scheduleRunId, status, error {code, message}, retryAt?}`            | everyone                                                         |
-| `probe.updated`       | `{key, status, metric, ts}`                                                       | everyone                                                         |
-| `news.updated`        | `{new, updated}` — a News and changes collection added or changed items           | everyone                                                         |
-| `emergency.changed`   | `{target, paused}` — changes or automation paused or resumed                      | everyone                                                         |
+| Event                 | Data                                                                                                      | Who receives it                                                  |
+| --------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `ready`               | `{mode, armedUntil}`                                                                                      | the connection, on connect                                       |
+| `session.mode`        | `{mode: read or armed, armedUntil}` — armed, disarmed, extended, expired                                  | the connection                                                   |
+| `session.ended`       | `{}` — signed out or expired; the stream then closes                                                      | the connection                                                   |
+| `definitions.changed` | `{all: true}` — content published or reloaded; never the keys (refetch)                                   | everyone                                                         |
+| `run.updated`         | `{v: 1, runId, eventId, type: run or step, status?, initiatorOid?, parentRunId?}`                         | the run's initiator (or everyone when the payload names no user) |
+| `appearance.changed`  | `{version}`                                                                                               | everyone                                                         |
+| `schedule.updated`    | `{key, scheduleRunId?, status?}`                                                                          | everyone                                                         |
+| `schedule.failed`     | `{key, scheduleRunId, status, error {code}, retryAt?}` — metadata only; the message is in the run history | everyone                                                         |
+| `probe.updated`       | `{key, status, metric, ts}`                                                                               | everyone                                                         |
+| `news.updated`        | `{new, updated}` — a News and changes collection added or changed items                                   | everyone                                                         |
+| `emergency.changed`   | `{target, paused}` — changes or automation paused or resumed                                              | everyone                                                         |
 
 `run.updated` carries no log or progress lines — those are only on the run's own stream,
 [`GET /api/runs/:id/events`](#get-apirunsidevents). The run worker and the scheduler run in the API process, so their

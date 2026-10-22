@@ -307,8 +307,11 @@ the reason.
   write permission content declares — use a dedicated named identity for them if that matters, ADR-014). The file
   check downloads only from a SharePoint host over https on the default port, without credentials.
 - Report files, probe result rows and the outputs of scheduled runs were collected with application permissions, so
-  by default only `Portal.Operator` can see them (a schedule's `requires.portalRoles` overrides this), plus the
-  playbook's own roles for run outputs. A probe's result **message** is shown to every Reader, so checks never copy
+  by default only `Portal.Operator` can see them (for files, runs and run history a schedule's `requires.portalRoles`
+  overrides this; probe rows use the default), plus the report's or playbook's own roles. That includes the error
+  message, hint and run id in a schedule's run history (for a schedule that runs with its creator's access: the
+  creator and Portal Admins): others see the status and the error code — the scheduler's own messages, such as a
+  missed run, stay — and the `schedule.failed` browser event carries the code only. A probe's result **message** is shown to every Reader, so checks never copy
   names, ids or rows into it (an aggregate such as the most common sign-in error code and Microsoft's reason text is
   allowed); others see the probe's `remedy` and `link`, whose in-app pages read with their own permissions. A probe
   `link` is an in-app path or an https URL — validation refuses protocol-relative (`//host`) and backslash paths,

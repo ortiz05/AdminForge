@@ -288,7 +288,8 @@ datasources:
           "partial": ds.everyGroup.truncated = true or ds.ownerIds.truncated = true
         }
       ) }
-  # What the browser gets in a member view: the first 10,000 matching groups (the export has every one).
+  # What the browser gets in a member view: the first 10,000 matching groups, fewest members first (the export has
+  # every one).
   groupList:
     source: static
     when: ${ params.members in ['None', 'UnderFive'] }
@@ -296,7 +297,7 @@ datasources:
     transform: >-
       ${ (
         $m := ds.memberMatches;
-        { "rows": $take($m.rows, 10000), "matched": $count($m.rows), "listCapped": $count($m.rows) > 10000, "partial": $m.partial }
+        { "rows": $take($m.rows^(memberCount, displayName), 10000), "matched": $count($m.rows), "listCapped": $count($m.rows) > 10000, "partial": $m.partial }
       ) }
 
 actions:

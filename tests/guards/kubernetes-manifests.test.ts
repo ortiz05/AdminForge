@@ -100,8 +100,8 @@ describe('Kubernetes manifests', () => {
   });
 
   it('the pod lands where its images run, and is ready as soon as both containers answer', () => {
-    // The runner image is amd64 only — its PowerShell base is (README.md → Requirements › CPU architecture): on a
-    // cluster with arm64 nodes too the pod must not be scheduled there.
+    // The runner image is amd64 only — it installs PowerShell's linux-x64 archive (README.md → Requirements › CPU
+    // architecture): on a cluster with arm64 nodes too the pod must not be scheduled there.
     expect(pod.nodeSelector).toEqual({ 'kubernetes.io/arch': 'amd64' });
     // The runner's first readiness check runs before it listens and the next one 30 s later: a startup probe that
     // checks every few seconds keeps that wait out of every deploy's outage (Recreate).

@@ -406,6 +406,12 @@ yet (its file is gone) until it is reloaded. The runner's PowerShell modules are
 `portal/apps/runner/modules.lock.json`; a change there needs only the new image. The base images are pinned by digest;
 moving one is a reviewed commit, then an ordinary upgrade.
 
+**The runner image, monthly** (after Microsoft's Patch Tuesday, the second Tuesday), with or without a release: an
+image keeps the Ubuntu packages of the day it was built, so rebuild it from the commit that is running and deploy it —
+the tag stays the commit's, so pin the new digest. Check github.com/PowerShell/PowerShell/releases at the same time: its
+PowerShell, with the .NET runtime inside, moves only by a reviewed bump of the version and hash in its Dockerfile
+(`portal/apps/runner/README.md` → Container image); bump it sooner after a PowerShell or .NET security advisory.
+
 A release that bumps the content schema version (`CONTENT_SCHEMA_VERSION`; its pull request says so): after the
 upgrade run `publish --dry-run`, which lists the published rows stamped with an older version and whether they still
 pass, then publish again. A row that no longer passes is refused when the API loads it (`definition_unavailable`) until
@@ -690,8 +696,6 @@ AdminForgeSender`. (Granting Entra `Mail.Send` needs `AF_AUTOMATION_ALLOW_WRITE_
       for the portal-readiness probe, Private Link endpoints) are named in `networkpolicy-private-egress.yaml`; the
       namespace enforces the `restricted` Pod Security Standard; only the people who operate AdminForge can read the
       `adminforge-env` Secret or exec into the pod (RBAC), and Secrets are encrypted at rest.
-- [ ] The runner's base image has been moved off the stale MCR PowerShell tag (`portal/deploy/kubernetes/README.md` →
-      CPU architecture).
 
 ## Secret and key rotation
 

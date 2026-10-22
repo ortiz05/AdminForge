@@ -285,7 +285,7 @@ publish`). **Safe:** only with `--dry-run` (which may still migrate the schema).
   in again) and session token partitions; schedules' sealed grant tokens are kept, so keep the same
   `TOKEN_CACHE_KEY`. Refuses a target that already holds data, and a database older than the last Postgres release.
   The steps around it (stop the old services, put the file on the volume) are in
-  `portal/deploy/kubernetes/README.md` → Moving the data from the Postgres host.
+  `portal/deploy/kubernetes/README.md` → Moving the data in.
 - **Options:** `--to` (the new file, default `DATABASE_PATH`), `--from-env` (the variable that holds the Postgres URL,
   default `DATABASE_URL` — read from the env files or the environment, never typed on the command line),
   `--dry-run` (check the source and print the row counts, write nothing).

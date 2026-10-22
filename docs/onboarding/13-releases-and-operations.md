@@ -33,8 +33,9 @@ and refuses unreviewed content — on your machine, content not committed and me
 itself) with clean content. `--allow-unreviewed` exists for emergencies only; it is audited and must be followed by the
 reviewed change.
 
-An installation that ran a Postgres release moves its data once with `adminforge db import-postgres`
-([Kubernetes → Moving the data](../../portal/deploy/kubernetes/README.md#moving-the-data-from-the-postgres-host-once)).
+The interim host's data moves onto the cluster as its stopped database file; an installation that ran a Postgres
+release moves its data once with `adminforge db import-postgres`
+([Kubernetes → Moving the data in](../../portal/deploy/kubernetes/README.md#moving-the-data-in-once)).
 A service that runs from a checkout — an interim installation on a single machine, say — serves that checkout's build:
 never build, install or run `pnpm dev` there ([CLAUDE.md › Commands](../../CLAUDE.md#commands)), and leave it and its
 services alone unless a code owner asks.

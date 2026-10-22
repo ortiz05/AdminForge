@@ -2,7 +2,7 @@
 
 AdminForge is deployed on Kubernetes only (ADR-017): one pod, with all of its state in one SQLite file on a
 PersistentVolume (ADR-016). The runbook — requirements, images, Secrets, deploy, publishing content, upgrades, the
-one-time move from the Postgres host, backups, audit checkpoints, operating and troubleshooting — is
+moving the data in (from the interim host, or once from a Postgres release), backups, audit checkpoints, operating and troubleshooting — is
 [`kubernetes/README.md`](kubernetes/README.md). Day-to-day operations are in `docs/operations.md`.
 
 | Path                               | What                                                                                                                                                                                |

@@ -1,7 +1,7 @@
-# A one-off pod that mounts the database volume while AdminForge is stopped, to put a database file on it (the first
-# move from the Postgres releases: `adminforge db import-postgres`; a restore from `adminforge db backup`) or take one
-# off (with its -wal, if there is one). The file put in must be self-contained: a backup copy or the importer's output
-# (both are), never a live database's file without its -wal. README.md → Moving the data, Backups.
+# A one-off pod that mounts the database volume while AdminForge is stopped, to put a database file on it (the move from
+# the interim host: its stopped database file with its -wal; from a Postgres release: `adminforge db import-postgres`'s
+# output; a restore: an `adminforge db backup` copy) or take one off (with its -wal, if there is one). Never a live
+# database's file without its -wal. README.md → Moving the data in, Backups.
 #
 #   kubectl -n adminforge scale deploy/adminforge --replicas=0
 #   kubectl -n adminforge apply -f portal/deploy/kubernetes/tools/loader-pod.yaml

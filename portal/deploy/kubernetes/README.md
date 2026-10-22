@@ -289,12 +289,13 @@ continuously.
   your platform's backup).
 - Restores and the one-time move use the loader pod (`tools/loader-pod.yaml`): the Deployment scaled to 0, `kubectl cp`.
 
-### The one-time import
+### Moving in
 
-The old host runs `adminforge db import-postgres` from a checkout of this release against its own Postgres and
-writes one SQLite file; that file goes onto the volume with the loader pod (§ Moving the data). The cluster needs
-nothing more than the loader pod, the same `TOKEN_CACHE_KEY` in `adminforge-env`, and the Entra redirect URI for the
-new `PUBLIC_BASE_URL` (`pnpm adminforge provision entra`).
+The data comes from the interim host, which already runs the SQLite build (its Postgres data was imported there on
+2026-10-21 and the Postgres removed): its database file goes onto the volume with the loader pod (§ Moving the data
+in). An installation still on a Postgres release uses `adminforge db import-postgres` instead (same section). The
+cluster needs nothing more than the loader pod, the same `TOKEN_CACHE_KEY` in `adminforge-env`, and the Entra
+redirect URI for the new `PUBLIC_BASE_URL` (`pnpm adminforge provision entra`).
 
 ### Cluster readiness checklist
 
@@ -328,7 +329,8 @@ new `PUBLIC_BASE_URL` (`pnpm adminforge provision entra`).
       provable.
 - [ ] **Backups**: an operator's machine with `kubectl` and `gpg`, a place off the cluster for the encrypted copies,
       and the audit chain key kept as long as them (a keyed copy verifies only with it).
-- [ ] **Old host** ready for the one-time import (a checkout of this release, its Postgres reachable from it).
+- [ ] **The interim host's database** ready to move: its service stopped and the file copied (§ Moving the data in), the
+      same `TOKEN_CACHE_KEY` in the Secret.
 
 ## 1. Build and push the images
 
@@ -432,26 +434,38 @@ API (the `definitions_changed` signal) — no restart.
 4. Publish the content of the new image (step 4). After a release that bumps the content schema version,
    `publish --dry-run` lists the published rows stamped with an older one and whether they still pass.
 
-## Moving the data from the Postgres host (once)
+## Moving the data in (once)
 
-The Postgres releases kept state in Postgres on the host. `adminforge db import-postgres` copies it — settings,
-preferences, saved views, definitions, schedules and their grants, runs with steps and events, approvals, schedule
-history, probe results, News and changes, and the audit log with its hash chain (re-verified; its tail must equal
-Postgres') — into a new SQLite file. Signed-in sessions are not copied: everyone signs in again.
-
-On the old host, from a checkout of this release:
+**From the interim host** (the SQLite build, which holds this installation's data since 2026-10-21). Stop it so
+nothing is written after the copy, then take the database file together with its `-wal` and `-shm`, where SQLite left
+them:
 
 ```bash
-# Stop writes first, so nothing happens after the copy's snapshot:
-systemctl --user stop adminforge-api adminforge-worker adminforge-scheduler
+systemctl --user stop adminforge-sqlite
+cd ~/.local/share/adminforge/sqlite && tar -czf ~/adminforge-move.tgz adminforge.db*
+```
+
+Put the files on the volume with the loader pod (the Deployment scaled to 0 — instructions in `tools/loader-pod.yaml`)
+and scale back to 1; the API checks and migrates the database at start. Use the **same `TOKEN_CACHE_KEY`** in
+`adminforge-env`: schedules that run with their creator's access keep their sealed grant tokens (people sign in again
+at the cluster's address).
+(`adminforge db backup` also gives a consistent copy, without stopping the service, but leaves the tokens out: creators
+then consent again to their schedules.) Keep the host's copy until you are satisfied,
+then retire the host.
+
+**From a Postgres release** (an installation that never ran the SQLite build). `adminforge db import-postgres` copies
+its state — settings, preferences, saved views, definitions, schedules and their grants, runs with steps and events,
+approvals, schedule history, probe results, News and changes, and the audit log with its hash chain (re-verified; its
+tail must equal Postgres') — into a new SQLite file; signed-in sessions are not copied. With the old services stopped,
+from a checkout of this release on that host:
+
+```bash
 # The services' database: the host overlay's DATABASE_URL (the URL is read from the env files, never typed).
 ADMINFORGE_ENV_OVERLAY=host pnpm adminforge db import-postgres --dry-run
 ADMINFORGE_ENV_OVERLAY=host pnpm adminforge db import-postgres --to ~/adminforge-import/adminforge.db
 ```
 
-Then put the file on the volume with the loader pod (the Deployment scaled to 0 — instructions in
-`tools/loader-pod.yaml`), and scale back to 1. Use the **same `TOKEN_CACHE_KEY`** in `adminforge-env`: schedules that run
-with their creator's access keep their sealed grant tokens. Keep the old host's last `pg_dump` until you are satisfied.
+Then the loader pod and the same `TOKEN_CACHE_KEY`, as above. Keep the last `pg_dump` until you are satisfied.
 
 ## Backups
 

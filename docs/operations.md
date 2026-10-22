@@ -426,8 +426,8 @@ round trips, the sealed token cache, settings and preferences, definitions, runs
 history, probe results, News and changes, the run queue, leases and signals. Next to it SQLite keeps
 `adminforge.db-wal` and `adminforge.db-shm` (write-ahead logging): they are part of the database. Never copy the main
 file alone out of a running pod (use `adminforge db backup`), and never put a file in place next to another file's
-`-wal` and `-shm` (Backups → Restore). Data from the Postgres releases moves once, with `adminforge db import-postgres`
-(`portal/deploy/kubernetes/README.md` → Moving the data).
+`-wal` and `-shm` (Backups → Restore). Data moves in once: from the interim host as its stopped database file, from a
+Postgres release with `adminforge db import-postgres` (`portal/deploy/kubernetes/README.md` → Moving the data in).
 
 The api container is the only process that keeps the file open. The CLI (`publish`, `audit verify`, `db backup`) and
 the scheduler one-shots open it beside the API, in the same container. Nothing else may: SQLite allows one writer at

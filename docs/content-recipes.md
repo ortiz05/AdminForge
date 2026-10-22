@@ -113,6 +113,9 @@ paths a call. Adding one is the `adding-an-expression-helper` skill.
   `$withCount(…)` `n eq 1`, group the rest with `{ k: $[0] }`).
 - `$pick(rows, ['id', 'displayName'])`: top-level fields only (keeps joined objects and exports small).
 - `$withCount(rows, 'appId', 'n')`: each row with how many rows share its value (as text, like `$attach`).
+- `$withItemCount(rows, 'members', 'memberCount')`: each row with how many items it holds at a path (a list's
+  non-blank items, 1 for a single value, 0 when missing) — to filter on or show a count (`identity.groups`, "Fewer
+  than 5 members"). `$withCount` counts rows that share a value; this counts within each row.
 - `$idsWhere(rows, 'id', { "publicClient": filter, … })`: the ids (texts, numbers, true/false) each
   `$applyAdvanced`-style filter matches, all filters in one pass — for many findings over the same rows. Names that
   share one filter object share its work.

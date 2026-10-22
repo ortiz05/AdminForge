@@ -930,6 +930,29 @@ export function withCount(rows: unknown, path: unknown, as: unknown, budget?: Bu
 }
 
 /**
+ * `$withItemCount(rows, 'members', 'memberCount')`: each row with `as` = how many items it holds at `path` — a list's
+ * non-blank items (paths read through lists, as in `$applyAdvanced`), 1 for a single value, 0 when missing, null or
+ * '' — natively, where `$count(members)` per row costs JSONata ~15 µs a row (`identity.groups`, "Fewer than 5
+ * members"). Unlike `$withCount`, which counts the rows that share a value, this counts within each row.
+ */
+export function withItemCount(rows: unknown, path: unknown, as: unknown, budget?: Budget): unknown[] {
+  const keys = pathKeys(path, '$withItemCount');
+  const name = writableField(as, '$withItemCount', 'the count field');
+  const list = asRows(rows);
+  if (list.length > MAX_SEQUENCE) throw new Error(`$withItemCount: at most ${MAX_SEQUENCE} rows`);
+  return list.map((row, i) => {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    if (!isRecord(row)) return row;
+    const v = readPath(row, keys);
+    let n = 0;
+    if (Array.isArray(v)) {
+      for (const x of v) if (!blank(x)) n++;
+    } else if (!blank(v)) n = 1;
+    return { ...row, [name]: n };
+  });
+}
+
+/**
  * `$pick(rows, fields)`: each row with only the named top-level fields (own properties; missing ones left out) —
  * natively, to keep big objects (a service principal from `getByIds`) small before they are joined or returned.
  */
@@ -1003,6 +1026,7 @@ export const HELPER_NAMES = [
   'attach',
   'pick',
   'withCount',
+  'withItemCount',
   'flagIn',
   'idsWhere',
   'tableRows',
@@ -1073,6 +1097,13 @@ export function registerHelpers(expr: jsonata.Expression): void {
     'withCount',
     function (this: jsonata.Focus, rows: unknown, path: unknown, as: unknown) {
       return withCount(rows, path, as, budgetOf(this));
+    },
+    '<xss:a>',
+  );
+  expr.registerFunction(
+    'withItemCount',
+    function (this: jsonata.Focus, rows: unknown, path: unknown, as: unknown) {
+      return withItemCount(rows, path, as, budgetOf(this));
     },
     '<xss:a>',
   );

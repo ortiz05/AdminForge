@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.app-registration-risks
-version: 2.0.2
+version: 2.1.0
 title: App registration configuration risks
 summary: >-
   App registrations configured in ways that make token theft or misuse easier — wildcard or plain-HTTP redirect URIs,
@@ -55,15 +55,23 @@ datasources:
     # reads this whole list.
     transform: >-
       ${ (
-        $critical := ['RoleManagement.ReadWrite.Directory', 'AppRoleAssignment.ReadWrite.All', 'Application.ReadWrite.All',
-          'Directory.ReadWrite.All', 'Domain.ReadWrite.All', 'Organization.ReadWrite.All', 'Policy.ReadWrite.ConditionalAccess',
-          'Policy.ReadWrite.AuthenticationMethod', 'Policy.ReadWrite.PermissionGrant', 'Policy.ReadWrite.Authorization',
-          'PrivilegedAccess.ReadWrite.AzureADGroup', 'RoleAssignmentSchedule.ReadWrite.Directory',
-          'RoleEligibilitySchedule.ReadWrite.Directory', 'UserAuthenticationMethod.ReadWrite.All',
-          'DelegatedPermissionGrant.ReadWrite.All', 'Group.ReadWrite.All', 'GroupMember.ReadWrite.All',
-          'Mail.ReadWrite', 'Mail.Send', 'Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.FullControl.All', 'User.ReadWrite.All'];
+        /* Tier 0 for app-only identities (as identity.app-permissions: PRIVILEGED_APP_ROLES and a copy of
+           PRIVILEGED_APP_FAMILIES, tests/content/app-permissions-critical-tier.test.ts), plus writing every mailbox,
+           file, site or user. */
+        $critical := ['AppRoleAssignment.ReadWrite.All', 'Application.ReadWrite.All', 'Application.ReadWrite.OwnedBy',
+          'Application.ReadUpdate.All', 'DelegatedPermissionGrant.ReadWrite.All', 'Directory.ReadWrite.All',
+          'Directory.Write.Restricted', 'Domain.ReadWrite.All', 'Domain-InternalFederation.ReadWrite.All',
+          'Organization.ReadWrite.All', 'PublicKeyInfrastructure.ReadWrite.All', 'MutualTlsOauthConfiguration.ReadWrite.All',
+          'TrustFrameworkKeySet.ReadWrite.All', 'SpiffeTrustDomain.ReadWrite.All', 'IdentityProvider.ReadWrite.All',
+          'EntitlementManagement.ReadWrite.All', 'User-PasswordProfile.ReadWrite.All', 'AuthenticationContext.ReadWrite.All',
+          'OnPremDirectorySynchronization.ReadWrite.All', 'Synchronization.ReadWrite.All', 'Group.ReadWrite.All',
+          'GroupMember.ReadWrite.All', 'DelegatedAdminRelationship.ReadWrite.All', 'DeviceManagementConfiguration.ReadWrite.All',
+          'DeviceManagementScripts.ReadWrite.All', 'DeviceManagementApps.ReadWrite.All', 'DeviceManagementRBAC.ReadWrite.All',
+          'DeviceManagementManagedDevices.PrivilegedOperations.All', 'Mail.ReadWrite', 'Mail.Send', 'Files.ReadWrite.All',
+          'Sites.ReadWrite.All', 'Sites.FullControl.All', 'User.ReadWrite.All'];
+        $criticalFamily := /^(RoleManagement|RoleManagementPolicy|RoleAssignmentSchedule|RoleEligibilitySchedule|PrivilegedAccess|PrivilegedAssignmentSchedule|PrivilegedEligibilitySchedule|Policy)\.ReadWrite\.|^UserAuth(entication)?Method(-[A-Za-z]+)?\.(ReadWrite|Delete)\.|^LifecycleWorkflows(-Workflow)?\.(ReadWrite\.All|Activate)$|^AgentIdentityBlueprint\.(AddRemoveCreds|ReadWrite|UpdateAuthProperties)\.|^TeamsAppInstallation\.ReadWriteAndConsent/i;
         $roles := ds.graphApi ? ds.graphApi : {};
-        $criticalIds := [$keys($roles)[$lookup($roles, $) in $critical]];
+        $criticalIds := [$keys($roles)[$lookup($roles, $) in $critical or $contains($lookup($roles, $), $criticalFamily)]];
         $apps := value.value;
         $local := ['localhost', '127.0.0.1', '[::1]'];
         $all3 := ['web.redirectUris', 'spa.redirectUris', 'publicClient.redirectUris'];

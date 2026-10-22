@@ -27,7 +27,13 @@ $script:Mode = 'write'
        outside a small allow-list, reflection and invocation members (.Invoke(), .GetType(), .ExecuteQuery() …), the
        engine variables ($ExecutionContext, $Host, $PSCmdlet), provider variables (${function:…}, $env:…), classes,
        using statements and file redirection (> out.txt, >>, 2>, *>, also > $null; merging a stream into the
-       output, 2>&1, writes no file and stays allowed).
+       output, 2>&1, writes no file and stays allowed). A SharePoint client object a Get-PnP* cmdlet returns queues
+       a change when a property is set or a method like Update() is called, and the connection's next request sends
+       it, so: properties and indexes may be set (=, +=, ++) only on a variable the script assigns nothing but
+       @{…} or [ordered]@{…} (never an automatic variable, a parameter, a foreach or -PipelineVariable variable);
+       set_*() accessors, .ForEach('Name', value) and wildcard member names in ForEach-Object are refused; and
+       common change methods (Update, Delete…, Recycle, Set…, CopyTo, Publish, Approve, Move…, Share…) are
+       refused by name. That list is a deny-list, not a complete one (docs/backlog.md, constrained runspace).
     2. While it runs (Enable-AdminForgeReadOnlyMode): every non-Get command of every loaded service module
        (Exchange Online, its tmpEXO_* module, Teams, PnP, Microsoft Graph, Az …) is replaced by a constant guard,
        Invoke-MgGraphRequest / Invoke-AzRestMethod accept only GET, unknown non-Get commands fail as read-only, and
@@ -85,6 +91,9 @@ $script:ReadOnlyTypes = [System.Collections.Generic.HashSet[string]]::new([strin
     ), [System.StringComparer]::OrdinalIgnoreCase)
 # Members that run code, reflect, reach the engine, or commit/send through client objects.
 $script:ReadOnlyDeniedMethodPattern = '(?i)^(invoke\w*|begininvoke|endinvoke|dynamicinvoke|gettype|get(method|constructor|field|property|member|event|nestedtype|interface)s?|createinstance\w*|createdelegate|makegeneric(type|method)|new(bound)?scriptblock|getnewclosure|getpowershell|getsteppablepipeline|getcommand\w*|getcmdlet\w*|executequery\w*|add(command|script|statement|parameters?|argument)|start|kill|send\w*|upload\w*|download\w*|getresponse\w*|getrequeststream\w*|\w+async)$'
+# Methods that change the object they are called on (SharePoint client objects queue the change and the connection's next
+# request sends it): a deny-list of common names, not a complete one (docs/backlog.md, constrained runspace).
+$script:ReadOnlyChangeMethodPattern = '(?i)^(\w*update\w*|\w*delete\w*|\w*recycle\w*|\w*restore\w*|\w*roleinheritance|ensureuser|adduser|removeby\w*|set(?!equals$)\w+|check(in|out)|undocheckout|\w*publish|approve|deny|move(?!next$)\w*|copyto\w*|\w*upload\w*|apply\w*|\w*shar(e|ing)\w*)$'
 $script:ReadOnlyDeniedMembers = [System.Collections.Generic.HashSet[string]]::new([string[]]@(
         'SessionState', 'InvokeCommand', 'InvokeProvider', 'PSVariable', 'Runspace', 'RunspacePool', 'Context', 'Host'
     ), [System.StringComparer]::OrdinalIgnoreCase)
@@ -170,6 +179,70 @@ function Test-AdminForgeReadOnlyScript {
     foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
         [void]$defined.Add(($f.Name -split ':', 2)[-1])
     }
+    # Variables every assignment of which is a hashtable literal (@{…} or [ordered]@{…}): the only objects a read-mode
+    # script may set properties on. A property set on an object a service returned (a SharePoint client object) is a
+    # change the connection's next request sends.
+    $hashtables = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $notHashtables = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $variableName = { param($Variable) ($Variable.VariablePath.UserPath -split ':')[-1] }
+    foreach ($n in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] }, $true)) {
+        $right = $n.Right
+        if ($right -is [System.Management.Automation.Language.PipelineAst] -and $right.PipelineElements.Count -eq 1) { $right = $right.PipelineElements[0] }
+        if ($right -is [System.Management.Automation.Language.CommandExpressionAst]) { $right = $right.Expression }
+        if ($right -is [System.Management.Automation.Language.ConvertExpressionAst] -and $right.Type.TypeName.Name -eq 'ordered') { $right = $right.Child }
+        $literal = $n.Operator -eq 'Equals' -and $right -is [System.Management.Automation.Language.HashtableAst]
+        if ($n.Left -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            [void]$(if ($literal) { $hashtables.Add((& $variableName $n.Left)) } else { $notHashtables.Add((& $variableName $n.Left)) })
+        } else {
+            foreach ($v in $n.Left.FindAll({ param($x) $x -is [System.Management.Automation.Language.VariableExpressionAst] }, $false)) {
+                if ($n.Left -isnot [System.Management.Automation.Language.MemberExpressionAst] -and $n.Left -isnot [System.Management.Automation.Language.IndexExpressionAst]) { [void]$notHashtables.Add((& $variableName $v)) }
+            }
+        }
+    }
+    foreach ($auto in '_', 'PSItem', 'args', 'input', 'this', 'Matches', 'foreach', 'switch') { [void]$notHashtables.Add($auto) }
+    foreach ($n in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.ForEachStatementAst] }, $true)) { [void]$notHashtables.Add((& $variableName $n.Variable)) }
+    foreach ($n in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.ParameterAst] }, $true)) { [void]$notHashtables.Add((& $variableName $n.Name)) }
+    foreach ($n in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+        $elements = @($n.CommandElements)
+        for ($i = 0; $i -lt $elements.Count; $i++) {
+            $e = $elements[$i]
+            if ($e -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+            $pn = $e.ParameterName
+            $isVar = $pn -match '^(?i)(ov|pv|ev|wv|iv)$' -or ($pn.Length -ge 2 -and @('OutVariable', 'PipelineVariable', 'ErrorVariable', 'WarningVariable', 'InformationVariable' | Where-Object { $_.StartsWith($pn, [System.StringComparison]::OrdinalIgnoreCase) }).Count)
+            if (-not $isVar) { continue }
+            $value = if ($e.Argument) { $e.Argument } elseif ($i + 1 -lt $elements.Count) { $elements[$i + 1] }
+            if ($value -is [System.Management.Automation.Language.StringConstantExpressionAst]) { [void]$notHashtables.Add((($value.Value -replace '^\+', '') -split ':')[-1]) }
+            else { [void]$notHashtables.Add('*') }
+        }
+    }
+    foreach ($n in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.HashtableAst] }, $true)) {
+        foreach ($pair in $n.KeyValuePairs) {
+            $key = if ($pair.Item1 -is [System.Management.Automation.Language.StringConstantExpressionAst]) { $pair.Item1.Value } else { '' }
+            if ($key -match '^(?i)(ov|pv)$' -or ($key.Length -ge 2 -and @('OutVariable', 'PipelineVariable' | Where-Object { $_.StartsWith($key, [System.StringComparison]::OrdinalIgnoreCase) }).Count)) { [void]$notHashtables.Add('*') }
+        }
+    }
+    $settable = {
+        param($Target)
+        while ($true) {
+            if ($Target -is [System.Management.Automation.Language.AttributedExpressionAst]) { $Target = $Target.Child; continue }
+            if ($Target -is [System.Management.Automation.Language.ParenExpressionAst]) { $pure = $Target.Pipeline.GetPureExpression(); if (-not $pure) { return $false }; $Target = $pure; continue }
+            break
+        }
+        if ($Target -is [System.Management.Automation.Language.ArrayLiteralAst]) { foreach ($el in $Target.Elements) { if (-not (& $settable $el)) { return $false } }; return $true }
+        if ($Target -is [System.Management.Automation.Language.VariableExpressionAst]) { return $true }
+        if ($Target -is [System.Management.Automation.Language.IndexExpressionAst]) {
+            $recv = $Target.Target
+            if ($recv -isnot [System.Management.Automation.Language.VariableExpressionAst]) { return $false }
+            $rn = & $variableName $recv
+            return ($hashtables.Contains($rn) -and -not $notHashtables.Contains($rn) -and -not $notHashtables.Contains('*'))
+        }
+        if ($Target -isnot [System.Management.Automation.Language.MemberExpressionAst] -or $Target -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) { return $false }
+        if ($Target.Static -or $Target.Expression -isnot [System.Management.Automation.Language.VariableExpressionAst]) { return $false }
+        $name = & $variableName $Target.Expression
+        $hashtables.Contains($name) -and -not $notHashtables.Contains($name) -and -not $notHashtables.Contains('*')
+    }
+    $setWhy = "Read-only scripts can set properties and indexes only on a variable the script assigns nothing but @{…} or [ordered]@{…} (a new one per row, under its own name); changing an object a service returned needs a write-mode playbook step (armed session)."
+
     $findings = [System.Collections.Generic.List[object]]::new()
     $flag = {
         param($Node, [string]$Text, [string]$Why)
@@ -183,6 +256,7 @@ function Test-AdminForgeReadOnlyScript {
             })
     }
     $codeWhy = "Read-only scripts can't run code, use reflection or send requests through .NET objects."
+    $changeWhy = "Read-only scripts can't call methods that change an object (Update, Delete…, Recycle, Set…, CopyTo …): changes need a write-mode playbook step (armed session). To copy a collection, use @(`$collection)."
     $checkMember = {
         param($Node, $Member, [bool]$Invoked)
         if ($Member -isnot [System.Management.Automation.Language.StringConstantExpressionAst]) {
@@ -192,6 +266,8 @@ function Test-AdminForgeReadOnlyScript {
         $name = $Member.Value
         if ($script:ReadOnlyDeniedMembers.Contains($name) -or ($Invoked -and $name -match $script:ReadOnlyDeniedMethodPattern)) {
             & $flag $Node ".$name" $codeWhy
+        } elseif ($Invoked -and $name -match $script:ReadOnlyChangeMethodPattern) {
+            & $flag $Node ".$name" $changeWhy
         }
     }
 
@@ -220,7 +296,8 @@ function Test-AdminForgeReadOnlyScript {
                     # Positional 0 / -MemberName names a property or method; -Parallel and -AsJob run in other runspaces.
                     $checkMemberElement = {
                         param($Element)
-                        if ($Element -is [System.Management.Automation.Language.StringConstantExpressionAst]) { & $checkMember $node $Element $true }
+                        if ($Element -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $Element.Value -match '[*?\[]') { & $flag $node $node.Extent.Text 'Members must be named exactly (no wildcards) in read-only mode.' }
+                        elseif ($Element -is [System.Management.Automation.Language.StringConstantExpressionAst]) { & $checkMember $node $Element $true }
                         elseif ($Element -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
                             & $flag $node $node.Extent.Text 'Methods must be called by name in read-only mode.'
                         }
@@ -282,7 +359,8 @@ function Test-AdminForgeReadOnlyScript {
                 & $checkMember $node $node.Member $true
                 if ($node.Member -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $node.Member.Value -in 'ForEach', 'Where' -and @($node.Arguments).Count) {
                     $argument = @($node.Arguments)[0]
-                    if ($argument -is [System.Management.Automation.Language.StringConstantExpressionAst]) { & $checkMember $node $argument $true }
+                    if ($argument -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $node.Member.Value -eq 'ForEach' -and @($node.Arguments).Count -ge 2) { & $flag $node $node.Extent.Text $setWhy }
+                    elseif ($argument -is [System.Management.Automation.Language.StringConstantExpressionAst]) { & $checkMember $node $argument $true }
                     elseif ($argument -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst] -and $argument -isnot [System.Management.Automation.Language.TypeExpressionAst]) {
                         & $flag $node $node.Extent.Text 'Methods must be called by name in read-only mode.'
                     }
@@ -294,6 +372,12 @@ function Test-AdminForgeReadOnlyScript {
                     break
                 }
                 & $checkMember $node $node.Member $false
+            }
+            'AssignmentStatementAst' {
+                if (-not (& $settable $node.Left)) { & $flag $node $node.Left.Extent.Text $setWhy }
+            }
+            'UnaryExpressionAst' {
+                if ($node.TokenKind -in 'PlusPlus', 'MinusMinus', 'PostfixPlusPlus', 'PostfixMinusMinus' -and -not (& $settable $node.Child)) { & $flag $node $node.Child.Extent.Text $setWhy }
             }
             'TypeExpressionAst' {
                 if (-not (Test-AdminForgeReadOnlyType $node.TypeName)) { & $flag $node "[$($node.TypeName.FullName)]" 'Read-only scripts can use only basic .NET types (text, numbers, dates, collections, regex, Math).' }

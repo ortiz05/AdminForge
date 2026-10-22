@@ -36,7 +36,11 @@ refuses anything else. Conventions in one place: `portal/content/scripts/README.
    `Get-*` commands (not ones returning tokens or connections), the AdminForge helpers, the script's own functions and
    a fixed set of utilities (`ForEach-/Where-/Select-/Sort-/Group-/Measure-Object`, `ConvertTo/From-Json`, `Get-Date`,
    …). No `Module\Verb-Noun` except to allowed commands, no `& $x`, no `$env:`/`$ExecutionContext`, no
-   `.Invoke()`/`.GetType()`/`.ExecuteQuery()`, no `-as $string`, no classes or `using`, and no file redirection (`>`,
+   `.Invoke()`/`.GetType()`/`.ExecuteQuery()` or change methods (`.Update()`, `.Delete…()`, `.Set…()`, `.CopyTo()` —
+   copy a collection with `@($set)`), properties and indexes set only on a variable the script assigns nothing but
+   `@{…}`/`[ordered]@{…}` (`$result = [ordered]@{…}; $result.total = 3`; a new `[ordered]@{}` per row under its own
+   name — not `[pscustomobject]@{}`, `$_`, a parameter, a `foreach` variable or what a `Get-*` command returned), no
+   wildcard member names (`ForEach-Object Upd*`), no `-as $string`, no classes or `using`, and no file redirection (`>`,
    `>>`, `2>`, `*>`, also `> $null` and `2>$null`): discard output with `| Out-Null`, silence a stream with
    `-ErrorAction SilentlyContinue` (merging a stream, `2>&1`, stays allowed). .NET types from a small allow-list only.
    Service writes fail at the call. Check with `Test-AdminForgeReadOnlyScript -Content (Get-Content -Raw <file>)` (the

@@ -6,6 +6,18 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Read-mode scripts can't change SharePoint client objects (2026-10-22)
+
+- **Property sets only on hashtables the script builds.** A `Get-PnP*` cmdlet returns SharePoint client objects; a
+  property set or `.Update()` on one queues a change that the connection's next request sends — in read mode, under a
+  Reader's token. The read-only policy now refuses a property or index set (`=`, `+=`, `++`, also in parentheses or
+  a multiple assignment) on anything but a variable the script only ever assigns `@{…}` or `[ordered]@{…}` (never
+  `$_`, a parameter, a `foreach` or `-PipelineVariable` variable), `set_*()` accessors, `.ForEach('Name', value)`,
+  wildcard member names in `ForEach-Object` (which reached every denied method, `.ExecuteQuery()` included), and
+  common change methods by name (`Update…`, `Delete…`, `Recycle`, `Restore…`, `Set…`, `CopyTo`, `Publish`, `Approve`,
+  `Move…`, `Share…`, …). Every shipped read script passes unchanged. From the 2026-10-22 security review; the method
+  list is a deny-list, and what the static policy still can't see is in `docs/backlog.md` (constrained runspace).
+
 ### Provisioning ceilings for app-only identities (2026-10-22)
 
 - **Tier-0 application permissions have a list of their own.** The automation identity and named schedule identities

@@ -6,6 +6,17 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Mail-enabled security groups need a second engineer (2026-10-22)
+
+- **`m365.add-distribution-list-members` 1.3.0 asks for approval when the list is a mail-enabled security group**
+  (owner decision after the 2026-10-22 security review): such a group grants access like any security group, so a
+  Playbook Approver who isn't among the people being added approves, and the update then runs as them. A list
+  Microsoft Entra ID can't name by its primary address (`/groups?$filter=mail eq …`), or names twice, is treated the same
+  way and the messages say which; plain distribution lists stay one-step. Because the update then runs as the approver,
+  the playbook now refuses your own addresses itself — primary, aliases and UPN (`/me`) — instead of leaving aliases to
+  the script. The page's bulk action leaves out selections with a mail-enabled security group (an approval would hold
+  the rest of the run): add to those one at a time. It needs `Group.Read.All` on the Write app (already granted).
+
 ### Borderline app-only permissions are tier 0 (2026-10-22)
 
 - **Decided by the owner after the 2026-10-22 security review.** Application permissions that change what Conditional

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.distribution-lists
-version: 1.2.0
+version: 1.3.0
 title: Distribution lists
 summary: Distribution lists and mail-enabled security groups — owners, who can join, whether outside senders can mail them. Add members in bulk, or create a list.
 owner: m365-team
@@ -188,7 +188,9 @@ layout:
             identity: ${ row.primarySmtpAddress }
           concurrency: 3
         maxItems: 50
-        when: ${ $count(rows[isDirSynced = true]) = 0 }
+        # Adding to a mail-enabled security group waits for a second engineer, which would hold the rest of a bulk run
+        # list by list: add to those one at a time (the row action).
+        when: ${ $count(rows[isDirSynced = true or recipientTypeDetails = 'MailUniversalSecurityGroup']) = 0 }
     empty:
       title: No distribution lists match
       body: Clear the filters. Lists synced from on-premises Active Directory are managed there, not in Exchange Online.

@@ -79,14 +79,14 @@ describe('base images are pinned by digest', () => {
     const text = [
       '# check=error=true',
       '# syntax=docker/dockerfile:1.7',
-      'FROM node:24 AS build',
+      'FROM node:26 AS build',
       'FROM build AS again',
       'COPY --from=build /a /b',
       'COPY --from=0 /a /b',
       'COPY --link --from=alpine:3 /x /y',
       'RUN --mount=type=cache,target=/c --mount=type=bind,from=busybox:1,source=/,target=/b true',
     ].join('\n');
-    expect(images(text).map((i) => i.image)).toEqual(['node:24', 'alpine:3', 'busybox:1']);
+    expect(images(text).map((i) => i.image)).toEqual(['node:26', 'alpine:3', 'busybox:1']);
     expect(directives(text).syntax).toBe('docker/dockerfile:1.7');
   });
 });

@@ -8,7 +8,7 @@ export default defineConfig({
   entry: { adminforge: 'src/index.ts' },
   format: ['esm'],
   platform: 'node',
-  target: 'node24',
+  target: 'node26',
   outDir: 'dist',
   clean: true,
   splitting: false,

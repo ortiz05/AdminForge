@@ -52,8 +52,8 @@ BeforeAll {
         $m
     }
     New-Stub 'Get-EXORecipient' {
-        param($Identity)
-        foreach ($r in $global:AfRf.Recipients) { if ($Identity -in @($r.Name, $r.PrimarySmtpAddress)) { return $r } }
+        param($Identity, $Properties)
+        foreach ($r in @($global:AfRf['Recipients'] | Where-Object { $_ })) { if ($Identity -in @($r.Name, $r.PrimarySmtpAddress)) { return $r } }
         throw "Couldn't find object '$Identity'."
     }
     New-Stub 'Set-Mailbox' {

@@ -46,6 +46,9 @@ function respond(call: ServiceCall): unknown {
         },
       ],
     };
+  // Every id asked about is a user (add-group-members checks that before adding anyone).
+  if (p === '/directoryObjects/getByIds')
+    return { value: ((call.body as { ids?: string[] } | undefined)?.ids ?? []).map((id) => ({ id })) };
   if (p.startsWith('/directoryObjects/'))
     return {
       '@odata.type': '#microsoft.graph.group',

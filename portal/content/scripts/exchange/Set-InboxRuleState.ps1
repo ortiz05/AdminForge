@@ -12,6 +12,8 @@
     that rules turned off in Outlook may be lost, which nobody can answer in an unattended run.
     Turning on a rule that forwards, forwards as attachment or redirects to an address outside the accepted domains is
     refused (the same test as Get-InboxRules.ps1's "high" risk): that is how mail leaves the organization unseen.
+    Turning on a rule in someone else's mailbox that sends their mail to the person running this (any of their
+    addresses) is refused too: that would hand them another person's mail.
     The Entra object id of the mailbox's account is an input too, so AdminForge's protected-object guard sees whose
     mailbox this is before the write runs; it must equal the mailbox's ExternalDirectoryObjectId.
 
@@ -140,6 +142,42 @@ $result.rule = [ordered]@{
 $wantEnabled = $action -eq 'enable'
 if ($action -eq 'enable' -and -not [bool]$rule.Enabled -and $external.Count) {
     throw (New-AdminForgeError -Category input -Message "The rule '$($rule.Name)' in $mailbox sends mail outside the organization ($($external -join ', ')), so AdminForge doesn't turn it on. If the person really needs it, they can turn it on in Outlook after the forwarding has been reviewed; nothing was changed.")
+}
+# Another person's mail to the engineer: nobody turns that on for themselves (their own mailbox is theirs to manage).
+if ($action -eq 'enable' -and -not [bool]$rule.Enabled -and $targets.Count) {
+    $me = if ($Context['User'] -is [System.Collections.IDictionary] -and $Context['User']['Upn']) { ([string]$Context['User']['Upn']).ToLowerInvariant() } else { '' }
+    $myId = if ($Context['User'] -is [System.Collections.IDictionary] -and $Context['User']['ObjectId']) { [string]$Context['User']['ObjectId'] } else { '' }
+    if (-not $me) {
+        throw (New-AdminForgeError -Category script -Message "AdminForge couldn't tell who is running this, so nothing was changed. Sign in again and retry.")
+    }
+    $mine = [System.Collections.Generic.HashSet[string]]::new([string[]]@($me), [System.StringComparer]::OrdinalIgnoreCase)
+    try {
+        # By object id when the runner has it: a sign-in name Exchange hasn't caught up with would find nobody.
+        $self = Get-EXORecipient -Identity $(if ($myId) { $myId } else { $me }) -Properties EmailAddresses, LegacyExchangeDN |
+            Select-Object PrimarySmtpAddress, EmailAddresses, LegacyExchangeDN
+    } catch {
+        if ("$($_.Exception.Message) $($_.FullyQualifiedErrorId)" -match "couldn't find object|couldn't be found|ManagementObjectNotFound") { $self = $null }
+        else {
+            Write-AdminForgeLog -Level Warn "Looking up your own addresses failed: $($_.Exception.Message)"
+            throw (New-AdminForgeError -Category script -Message "Exchange couldn't check your own addresses just now, so nothing was changed. Try again in a few minutes.")
+        }
+    }
+    if ($self) {
+        if ($self.PrimarySmtpAddress) { [void]$mine.Add([string]$self.PrimarySmtpAddress) }
+        if ($self.LegacyExchangeDN) { [void]$mine.Add([string]$self.LegacyExchangeDN) }
+        foreach ($a in @($self.EmailAddresses)) { if ("$a" -match '^(smtp|x500):(.+)$') { [void]$mine.Add($Matches[2]) } }
+    }
+    $ownMailbox = $mine.Contains($mailbox) -or ($myId -and $myId -ieq [string]$mbx.ExternalDirectoryObjectId)
+    # The recipient is the trailing "[SMTP:…]" / "[EX:…]" (the display name before it is whatever the rule's author
+    # typed), or the whole entry when it has no brackets ("SMTP:a@b", "a@b").
+    $toMe = @($targets | Where-Object {
+            $m = [regex]::Match($_, '\[(SMTP|EX|X500):([^\]]+)\]\s*$', 'IgnoreCase')
+            $value = if ($m.Success) { $m.Groups[2].Value } else { ($_ -replace '^\s*(SMTP|EX|X500):', '').Trim() }
+            $mine.Contains($value.Trim())
+        })
+    if ($toMe.Count -and -not $ownMailbox) {
+        throw (New-AdminForgeError -Category input -Message "The rule '$($rule.Name)' in $mailbox sends its mail to you, so you can't turn it on here. Ask another engineer; nothing was changed.")
+    }
 }
 if ($action -ne 'remove' -and [bool]$rule.Enabled -eq $wantEnabled) {
     Write-AdminForgeLog "The rule '$($rule.Name)' is already $(if ($wantEnabled) { 'enabled' } else { 'disabled' }); nothing to do"

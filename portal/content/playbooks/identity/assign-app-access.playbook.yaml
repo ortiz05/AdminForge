@@ -1,13 +1,13 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.assign-app-access
-version: 1.1.0
+version: 1.2.0
 title: Assign user or group to enterprise app
 summary: >-
   Assigns a user or group to an enterprise app with one of its app roles, or Default Access when the app defines none.
   Assigned people see the app in My Apps and, when assignment is required, are allowed to sign in. Assigning a group
   needs Microsoft Entra ID P1 and covers its direct members only. AdminForge's own apps are refused: portal roles come
-  from their security groups.
+  from their security groups. You can't assign yourself, or a group you belong to or own: ask another engineer.
 owner: identity-team
 tags: [identity, apps, access]
 risk: medium
@@ -80,6 +80,50 @@ steps:
     type: assert
     that: ${ steps.kind.output in ['user', 'group'] }
     message: Only users and groups are assigned here. Application permissions for other apps are granted through admin consent.
+
+  # Assigning an app grants access: nobody assigns themselves, directly or through a group they belong to (nested
+  # groups included, although an assignment covers direct members only).
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.principalId) = $lowercase(user.oid)) }
+    message: You can't assign an app to yourself. Ask another engineer to do it.
+
+  - id: myGroups
+    type: graph
+    mode: read
+    describe: Check whether you belong to the group
+    when: ${ steps.kind.output = 'group' }
+    request:
+      method: POST
+      path: /users/${ $encode($lowercase(user.oid)) }/checkMemberGroups
+      body:
+        groupIds: ${ [$guid(inputs.principalId)] }
+
+  - id: notMyGroup
+    type: assert
+    when: ${ steps.kind.output = 'group' }
+    that: ${ $not($guid(inputs.principalId) in [steps.myGroups.output.value].$lowercase($)) }
+    message: ${ 'You belong to ' & steps.principal.output.displayName & ', so assigning it would give you access too. Ask another engineer to do it.' }
+
+  # An owner can add themselves to their group (My Groups) at any time, so a group you own counts as yours.
+  - id: groupOwners
+    type: graph
+    mode: read
+    describe: Read the group's owners
+    when: ${ steps.kind.output = 'group' }
+    paging: all
+    maxItems: 1000
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.principalId)) }/owners
+      query:
+        $select: id
+
+  - id: notMyOwnedGroup
+    type: assert
+    when: ${ steps.kind.output = 'group' }
+    that: ${ $not($lowercase(user.oid) in [steps.groupOwners.output.value.$lowercase(id)]) }
+    message: ${ 'You own ' & steps.principal.output.displayName & ' and can add yourself to it, so assigning it would give you access too. Ask another engineer to do it.' }
 
   # Default Access (all zeros) applies when the app defines no roles people can be assigned to.
   - id: appRole
@@ -183,8 +227,44 @@ tests:
         servicePrincipalType: Application
         appRoles: [{ id: 00000000-0000-4000-8000-000000000a05, displayName: User, allowedMemberTypes: [User], isEnabled: true }]
       principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      myGroups: { value: [] }
+      groupOwners: { value: [] }
       existing: { value: [{ id: ara-405-1, resourceId: 00000000-0000-4000-8000-000000000405, appRoleId: 00000000-0000-4000-8000-000000000a05 }] }
     expect: { status: failed, failedStep: notAssigned }
+  - name: refuses assigning yourself
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000404, principalId: 00000000-0000-4000-8000-0000000000a1 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000404, appId: 00000000-0000-4000-8001-000000000404, displayName: PDF Converter Online, servicePrincipalType: Application, appRoles: [] }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-0000000000a1, displayName: Avery Example }
+    expect: { status: failed, failedStep: notSelf }
+  - name: refuses a group you belong to
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000404, principalId: 00000000-0000-4000-8000-000000000201 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000404, appId: 00000000-0000-4000-8001-000000000404, displayName: PDF Converter Online, servicePrincipalType: Application, appRoles: [] }
+      principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      myGroups: { value: [00000000-0000-4000-8000-000000000201] }
+    expect: { status: failed, failedStep: notMyGroup }
+  - name: plans a group assignment when you are not a member
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000404, principalId: 00000000-0000-4000-8000-000000000201 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000404, appId: 00000000-0000-4000-8001-000000000404, displayName: PDF Converter Online, servicePrincipalType: Application, appRoles: [] }
+      principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      myGroups: { value: [] }
+      groupOwners: { value: [{ id: 00000000-0000-4000-8000-0000000000b2 }] }
+      existing: { value: [] }
+    expect: { status: succeeded, plan: [assign] }
+  - name: refuses a group you own
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000404, principalId: 00000000-0000-4000-8000-000000000201 }
+    user: { oid: 00000000-0000-4000-8000-0000000000A1, upn: avery@example.com }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000404, appId: 00000000-0000-4000-8001-000000000404, displayName: PDF Converter Online, servicePrincipalType: Application, appRoles: [] }
+      principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      myGroups: { value: [] }
+      groupOwners: { value: [{ id: 00000000-0000-4000-8000-0000000000a1 }] }
+    expect: { status: failed, failedStep: notMyOwnedGroup }
   - name: plans a Default Access assignment for a user
     inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000404, principalId: 00000000-0000-4000-8000-000000000102 }
     mocks:

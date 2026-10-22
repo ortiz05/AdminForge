@@ -243,8 +243,16 @@ the reason.
   that may be minutes old) carry what the person saw and assert it still holds before writing — so a stale screen
   can't sign out or message the wrong person — and high-risk ones (and every bulk action from medium risk up) ask for
   a typed confirmation (in bulk, the number of items).
-- Group and app-owner playbooks refuse adding yourself; adding to a role-assignable group (which carries directory
-  roles) and making someone an app owner need a second person's approval.
+- Group, distribution-list, app-owner and app-assignment playbooks refuse adding yourself — for an app assignment
+  also a group you belong to or own; group members must be users, and a mail-enabled security group takes people,
+  not other groups — adding to a role-assignable group (which
+  carries directory roles) and making someone an app owner need a second person's approval. Nobody dismisses their own
+  sign-in risk, turns on an inbox rule that sends someone else's mail to them, or issues themselves a Temporary
+  Access Pass or removes their own MFA methods. The people who approve AdminForge changes (everyone holding
+  Playbook Approver or Portal Admin on the Read app, through a group or directly) get no new credential through
+  AdminForge at all: whoever held it could approve their own change as a second person. "Yourself" is the account
+  you are signed in with: a second account of yours (a separate everyday or admin account, or one you create with
+  onboarding and receive the first credential for) isn't recognised (Known gaps).
 - **Emergency stop** (Admin → Settings): a `Portal.Admin` or `Playbook.Approver` can pause all changes or all
   automation with a reason; only a `Portal.Admin` resumes. While changes are paused every declared write — interactive,
   scheduled or PowerShell — is refused (`writes_paused`; AdminForge's own notification mail still goes out); while
@@ -636,6 +644,12 @@ README.md` → Backups). Every `db backup` is itself in the audit log: a `databa
 
 Tracked in `docs/backlog.md`:
 
+- **A second account of the same person isn't "yourself".** The self-benefit refusals compare with the account that is
+  signed in. An engineer with a separate everyday and admin account (Microsoft's recommendation) can add the other one
+  to a group, assign it an app, issue it a pass or dismiss its risk; onboarding (`identity.create-user`) hands the
+  person running it the new account's first credential and can add it to ordinary groups, which makes a stand-in
+  account. The writes still run with the engineer's own Microsoft roles; linking accounts (an `employeeId` or a
+  configured attribute) is in `docs/backlog.md`.
 - **The provisioner is powerful while its credential is on the host** (typically Global Administrator, plus a role that can assign Azure roles). Remove its directory role and Owner membership when not
   provisioning, or use a short-lived secret per run (`docs/operations.md`). **Graph application permissions survive
   removing the directory role**: the test fixtures' `RoleEligibilitySchedule.ReadWrite.Directory` (PIM),

@@ -29,11 +29,20 @@ updates:
         patterns: ['*']
   # Base images of the runner and app images. Dependabot reads literal `FROM image:tag[@sha256:…]` lines only: an
   # image named through an ARG (`FROM ${NODE_IMAGE}`) gets no pull requests, so the pins must stay literal.
+  # The runner: node (its build stage) and ubuntu:24.04 (its base: each new digest of the 24.04 tag is proposed).
+  # PowerShell itself is a release archive with its SHA-256 in the Dockerfile, which Dependabot doesn't read: a
+  # reviewed bump (portal/apps/runner/README.md → Container image).
   - package-ecosystem: docker
     directory: /portal/apps/runner
     schedule: { interval: weekly, day: monday }
     cooldown: { default-days: 7 }
     commit-message: { prefix: 'chore(runner)' }
+    ignore:
+      # Another Ubuntu release (24.10, 25.10, 26.04: major and minor in Dependabot's terms) changes the library
+      # packages the Dockerfile names (libicu74), and an interim release may be past its support: a reviewed move,
+      # not a weekly bump. New digests of 24.04 itself still come.
+      - dependency-name: ubuntu
+        update-types: [version-update:semver-major, version-update:semver-minor]
   - package-ecosystem: docker
     directory: /portal/deploy/kubernetes
     schedule: { interval: weekly, day: monday }

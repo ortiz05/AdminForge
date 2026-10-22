@@ -86,6 +86,24 @@ pwsh -File portal/apps/runner/scripts/install-modules.ps1 -Name Pester  # just t
 
 Bump a pin deliberately, re-run the install and the tests below, and check `GET /healthz` (`modules.items[].installed`).
 
+## Container image
+
+`Dockerfile`: `ubuntu:24.04` (pinned by digest) with Ubuntu's updates of the build's day and the libraries PowerShell
+needs; PowerShell from Microsoft's release archive, checked against the release's SHA-256 before it is unpacked
+(`tests/guards/runner-powershell-download.test.ts`); the Node binary of the bundle's build stage; the pinned runtime
+modules. The image runs as uid 10002, has no setuid or setgid files, and starts exactly the checked `pwsh`
+(`PWSH_PATH`); the pod adds the rest — no capabilities, no privilege escalation, a read-only root file system with
+`/tmp` and `/home/adminforge` as emptyDirs (each worker's `HOME` is a temporary directory under `/tmp`):
+`portal/deploy/kubernetes/README.md`. The Dockerfile's header shows the same locked-down `docker run`.
+
+- **Ubuntu and Node** move with Dependabot: it proposes each new `ubuntu:24.04` digest and Node tag weekly. A cached
+  build still installs the updates published since its day: `build-images.sh` passes the day (`UBUNTU_UPDATES`).
+- **PowerShell** is a reviewed bump (its servicing releases come about monthly:
+  github.com/PowerShell/PowerShell/releases). In the `powershell` stage set `POWERSHELL_VERSION`, and
+  `POWERSHELL_SHA256` to the `powershell-<version>-linux-x64.tar.gz` line of that release's `hashes.sha256` (the
+  release notes list the same hash); build, run the tests below, then check `GET /healthz` (`pwsh.version`,
+  `modules.items[].loaded`) and a read-only job against the validation tenant.
+
 ## Testing
 
 ```sh

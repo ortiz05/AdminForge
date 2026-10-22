@@ -810,9 +810,9 @@ provision entra` once after upgrading (until then the sign-in is refused with `s
 ### Permission opt-ins
 
 `AF_ALLOW_PRIVILEGED_WRITE_SCOPES` (tier-0 delegated scopes on the Write app), `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS`
-(application permissions that change data), `AF_AUTOMATION_ALLOW_SENSITIVE_READS` (mail, files, sites, chats, …),
+(application permissions that change data), `AF_AUTOMATION_ALLOW_SENSITIVE_READS` (mail, files, sites — full control of every site included — chats, call records, BitLocker keys and LAPS passwords, …; the write opt-in doesn't replace it),
 `AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS` (tier-0 application permissions for any app-only identity) and each
-named identity's `AF_IDENTITY_<NAME>_ALLOW_*` keys are deliberate decisions: set them in `<env>.admin.env`, review `provision entra --dry-run`, and record the decision in your change record (not in this repository: it's installation state). `provision status` fails on privilege that provisioning didn't grant.
+named identity's `AF_IDENTITY_<NAME>_ALLOW_*` keys are deliberate decisions: set them in `<env>.admin.env`, review `provision entra --dry-run`, and record the decision in your change record (not in this repository: it's installation state). `provision status` fails on privilege that provisioning didn't grant — including a permission an identity already holds that a ceiling now withholds (for example `Sites.FullControl.All` granted before it needed the sensitive-read opt-in) until the opt-in is set or `--prune` removes it.
 
 Removing permissions: `provision entra` drops delegated scopes nothing needs any more, but leaves application
 permissions it no longer grants (after content is retired, a baseline permission is dropped, or a ceiling is turned

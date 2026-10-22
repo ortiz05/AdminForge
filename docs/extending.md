@@ -106,8 +106,9 @@ and `adminforge validate` lists them; remove it once it works live. The full pro
 - **In the production-build smoke test** (`tests/e2e/prod/csp-no-eval.spec.ts`): a page loaded under the API's
   `script-src 'self'` policy must cause no Content-Security-Policy violation — no `eval`, `new Function` or inline
   script in the bundle (`SECURITY.md` › Deployment, storage and network).
-- **In provisioning** (`adminforge provision entra`): tier-0 Write scopes, application write permissions and
-  sensitive application reads are only granted with their opt-ins (`docs/access.md`); `provision status` fails on
+- **In provisioning** (`adminforge provision entra`): tier-0 Write scopes, tier-0 application permissions,
+  application write permissions and sensitive application reads are only granted with their opt-ins
+  (`docs/access.md`; the write opt-in never lifts the other two); `provision status` fails on
   privilege it didn't grant.
 - **At run time:** a restart (every deploy) lets each run finish the step it is on; a step still in flight 10 s after
   a stop is retried after the restart unless it says `idempotent: false` (then the run ends `needs_review`) — declare

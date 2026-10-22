@@ -117,8 +117,10 @@ a code owner's own changes need another engineer's review by agreement (a known 
 - npm dependencies use `^` ranges; the committed `pnpm-lock.yaml` and `pnpm install --frozen-lockfile` (CI) make
   installs reproducible. Install scripts are opt-in (`allowBuilds` in `pnpm-workspace.yaml`), and security fixes for
   transitive packages go in its `overrides`. Exact pins are used for PowerShell modules
-  (`portal/apps/runner/modules.lock.json`), GitHub Actions (a commit SHA with the version in a comment) and both
-  images' base images (by digest, `tests/guards/image-digests.test.ts`).
+  (`portal/apps/runner/modules.lock.json`), GitHub Actions (a commit SHA with the version in a comment), both
+  images' base images (by digest, `tests/guards/image-digests.test.ts`), and pnpm and Corepack, which sit above the
+  lockfile (version and sha512: `packageManager`, the app image's Dockerfile;
+  `tests/unit/tooling/package-manager-pin.test.ts`).
 - **New versions wait seven days.** pnpm resolves only versions published at least seven days ago and re-checks the
   lockfile against that on every install (`minimumReleaseAge` in `pnpm-workspace.yaml`, strict); Dependabot waits the
   same (`cooldown`). An urgent fix that can't wait — a Dependabot security update skips its cooldown but not pnpm's

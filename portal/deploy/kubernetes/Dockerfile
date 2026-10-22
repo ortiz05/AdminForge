@@ -22,9 +22,18 @@
 # ── Build: install, build the four bundles, then keep production dependencies only ─────────────────────
 FROM node:26.11.1-bookworm-slim@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567 AS build
 WORKDIR /src
-# Node 25 and later no longer bundle Corepack: install it (pinned), and it provides the pnpm that package.json's
-# packageManager names.
-RUN npm install --global --ignore-scripts corepack@0.36.0 && corepack enable pnpm
+# Node 25 and later no longer bundle Corepack, so the build installs it: corepack@0.36.0 (published 2026-08-28; no
+# dependencies), its registry tarball checked against the sha512 recorded here, without install scripts. Corepack then
+# provides the pnpm that package.json's packageManager names, checked against the sha512 recorded there. Neither comes
+# through pnpm's release-age floor: a bump is a reviewed commit of version and hash, once the version is seven days
+# old (tests/unit/tooling/package-manager-pin.test.ts).
+RUN cd /tmp \
+ && npm pack --silent corepack@0.36.0 \
+ && echo "4a2889b01859a9d0623c74c497a393dec012ad1aca21c61340cb15197c7a104fe033c5853306237885fc4edf11894e08bf627a2db4fc2a919f08eb01a51581ff  corepack-0.36.0.tgz" \
+      | sha512sum -c - \
+ && npm install --global --ignore-scripts ./corepack-0.36.0.tgz \
+ && rm corepack-0.36.0.tgz \
+ && corepack enable pnpm
 COPY . .
 RUN pnpm install --frozen-lockfile \
       --filter @adminforge/api... --filter @adminforge/web... --filter @adminforge/cli... --filter @adminforge/scheduler...

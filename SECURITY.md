@@ -478,8 +478,13 @@ Read-mode jobs use Read-app tokens, some of which can write (Exchange `Exchange.
 the parsed script allows `Get-*` commands, the AdminForge helpers, a fixed set of PowerShell utilities and the
 script's own functions, and refuses everything else: module-qualified calls, dynamic invocation, scripts and programs
 by path, `Get-*` commands that return tokens or connections, .NET types outside a small allow-list, reflection and
-invocation members, engine and provider variables, classes, `using`, and file redirection (`>`, `>>`, `2>`, `*>`, also
-`> $null`; merging a stream into the output, `2>&1`, writes no file and stays allowed). While it runs, every non-`Get`
+invocation members, engine and provider variables, classes, `using`, file redirection (`>`, `>>`, `2>`, `*>`, also
+`> $null`; merging a stream into the output, `2>&1`, writes no file and stays allowed), and changes to objects the
+script didn't build: a change queued on a SharePoint client object a `Get-PnP*` cmdlet returned would go out with the
+connection's next request. Properties and indexes may be set only on a variable the script assigns nothing but `@{…}`
+or `[ordered]@{…}`; `set_*()` accessors, `.ForEach('Name', value)` and wildcard member names are refused; and common
+change methods (`Update()`, `Delete…()`, `Recycle()`, `Set…()`, `CopyTo()`, `Publish()`, `Move…()`, `Share…()` …) are
+refused by name — a deny-list, see Known gaps. While it runs, every non-`Get`
 command of every loaded service module (Exchange Online, Teams, PnP, Microsoft Graph, Az) is replaced by a guard,
 REST cmdlets accept only GET, and module auto-loading is off.
 
@@ -724,7 +729,10 @@ Tracked in `docs/backlog.md`:
   `capabilities: drop: [ALL]` forbid. Write scripts are SHA-256-pinned published content and run only for an armed
   engineer; read-mode scripts can't reach `/proc` (no `Get-Content`, file .NET types, `$env:` or provider variables).
 - Read-mode PowerShell still runs in FullLanguage: the static policy is the boundary, not a sandbox. A
-  ConstrainedLanguage runspace needs six read scripts rewritten. Runner answers are authenticated, not encrypted
+  ConstrainedLanguage runspace needs six read scripts rewritten. Its list of change methods is a deny-list: a change
+  method of a client object it doesn't name (a collection's `Add()` looks like a .NET list's) would still queue a change
+  for the next `Get-PnP*` call to send; a runtime check that the PnP connection holds no queued change is on the
+  backlog. Runner answers are authenticated, not encrypted
   (loopback); `/healthz` and cancel answers aren't signed.
 - A child playbook's own confirmation isn't asked when a parent starts it; `adminforge validate` refuses a parent (or
   a compensation) that starts a child asking for one unless the parent has a confirmation of its own. The parent's

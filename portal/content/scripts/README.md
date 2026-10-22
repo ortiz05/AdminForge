@@ -33,7 +33,9 @@ recipe is the `adding-a-runner-script` skill (`.claude/skills/adding-a-runner-sc
   front of the browser can act on. Never print tokens, secrets or raw service payloads.
 - **Read scripts** must pass the runner's read-only policy (checked before the script runs): `Get-*` service commands,
   the AdminForge helpers, the script's own functions and a fixed set of utilities; no module-qualified or dynamic calls,
-  reflection, `$env:`, classes or unlisted .NET types. Check one with
+  reflection, `$env:`, classes or unlisted .NET types, no change methods (`.Update()`, `.Delete…()`, `.CopyTo()` …),
+  and properties and indexes set only on a variable the script assigns nothing but `@{…}`/`[ordered]@{…}` (a new
+  `[ordered]@{}` per row; never `[pscustomobject]`, `$_`, a parameter or what a `Get-*` command returned). Check one with
   `Test-AdminForgeReadOnlyScript -Content (Get-Content -Raw <file>)`. Service writes fail at the call.
 - **Write scripts** (used only from playbook steps with `mode: write`) start by refusing read mode:
   `if ($Context['Mode'] -ne 'write') { throw (New-AdminForgeError -Category readOnly …) }`. They read the target first,

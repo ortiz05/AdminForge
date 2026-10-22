@@ -6,7 +6,7 @@ export default defineConfig({
   entry: { main: 'src/main.ts', healthcheck: 'src/healthcheck.ts' },
   format: ['esm'],
   platform: 'node',
-  target: 'node24', // the runner image's Node (portal/apps/runner/Dockerfile): it moves with that image
+  target: 'node26', // the runner image's Node (portal/apps/runner/Dockerfile): it moves with that image
   outDir: 'dist',
   clean: true,
   splitting: false,

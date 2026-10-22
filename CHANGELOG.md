@@ -43,6 +43,14 @@ All notable changes to AdminForge are recorded here. The format follows
   provisioning's families word for word; `tests/unit/cli/app-only-ceilings.test.ts` already covers the other
   direction.
 
+### `provision status` flags directory roles on the AdminForge apps (2026-10-22)
+
+- **A directory role on the Read, Write or automation app is unexpected privilege.** Provisioning assigns none, and an
+  app's directory role works without any signed-in user — Exchange or SharePoint Administrator on the automation
+  identity would reach far past its own permissions. `provision status` now lists active and PIM-eligible directory
+  roles of every AdminForge app by role name and fails on them; where eligibility can't be read (no Microsoft Entra ID
+  P2) it still checks the active ones and says so. From the 2026-10-22 security review.
+
 ### Provisioning ceilings for app-only identities (2026-10-22)
 
 - **Tier-0 application permissions have a list of their own.** The automation identity and named schedule identities

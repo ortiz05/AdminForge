@@ -1,7 +1,8 @@
 /**
  * `provision status` checks for privilege AdminForge did not grant: anything here is a way into the tenant that
  * provisioning would neither create nor notice (extra app-role assignments, permissions, consent grants, owners,
- * credentials, sign-in surface, Azure RBAC). Pure: desired state + fetched state (provision/entra-io.ts) → checks.
+ * credentials, sign-in surface, directory roles, Azure RBAC). Pure: desired state + fetched state
+ * (provision/entra-io.ts) → checks.
  * Output is names and counts only — never object ids or UPNs.
  */
 import {
@@ -170,7 +171,43 @@ export function findUnexpected(
     if (app.api?.oauth2PermissionScopes?.length)
       surface.push(plural(app.api.oauth2PermissionScopes.length, 'exposed API scope'));
     checks.push({ title: `${name}: sign-in surface`, problems: surface });
+
+    // Directory roles: provisioning assigns none to an AdminForge app — one works without any signed-in user.
+    const roles = state.directoryRoles;
+    if (sp && roles && !roles.error) {
+      const held = roles.byApp[want.key] ?? [];
+      const names = (eligible: boolean) =>
+        [...new Set(held.filter((x) => x.eligible === eligible).map((x) => x.role))].sort();
+      const active = names(false);
+      const eligible = names(true);
+      checks.push({
+        title: `${name}: directory roles`,
+        problems: [
+          ...(active.length
+            ? [
+                `${plural(active.length, 'directory role')} provisioning did not assign — ${active.join(', ')}`,
+              ]
+            : []),
+          ...(eligible.length
+            ? [`eligible (PIM) for ${plural(eligible.length, 'directory role')} — ${eligible.join(', ')}`]
+            : []),
+        ],
+      });
+    }
   }
+  if (state.directoryRoles?.error)
+    checks.push({
+      title: 'AdminForge apps: directory roles',
+      problems: [],
+      unknown:
+        'could not read directory role assignments (the provisioner needs RoleManagement.Read.Directory)',
+    });
+  else if (state.directoryRoles?.eligibleError)
+    checks.push({
+      title: 'AdminForge apps: eligible (PIM) directory roles',
+      problems: [],
+      unknown: 'could not read eligible directory roles (PIM needs Microsoft Entra ID P2)',
+    });
 
   // Azure RBAC of the automation identity: Reader on the subscription (+ Log Analytics Reader in AF-Test-<label>).
   const automation = state.sps.automation;

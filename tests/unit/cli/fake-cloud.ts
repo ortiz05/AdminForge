@@ -14,6 +14,8 @@ interface Obj extends Json {
 export interface FakeCloudOptions {
   tenantId: string;
   provisioner: { clientId: string; secret: string };
+  /** false: reading PIM eligibility fails as in a tenant without Microsoft Entra ID P2. */
+  eligibilityReadable?: boolean;
   /** Simulate an unlicensed tenant (no Exchange Online service principal). Default false. */
   withExchange?: boolean;
   /** When false, PATCH /collection(key='…') is rejected like an API version without upsert. Default true. */
@@ -117,6 +119,8 @@ export function createFakeCloud(opts: FakeCloudOptions) {
   const assignments: Obj[] = [];
   const members: Array<{ groupId: string; memberId: string }> = [];
   const roleAssignments: Obj[] = [];
+  /** PIM eligibility schedules for directory roles. */
+  const roleEligibilitySchedules: Obj[] = [];
   /** Owners per object id (applications, service principals, groups). */
   const owners = new Map<string, string[]>();
   /** Users whose sign-in sessions were revoked. */
@@ -236,6 +240,15 @@ export function createFakeCloud(opts: FakeCloudOptions) {
     if (method === 'GET' && path === '/oauth2PermissionGrants') return list(grants, url);
     if (method === 'GET' && path === '/roleManagement/directory/roleAssignments')
       return list(roleAssignments, url);
+    if (method === 'GET' && path === '/roleManagement/directory/roleEligibilitySchedules') {
+      if (opts.eligibilityReadable === false)
+        return graphError(
+          403,
+          'AadPremiumLicenseRequired',
+          'The tenant needs a Microsoft Entra ID P2 license.',
+        );
+      return list(roleEligibilitySchedules, url);
+    }
     if (path === '/policies/authenticationMethodsPolicy' && (method === 'GET' || method === 'PATCH')) {
       if (opts.authMethodsPolicyReadable === false)
         return graphError(403, 'accessDenied', 'Request Authorization failed');
@@ -547,6 +560,7 @@ export function createFakeCloud(opts: FakeCloudOptions) {
     assignments,
     members,
     roleAssignments,
+    roleEligibilitySchedules,
     armAssignments,
     owners,
     revoked,

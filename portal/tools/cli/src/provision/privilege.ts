@@ -96,9 +96,11 @@ const PRIVILEGED_APP = new Set(PRIVILEGED_APP_ROLES.map((s) => s.toLowerCase()))
  * Tier-0 families, whatever Microsoft adds to them: role management and PIM, tenant policies, every user's
  * authentication methods (one method at a time too: a Temporary Access Pass for an administrator), lifecycle
  * workflows (their built-in tasks add group members and issue passes), agent blueprint credentials, and Teams app
- * installations that consent to permissions.
+ * installations that consent to permissions. The application-permission reports keep a copy
+ * (`identity.app-permissions`, `identity.app-registration-risks`: `$criticalFamily`), and
+ * tests/content/app-permissions-critical-tier.test.ts fails when they drift.
  */
-const PRIVILEGED_APP_FAMILIES: readonly RegExp[] = [
+export const PRIVILEGED_APP_FAMILIES: readonly RegExp[] = [
   /^(RoleManagement|RoleManagementPolicy|RoleAssignmentSchedule|RoleEligibilitySchedule|PrivilegedAccess|PrivilegedAssignmentSchedule|PrivilegedEligibilitySchedule|Policy)\.ReadWrite\./i,
   /^UserAuth(entication)?Method(-[A-Za-z]+)?\.(ReadWrite|Delete)\./i,
   /^LifecycleWorkflows(-Workflow)?\.(ReadWrite\.All|Activate)$/i,

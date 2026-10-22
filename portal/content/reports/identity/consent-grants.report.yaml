@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.consent-grants
-version: 2.1.0
+version: 2.2.0
 title: Delegated permission grants
 summary: >-
   OAuth delegated permission grants — admin consent on behalf of all users and consent individual users gave
@@ -79,16 +79,22 @@ datasources:
           $pluck(ds.grants.value, 'principalId')))) > 1000,
         "partial": ds.grants.truncated = true
       } }
-    # critical = directory/role/app/policy control or full mailbox/site access as the user; high = content (mail,
+    # critical = directory/role/app/policy control or full mailbox/site access as the user — every delegated tier-0
+    # scope provisioning holds back (portal/tools/cli/src/provision/privilege.ts: PRIVILEGED_DELEGATED_SCOPES and any
+    # RoleManagement.ReadWrite.*, tests/content/app-permissions-critical-tier.test.ts); high = content (mail,
     # files, sites, chats, calendars), anything that writes, sends, or impersonates the user on an API.
     # Each distinct scope string and each object is classified once and joined onto the grants natively ($attach).
     transform: >-
       ${ (
         $critical := ['Directory.ReadWrite.All', 'Directory.AccessAsUser.All', 'RoleManagement.ReadWrite.Directory',
+          'RoleAssignmentSchedule.ReadWrite.Directory', 'RoleEligibilitySchedule.ReadWrite.Directory',
+          'RoleManagementPolicy.ReadWrite.Directory', 'PrivilegedAccess.ReadWrite.AzureADGroup',
+          'PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup', 'PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup',
           'Application.ReadWrite.All', 'AppRoleAssignment.ReadWrite.All', 'DelegatedPermissionGrant.ReadWrite.All',
           'Policy.ReadWrite.ConditionalAccess', 'Policy.ReadWrite.AuthenticationMethod', 'Policy.ReadWrite.PermissionGrant',
-          'Policy.ReadWrite.Authorization', 'UserAuthenticationMethod.ReadWrite.All', 'full_access_as_user',
-          'EWS.AccessAsUser.All', 'Sites.FullControl.All', 'Exchange.Manage'];
+          'Policy.ReadWrite.Authorization', 'Policy.ReadWrite.CrossTenantAccess', 'Domain.ReadWrite.All',
+          'IdentityProvider.ReadWrite.All', 'EntitlementManagement.ReadWrite.All', 'UserAuthenticationMethod.ReadWrite.All',
+          'full_access_as_user', 'EWS.AccessAsUser.All', 'Sites.FullControl.All', 'Exchange.Manage'];
         $high := function($s) {
           $contains($s, 'ReadWrite') or $contains($s, '.Send') or $contains($s, 'AccessAsUser') or $s = 'user_impersonation'
           or $contains($s, /^(Mail|Files|Sites|Notes|Chat|ChannelMessage|MailboxSettings|Calendars|Contacts|OnlineMeeting\w*|EAS|IMAP|POP|SMTP)\./)
@@ -104,8 +110,8 @@ datasources:
         $scopeStrings := $distinct($pluck($g, 'scope'));
         $scopeTable := $scopeStrings{ $: (
           $scopes := [$split($trim($), ' ')[$ != '']];
-          $crit := [$scopes[$ in $critical]];
-          $hi := [$scopes[$not($ in $critical) and $high($)]];
+          $crit := [$scopes[$ in $critical or $contains($, /^RoleManagement\.ReadWrite\./i)]];
+          $hi := [$scopes[$not($ in $crit) and $high($)]];
           $t := $count($crit) > 0 ? 'critical' : $count($hi) > 0 ? 'high' : 'low';
           { "scopes": $scopes, "risky": $append($crit, $hi), "tier": $t, "rank": $lookup($rank, $t) }
         ) };

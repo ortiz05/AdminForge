@@ -25,6 +25,24 @@ All notable changes to AdminForge are recorded here. The format follows
   so every sign-in ended in `invalid_state`. The live harness now runs a small stand-in for the web dev server on
   `PUBLIC_BASE_URL` that forwards `/auth` and `/api` to the API, as Vite's proxy does.
 
+### Permission reports: critical means tier 0 (2026-10-22)
+
+- **`identity.app-permissions` 2.1.0 and `identity.app-registration-risks` 2.1.0 rank critical every application
+  permission provisioning holds back as tier 0** for app-only identities — `Synchronization.ReadWrite.All`,
+  `Directory.Write.Restricted`, `User-PasswordProfile.ReadWrite.All`, certificate and federation trust,
+  `Application.ReadUpdate.All`, the Intune write permissions, and the role, policy, authentication-method,
+  lifecycle-workflow, agent-blueprint and Teams-consent families whatever Microsoft names next. Several of them ranked
+  low before (`Directory.Write.Restricted`, `Application.ReadUpdate.All`, `UserAuthMethod-*.Delete.*`, …), so the
+  default "Critical and high" view, its figures and the weekly archive (`reports.app-permissions-weekly`, pinned to
+  `tier: high`) left them out: from 2.1.0 the archive and figures gain those rows although nothing changed in the
+  tenant.
+- **`identity.consent-grants` 2.2.0 ranks every delegated tier-0 scope critical** — the PIM role and group schedules,
+  `RoleManagementPolicy`, `Policy.ReadWrite.CrossTenantAccess`, `Domain`, `IdentityProvider` and
+  `EntitlementManagement` writes and any `RoleManagement.ReadWrite.*` ranked only high.
+- A new test runs the three reports' transforms on one synthetic grant per tier-0 name and checks the reports' copy of
+  provisioning's families word for word; `tests/unit/cli/app-only-ceilings.test.ts` already covers the other
+  direction.
+
 ### Provisioning ceilings for app-only identities (2026-10-22)
 
 - **Tier-0 application permissions have a list of their own.** The automation identity and named schedule identities

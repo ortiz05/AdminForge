@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.app-permissions
-version: 2.0.0
+version: 2.1.0
 title: Application permissions
 summary: >-
   Application permissions (app roles) granted to service principals on Microsoft Graph, Exchange Online and SharePoint
@@ -91,23 +91,32 @@ datasources:
         "org": ds.apis.org,
         "holders": ds.holders.value
       } }
-    # Critical = can take over the tenant or every mailbox/site (role, app, policy, group or credential control);
+    # Critical = can take over the tenant or every mailbox/site/device (role, app, policy, group, device or credential
+    # control): what provisioning treats as tier 0 for app-only identities (portal/tools/cli/src/provision/privilege.ts:
+    # PRIVILEGED_APP_ROLES, and $criticalFamily is a copy of PRIVILEGED_APP_FAMILIES — 512 characters at most, the
+    # `validate` limit) plus full mailbox and site access, and Exchange.ManageAsApp (provisioning holds it at the write
+    # ceiling: its reach is the Exchange role assigned by hand). tests/content/app-permissions-critical-tier.test.ts
+    # keeps them in step;
     # high = reads or changes content (mail, files, chats, calendars) or writes anything; medium = reads the directory.
     # Each distinct permission and each holder is classified once and joined onto the grants natively ($attach):
     # a JSONata block per grant doesn't fit the budget at tens of thousands of grants.
     transform: >-
       ${ (
-        $critical := ['RoleManagement.ReadWrite.Directory', 'AppRoleAssignment.ReadWrite.All', 'Application.ReadWrite.All',
-          'Directory.ReadWrite.All', 'Domain.ReadWrite.All', 'Organization.ReadWrite.All', 'Policy.ReadWrite.ConditionalAccess',
-          'Policy.ReadWrite.AuthenticationMethod', 'Policy.ReadWrite.PermissionGrant', 'Policy.ReadWrite.Authorization',
-          'PrivilegedAccess.ReadWrite.AzureADGroup', 'PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup',
-          'PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup', 'RoleAssignmentSchedule.ReadWrite.Directory',
-          'RoleEligibilitySchedule.ReadWrite.Directory', 'RoleManagementPolicy.ReadWrite.Directory',
-          'UserAuthenticationMethod.ReadWrite.All', 'DelegatedPermissionGrant.ReadWrite.All', 'Group.ReadWrite.All',
-          'GroupMember.ReadWrite.All', 'full_access_as_app', 'Exchange.ManageAsApp', 'Sites.FullControl.All'];
+        $critical := ['AppRoleAssignment.ReadWrite.All', 'Application.ReadWrite.All', 'Application.ReadWrite.OwnedBy',
+          'Application.ReadUpdate.All', 'DelegatedPermissionGrant.ReadWrite.All', 'Directory.ReadWrite.All',
+          'Directory.Write.Restricted', 'Domain.ReadWrite.All', 'Domain-InternalFederation.ReadWrite.All',
+          'Organization.ReadWrite.All', 'PublicKeyInfrastructure.ReadWrite.All', 'MutualTlsOauthConfiguration.ReadWrite.All',
+          'TrustFrameworkKeySet.ReadWrite.All', 'SpiffeTrustDomain.ReadWrite.All', 'IdentityProvider.ReadWrite.All',
+          'EntitlementManagement.ReadWrite.All', 'User-PasswordProfile.ReadWrite.All', 'AuthenticationContext.ReadWrite.All',
+          'OnPremDirectorySynchronization.ReadWrite.All', 'Synchronization.ReadWrite.All', 'Group.ReadWrite.All',
+          'GroupMember.ReadWrite.All', 'DelegatedAdminRelationship.ReadWrite.All', 'DeviceManagementConfiguration.ReadWrite.All',
+          'DeviceManagementScripts.ReadWrite.All', 'DeviceManagementApps.ReadWrite.All', 'DeviceManagementRBAC.ReadWrite.All',
+          'DeviceManagementManagedDevices.PrivilegedOperations.All', 'full_access_as_app', 'Exchange.ManageAsApp',
+          'Sites.FullControl.All'];
+        $criticalFamily := /^(RoleManagement|RoleManagementPolicy|RoleAssignmentSchedule|RoleEligibilitySchedule|PrivilegedAccess|PrivilegedAssignmentSchedule|PrivilegedEligibilitySchedule|Policy)\.ReadWrite\.|^UserAuth(entication)?Method(-[A-Za-z]+)?\.(ReadWrite|Delete)\.|^LifecycleWorkflows(-Workflow)?\.(ReadWrite\.All|Activate)$|^AgentIdentityBlueprint\.(AddRemoveCreds|ReadWrite|UpdateAuthProperties)\.|^TeamsAppInstallation\.ReadWriteAndConsent/i;
         $microsoft := ['f8cdef31-a31e-4b4a-93e4-5f571e91255a', '72f988bf-86f1-41af-91ab-2d7cd011db47'];
         $tier := function($p) {
-          $p in $critical ? 'critical'
+          $p in $critical or $contains($p, $criticalFamily) ? 'critical'
           : $contains($p, 'ReadWrite') or $contains($p, 'FullControl') or $contains($p, '.Send')
             or $contains($p, /^(Mail|Files|Sites|Chat|ChannelMessage|Calendars|Contacts|Notes|MailboxSettings|OnlineMeeting\w*|CallRecords|EWS|Exchange)\./) ? 'high'
           : $contains($p, /\.Read(Basic)?\.(All|Directory)$/) ? 'medium' : 'low'

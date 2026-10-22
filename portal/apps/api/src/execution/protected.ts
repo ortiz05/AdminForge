@@ -1,5 +1,5 @@
 import type { ServiceId } from '@adminforge/connectors';
-import { GUID_PATTERN, isGuid } from '@adminforge/schemas';
+import { decodeEscapes, GUID_PATTERN, isGuid } from '@adminforge/schemas';
 import { ReauthRequired } from '../auth/types';
 import type { Config } from '../config';
 import { AppError } from '../errors';
@@ -80,7 +80,7 @@ const SENSITIVE_GRAPH = [
   /^\/(applications|servicePrincipals)(\/|\(|$)/i,
   /\/(appRoleAssignments|appRoleAssignedTo)(\/|\(|$)/i,
   /^\/users\/[^/]+\/authentication(\/|$)/i,
-  /^\/directoryObjects\/[^/]+\/?$/i,
+  /^\/directoryObjects(\/|\(|$)/i,
 ];
 
 /** "a, b c" → lower-case GUIDs. */
@@ -90,18 +90,20 @@ export const idList = (value: string | undefined): string[] =>
     .map((s) => s.trim().toLowerCase())
     .filter((s) => isGuid(s));
 
-const decode = (s: string) => {
-  try {
-    return decodeURIComponent(s);
-  } catch {
-    return s;
-  }
-};
+/** Percent-decoded, each run of valid escapes on its own (one stray `%` doesn't leave the rest encoded). */
+const decode = (s: string) => decodeEscapes(s);
 
 /** Every GUID in a string (raw and percent-decoded), lower case. */
+/** 32 hex digits on their own: Graph accepts a GUID without hyphens (`/groups/{32 hex}`, verified 2026-10-22). */
+const GUID_BARE = /(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])/gi;
+const hyphenate = (h: string) =>
+  `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`.toLowerCase();
+
 function idsIn(text: string, out: Set<string>) {
-  for (const t of text.includes('%') ? [text, decode(text)] : [text])
+  for (const t of text.includes('%') ? [text, decode(text)] : [text]) {
     for (const m of t.matchAll(GUID_ANY)) out.add(m[0].toLowerCase());
+    for (const m of t.matchAll(GUID_BARE)) out.add(hyphenate(m[0]));
+  }
 }
 
 /** Every GUID in a JSON value's strings and keys. */
@@ -130,7 +132,7 @@ export function referencedIds(t: WriteTarget): Set<string> {
  * `'{key}'`, `{key}`, `id='{key}'`, any other alternate key). Matched after runs of `/` are collapsed, so
  * `/users//{upn}` can't hide the key behind an empty segment.
  */
-const USER_REF = /(?:^|\/)users(?:\/([^/?#]*)|\(([^)]*)\)?)/gi;
+const USER_REF = /(?:^|\/)users(?:\/([^/?#]*)|\(([^)]*)\)?)/giu; // `u`: folds like .NET (`userſ`)
 /**
  * Keys whose values reference directory objects (`members/$ref` bodies, `owners@odata.bind`, the `$id` query of a
  * `$ref` delete), in any case and in the OData 4.01 spellings (`@id`, `@bind`) as well as without the `@`.
@@ -195,6 +197,113 @@ export function namesUserByName(t: WriteTarget, opts: { chatMembers?: boolean } 
   return refs.some(userKeyNotGuid);
 }
 
+/** The collections whose objects the guard protects, and their cast types, as .NET folds them (`groupſ` → GROUPS). */
+const OBJECT_COLLECTIONS = new Set(['GROUPS', 'APPLICATIONS', 'SERVICEPRINCIPALS', 'DIRECTORYOBJECTS']);
+const OBJECT_TYPES = new Set(['GROUP', 'APPLICATION', 'SERVICEPRINCIPAL', 'DIRECTORYOBJECT']);
+/** What may follow a collection instead of a key: a reference, a count, and collection-wide actions. */
+const COLLECTION_ACTIONS = new Set([
+  '$REF',
+  '$COUNT',
+  'DELTA',
+  'GETBYIDS',
+  'VALIDATEPROPERTIES',
+  'GETAVAILABLEEXTENSIONPROPERTIES',
+]);
+
+/** A path's segments: host and version dropped, empty segments dropped, each segment decoded on its own. */
+function pathSegments(ref: string): string[] {
+  const path = ref
+    .trim()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, '')
+    .split(/[?#]/)[0]!;
+  const segments = path
+    .split('/')
+    .filter((x) => x !== '')
+    .map((x) => decodeEscapes(x).trim());
+  if (/^(v1\.0|beta)$/i.test(segments[0] ?? '')) segments.shift();
+  return segments;
+}
+
+/** A key that names an object by id: `{id}`, `'{id}'`, `id='{id}'`, `appId='{id}'`. */
+const isIdKey = (key: string) =>
+  isGuid(
+    key
+      .trim()
+      .replace(/^(id|appId)\s*=\s*/i, '')
+      .replace(/^'(.*)'$/s, '$1')
+      .trim(),
+  );
+
+/**
+ * Whether a reference names a group, app, service principal or directory object by anything but its id (or an app's
+ * appId): an alternate key in parentheses (`groups(uniqueName='…')`, after a cast too:
+ * `directoryObjects/microsoft.graph.group(uniqueName='…')`), a key in its own segment (`groups/('…')`,
+ * `groups/uniqueName='…'`), or a segment after the collection that isn't a hyphenated GUID, a cast or a collection
+ * action. Names are folded as .NET does, so `groupſ(…)` is `groups(…)`.
+ */
+function objectKeyNotGuid(ref: string): boolean {
+  const segments = pathSegments(ref);
+  let itemPath = false;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!;
+    // A drive item addressed by path (`root:/IT/Applications/f.json:`): folder names, not collections.
+    const opens = /^root:$/i.test(seg) || (/:$/.test(seg) && segments[i - 1]?.toLowerCase() === 'items');
+    if (itemPath || opens) {
+      if (opens || /:$/.test(seg)) itemPath = opens && !itemPath ? true : !itemPath;
+      continue;
+    }
+    const call = /^([^(]*)\((.*)\)$/s.exec(seg);
+    const raw = (call ? call[1]! : seg).trim().toUpperCase();
+    const base = raw.startsWith('MICROSOFT.GRAPH.') ? raw.slice('MICROSOFT.GRAPH.'.length) : raw;
+    const collection = OBJECT_COLLECTIONS.has(base);
+    if (!collection && !OBJECT_TYPES.has(base)) {
+      // `groups (…)`, `groups(…);`: a protected collection's name followed by anything but a strict key.
+      const lead = /^([A-Za-zſı]+)/u.exec(seg.trim())?.[1]?.toUpperCase();
+      if (lead && OBJECT_COLLECTIONS.has(lead) && seg.trim().toUpperCase() !== lead) return true;
+      continue;
+    }
+    if (call) {
+      if (!isIdKey(call[2]!)) return true;
+      continue;
+    }
+    if (!collection) continue; // a cast segment (`…/microsoft.graph.group/members`)
+    const next = segments[i + 1];
+    if (next === undefined) continue; // the collection itself
+    const key = /^\((.*)\)$/s.exec(next);
+    if (key) {
+      if (!isIdKey(key[1]!)) return true;
+      continue;
+    }
+    if (isGuid(next) || /^microsoft\.graph\./i.test(next) || COLLECTION_ACTIONS.has(next.toUpperCase()))
+      continue;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a Graph write addresses a group, app, service principal or directory object by an alternate key instead of
+ * its id (or an app's appId), in its path or in a reference in its query or body: the guard matches ids only.
+ */
+export function namesObjectByKey(t: WriteTarget): boolean {
+  if (t.service !== 'graph') return false;
+  if (objectKeyNotGuid(t.path)) return true;
+  const refs: string[] = [];
+  references(t.query, refs);
+  references(t.body, refs);
+  return refs.some(objectKeyNotGuid);
+}
+
+export const objectNotById = () =>
+  new AppError(
+    403,
+    'object_not_by_id',
+    'This change names a group or app by another key (such as its unique name) instead of object ID, so AdminForge didn’t make it.',
+    {
+      hint: 'For the content author: look the object up first and pass its object ID through $guid(). AdminForge checks every change against the objects it protects by object ID.',
+    },
+  );
+
 /** S-15: a declared Graph write naming a user by sign-in name or address instead of object id. */
 export const userNotById = () =>
   new AppError(
@@ -254,7 +363,14 @@ export const permissionGrantIds = (t: Pick<WriteTarget, 'service' | 'path'>): st
 /** Whether a write is one that must not go ahead without the protected set. */
 export function isSensitiveWrite(t: WriteTarget): boolean {
   if (t.service !== 'graph') return false;
-  const path = decode(t.path.split('?')[0]!).replace(/^\/(v1\.0|beta)(?=\/)/, '');
+  // Segment by segment, decoded, folded as .NET does (`groupſ`), casts dropped (`/groups/{id}/microsoft.graph.group/
+  // members`), runs of `/` read as one: none of them may take a write out of the rule if Graph reads it as the plain path.
+  const path =
+    '/' +
+    pathSegments(t.path)
+      .filter((x) => !/^microsoft\.graph\./i.test(x))
+      .map((x) => x.toUpperCase().toLowerCase())
+      .join('/');
   return SENSITIVE_GRAPH.some((re) => re.test(path)) || grantRefs(t).mentioned;
 }
 
@@ -316,7 +432,7 @@ export class ProtectedObjects {
   /**
    * Throws `user_not_by_id` when a Graph write names a user by anything but an object id (S-15; not for AdminForge's
    * own notification mail, whose sender is configured as an address, nor for the members of the notify step's Teams
-   * chat: `chatMembers`), `protected_object` when a write names a
+   * chat: `chatMembers`), `object_not_by_id` when it names a group or app by another key, `protected_object` when a write names a
    * protected object, `protected_objects_unavailable` when the set couldn't be read and the write is a sensitive one;
    * returns when the write may go ahead.
    */
@@ -329,6 +445,7 @@ export class ProtectedObjects {
     if (!targets.length) return;
     if (!opts.notification && targets.some((t) => namesUserByName(t, { chatMembers: opts.chatMembers })))
       throw userNotById();
+    if (targets.some(namesObjectByKey)) throw objectNotById();
     const named = new Set<string>();
     for (const t of targets) for (const id of referencedIds(t)) named.add(id);
     // Named in configuration: refused without asking Graph.

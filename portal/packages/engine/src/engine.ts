@@ -1,6 +1,7 @@
 import type { Mode } from '@adminforge/connectors';
 import { renderTemplate, type Scope } from '@adminforge/expressions';
 import {
+  isBatchPath,
   DEFAULT_APPROVAL_EXPIRES_IN,
   flattenSteps,
   parseDuration,
@@ -2354,14 +2355,8 @@ function callsMe(payload: unknown): boolean {
   } | null;
   if (!call || call.service !== 'graph') return false;
   if (me(call.path)) return true;
-  let base = typeof call.path === 'string' ? call.path.trim() : '';
-  try {
-    base = decodeURIComponent(base);
-  } catch {
-    // keep it as it is
-  }
-  const batch = /^\/*\$batch(?:[?#]|$)/i.test(base);
-  return batch && (call.body?.requests ?? []).some((r) => me(r.url));
+  const base = typeof call.path === 'string' ? call.path : '';
+  return isBatchPath(base) && (call.body?.requests ?? []).some((r) => me(r.url));
 }
 
 /**

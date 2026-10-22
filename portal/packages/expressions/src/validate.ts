@@ -506,7 +506,7 @@ const BODY_FIELDS: Array<{ name: string; kinds: Kind[]; label: string; helper: s
   })),
 ];
 /** Endpoints whose body is a query: an opaque body sent there is checked as if every field were one. */
-const QUERY_ENDPOINT = /runHuntingQuery|\/\$batch\b|exportJobs|\/get\w*Report|\/query\b/i;
+const QUERY_ENDPOINT = /runHuntingQuery|\/(?:\$|%24)batch\b|exportJobs|\/get\w*Report|\/query\b/i;
 
 /** OData options named in a URL's query string (`/users?$filter=…` in a `$batch` request's `url`). */
 const URL_OPTION = /[?&](\$?(?:filter|search|orderby|expand))=/gi;

@@ -229,9 +229,15 @@ the reason.
   notify step's one-on-one Teams chat, whose members are a conversation, not a change to an account. A delegated
   permission grant's id isn't an object id, so a write to one (any path spelling, `$batch` included) reads the grant
   first (`clientId`, the same readers) and is refused when the client is a protected app; a grant key that isn't a
-  plain id, or a grant that can't be read, is refused (`protected_objects_unavailable`). Other names an object can be
-  addressed by (an application's `uniqueName`, say) and ids inside an encoded body (a base64 `$batch` sub-request)
-  aren't matched. PowerShell inputs are matched by object id only (names and UPNs aren't). Playbooks keep friendly
+  plain id, or a grant that can't be read, is refused (`protected_objects_unavailable`). A write that addresses a
+  group, app, service principal or directory object by anything but its id is refused too (`object_not_by_id`):
+  `groups(uniqueName='…')` — the key provisioning sets on AdminForge's own groups and apps — after a type cast or in a
+  segment of its own, a GUID without hyphens, or any other segment after the collection; `appId='{id}'` and
+  `id='{id}'` keys are compared like ids. Paths are read segment by segment, each decoded on its own, folded as .NET
+  does (`groupſ`), casts and runs of `/` ignored, so none of them takes a write out of the fail-closed rule. `$batch`
+  written another way (`/$Batch`, `/$batch/`, `/%24batch`) is checked request by request and sent as `/$batch`;
+  anything else that starts like `$batch`, and a batch inside a batch, is refused. Ids inside an encoded body (a
+  base64 `$batch` sub-request) aren't matched. PowerShell inputs are matched by object id only (names and UPNs aren't). Playbooks keep friendly
   early checks.
 - Playbooks that act on a target whose id can be reused or change hands (Azure Virtual Desktop session numbers, a list
   that may be minutes old) carry what the person saw and assert it still holds before writing — so a stale screen

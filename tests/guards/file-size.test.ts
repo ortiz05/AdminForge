@@ -12,7 +12,7 @@ const SLACK = 50;
 const OVER_CEILING: Record<string, number> = {
   // +533 for resume re-checks (built alongside this guard); the re-check machinery is the first piece to move out.
   'portal/packages/engine/src/engine.ts': 2401,
-  'portal/apps/api/src/execution/outbound.ts': 1825,
+  'portal/apps/api/src/execution/outbound.ts': 1724,
   'portal/apps/api/src/runs/service.ts': 1505,
   'portal/packages/ui/src/primitives/DataTable.tsx': 1344,
   'portal/packages/expressions/src/helpers.ts': 1247,

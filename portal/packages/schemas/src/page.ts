@@ -110,7 +110,11 @@ export const ExportSpec = z.strictObject({
   formats: z.array(z.enum(['csv', 'xlsx'])).min(1),
   /** Template; the extension is added. */
   fileName: Template.optional(),
-  /** Datasource path to export, e.g. `users.value` (default: the first table's `data`). */
+  /**
+   * Datasource path to export, e.g. `users.value` (default: the first table's `data`) — or a `${ … }` template over
+   * `params` that names one, for a page whose views switch tables:
+   * `${ params.mfa = 'NotRegistered' ? 'registrations.value' : 'users.value' }`.
+   */
   data: z.string().min(1).optional(),
   /** `visible` = the user's current columns; `all` = every declared column. */
   columns: z.enum(['visible', 'all']).optional(),
@@ -167,6 +171,16 @@ const pageShape = {
   /** Auto-refresh interval in seconds. */
   refresh: z.number().int().min(15).optional(),
 };
+
+/**
+ * The datasources `export.data` names: a plain path's first segment, or each quoted path in a template
+ * (`'registrations.value'`) — so a misspelt view fails `validate`, not the export.
+ */
+function exportDataSources(data: string | undefined): string[] {
+  if (!data) return [];
+  if (!data.includes('${')) return [data.split(/[.[]/)[0]!];
+  return [...data.matchAll(/(['"])([A-Za-z_][A-Za-z0-9_]*)[.[][^'"]*\1/g)].map((m) => m[2]!);
+}
 
 /** The query builder's raw value never reaches templates: not declared as a param, never referenced as one. */
 function checkAdvanced(
@@ -277,9 +291,13 @@ function checkPage(
   need(def.filters?.search, ['filters', 'search']);
   def.filters?.facets?.forEach((f, i) => need(f, ['filters', 'facets', i]));
   checkAdvanced(def, ctx);
-  const exportDs = def.export?.data?.split(/[.[]/)[0];
-  if (exportDs && !(exportDs in (def.datasources ?? {})))
-    ctx.addIssue({ code: 'custom', path: ['export', 'data'], message: `Unknown datasource "${exportDs}".` });
+  for (const exportDs of exportDataSources(def.export?.data))
+    if (!(exportDs in (def.datasources ?? {})))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['export', 'data'],
+        message: `Unknown datasource "${exportDs}".`,
+      });
   if (!def.layout?.length && !def.tabs?.length)
     ctx.addIssue({
       code: 'custom',

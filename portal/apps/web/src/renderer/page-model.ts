@@ -1,4 +1,4 @@
-import type { TableWidgetConfig } from '@adminforge/schemas';
+import { exportTable, type TableWidgetConfig } from '@adminforge/schemas';
 import { splitDataRef, type FeatureState, type MissingFeature } from '@adminforge/widgets';
 import { featureKeyFor, type Capabilities, type PageDefinition } from './api';
 import { blockId, type Block } from './blocks';
@@ -61,6 +61,16 @@ export function neededDatasources(def: PageDefinition, parts: unknown[]): string
  */
 export function withIds(blocks: readonly unknown[], prefix = ''): Block[] {
   return (blocks as Block[]).map((b, i) => (b.id ? b : { ...b, id: `${prefix}${b.widget}${i}` }));
+}
+
+/** The table an export reads, whose visible columns the browser sends — `exportTable` (schemas), by block id. */
+export function exportTableId(
+  blocks: readonly Block[],
+  datasources: PageDefinition['datasources'],
+  data: string | undefined,
+  ref: unknown,
+): string | undefined {
+  return exportTable(blocks, datasources, data, ref)?.id;
 }
 
 /** Blocks shown now: an entity/settings page's active tab (or its layout), everything else its layout. */

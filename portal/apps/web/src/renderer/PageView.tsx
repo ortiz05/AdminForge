@@ -13,6 +13,7 @@ import {
   type ProbesState,
   type TableViewState,
   type WidgetRuntime,
+  useTemplate,
 } from '@adminforge/widgets';
 import { loginUrl } from '../lib/api';
 import { browser } from '../lib/browser';
@@ -34,6 +35,7 @@ import { ExportMenu } from './ExportMenu';
 import { FilterRegion, filterParamsOf } from './FilterRegion';
 import {
   activeBlocks,
+  exportTableId,
   licenceState,
   neededDatasources,
   sectionLabel,
@@ -357,11 +359,14 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
   }, [viewsEnabled, def.id, viewId, currentState, presets, views.isPending, views.data, applyView]);
 
   // ── Export ───────────────────────────────────────────────────────────────────────────────────────
-  const exportTable = useMemo(() => {
-    if (!def.export) return undefined;
-    const ref = def.export.data;
-    return allBlocks.find((b) => b.widget === 'table' && (!ref || b.data === ref))?.id;
-  }, [def.export, allBlocks]);
+  // `export.data` may be a template over params (a page whose views switch tables): rendered as the server renders it.
+  const exportScope = useMemo(() => ({ params }), [params]);
+  const exportRef = useTemplate<unknown>(def.export?.data, exportScope, Boolean(def.export?.data));
+  const exportTable = useMemo(
+    () =>
+      def.export ? exportTableId(allBlocks, def.datasources, def.export.data, exportRef.value) : undefined,
+    [def.export, exportRef.value, allBlocks],
+  );
   const exportColumns = useMemo(() => {
     if (!exportTable) return undefined;
     const view = tableViews.get(exportTable);

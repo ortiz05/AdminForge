@@ -38,3 +38,30 @@ export function splitDataRef(ref: string): { root: string; rest: string } {
   if (!m) return { root: ref, rest: '' };
   return { root: m[1]!, rest: m[2] ?? m[3] ?? '' };
 }
+
+/**
+ * The table an export takes its columns from (the browser sends that table's visible columns): without `export.data`,
+ * the first table; else the table bound to `ref` — the path `export.data` names, rendered for the current params — or,
+ * when no table is, the one bound to a `source: static` view of that datasource (`data: ${ ds.<name> }`: a table capped
+ * for the browser whose export has every row, docs/content-recipes.md). None while `ref` isn't a path.
+ */
+export function exportTable<T extends { widget?: unknown; data?: unknown }>(
+  blocks: readonly T[],
+  datasources: Record<string, { source?: unknown; data?: unknown }> | undefined,
+  data: string | undefined,
+  ref: unknown,
+): T | undefined {
+  const tables = blocks.filter((b) => b.widget === 'table');
+  if (!data) return tables[0];
+  if (typeof ref !== 'string' || !ref) return undefined;
+  const direct = tables.find((t) => t.data === ref);
+  if (direct) return direct;
+  const { root } = splitDataRef(ref);
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(root)) return undefined;
+  const readsRoot = new RegExp(`\\bds\\.${root}\\b`);
+  return tables.find((t) => {
+    if (typeof t.data !== 'string') return false;
+    const view = datasources?.[splitDataRef(t.data).root];
+    return view?.source === 'static' && typeof view.data === 'string' && readsRoot.test(view.data);
+  });
+}

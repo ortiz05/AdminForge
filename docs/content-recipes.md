@@ -163,6 +163,11 @@ thousands of rows.
   (`export.data: <list>.rows`, `export.maxRows` = its `maxItems`) and the page binds its widgets to a `source: static`
   view of it — `${ $merge([value, { "rows": $take(value.rows, 10000), "listCapped": $count(value.rows) > 10000 }]) }`
   — so the browser gets 10,000 rows (`m365.mailbox-storage`: `mailboxList` → `mailboxes`).
+- **Views that switch tables** (a view Graph can't filter reads another datasource into a second table behind `when`):
+  `export.data` is a `${ … }` template over params naming the path to export,
+  `${ params.members in ['None', 'UnderFive'] ? 'memberMatches.rows' : 'groups.value' }`, rendered alike by the server
+  and the browser (params only; `validate` checks each quoted path's datasource). The export takes its columns from the
+  table bound to that path, or from the table reading a static view of it (`identity.groups`, `identity.users`).
 - **A list too big for one transform:** a list datasource for the export plus a page view that labels only the first
   rows it shows (`identity.app-credential-hygiene`: `page` / `exportList`). Each datasource has its own budget, but a
   page view built from a list datasource still runs that list on every page load.

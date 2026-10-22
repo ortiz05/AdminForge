@@ -4,6 +4,7 @@ import {
   STATUS_TONE_LABEL,
   columnMapEntry,
   columnMapLabel,
+  exportTable,
   getPath,
   isStatusTone,
   splitDataRef,
@@ -61,6 +62,19 @@ function tables(page: LoadedPage): TableWidgetConfig[] {
   return blocks.filter((b) => b.widget === 'table') as TableWidgetConfig[];
 }
 
+/**
+ * The datasource path `export.data` names for these params: the path itself, or what its `${ … }` template over params
+ * renders to (the table a view shows). Rendered with params only, as the browser does; anything but a text names none.
+ */
+async function exportDataRef(data: string, params: Record<string, unknown>): Promise<string | undefined> {
+  try {
+    const ref = await renderString(data, { params });
+    return typeof ref === 'string' && ref ? ref : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** File name from the `fileName` template (rendered with params), reduced to safe characters. */
 export async function exportFileName(
   spec: ExportSpec,
@@ -104,7 +118,7 @@ export async function planExport(
       `${page.key} exports ${spec.formats.join(' or ')}, not ${format}.`,
     );
   const all = tables(page);
-  const dataRef = spec.data ?? (all[0]?.data as string | undefined);
+  const dataRef = spec.data ? await exportDataRef(spec.data, params) : (all[0]?.data as string | undefined);
   if (!dataRef) throw new AppError(400, 'export_not_supported', `${page.key} has no table to export.`);
   // The table's own path reader (`value[0].items` included), so the file holds what the table shows.
   const { root: datasource, rest } = splitDataRef(dataRef);
@@ -116,7 +130,7 @@ export async function planExport(
       'export_not_supported',
       `${page.key} exports unknown datasource "${datasource}".`,
     );
-  const table = all.find((t) => (t.data as string | undefined) === dataRef) ?? all[0];
+  const table = exportTable(all, page.def.datasources, spec.data, dataRef) ?? all[0];
   if (!table)
     throw new AppError(400, 'export_not_supported', `${page.key} has no table columns for ${dataRef}.`);
   let columns = table.columns;

@@ -8,10 +8,10 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ### Dependencies (2026-10-22)
 
-- **Node.js 26** (from 24): the app image's base (`node:26.11.1-bookworm-slim`, by digest), CI's `setup-node`,
-  `.nvmrc`, `engines` (`>=26`) and the bundles' build target. Node 25 and later no longer bundle Corepack: the image
-  installs `corepack@0.36.0` itself, and engineers install the same version once (setup guide). The runner image's
-  Node stage moves separately.
+- **Node.js 26** (from 24): the app image's base and the runner image's build stage (`node:26.11.1-bookworm-slim`, by
+  digest), CI's `setup-node`, `.nvmrc`, `engines` (`>=26`) and both bundles' build target. Node 25 and later no longer
+  bundle Corepack: both images install `corepack@0.36.0` themselves, and engineers install the same version once
+  (setup guide).
 - **Every npm dependency at its latest release at least seven days old** (`minimumReleaseAge`): tsup 9 (from 8;
   esbuild 0.28 underneath: the bundles are unchanged but for esbuild's module helpers, and the low esbuild advisory
   through tsup is gone), React 19.3.1, Playwright 1.64.1, the TanStack Router plugin, and pnpm 11.28.5 (from
@@ -19,10 +19,16 @@ All notable changes to AdminForge are recorded here. The format follows
   days). Held back: TypeScript 7 in `tooling/lint` (typescript-eslint 8.72 supports TypeScript below 6.1) and pnpm 12
   (a native executable that Corepack can't install the way it installs pnpm 11: its own change).
 - **The package manager is pinned by hash** (it sits above the lockfile, outside the release-age floor):
-  `packageManager` carries pnpm's sha512, which Corepack checks; the app image checks Corepack's own tarball against
-  a recorded sha512 and installs it without scripts; the setup guide installs the same `corepack@0.36.0`
-  (`tests/unit/tooling/package-manager-pin.test.ts`). The runner's bundle keeps targeting Node 24 until its image
-  moves.
+  `packageManager` carries pnpm's sha512, which Corepack checks; both images check Corepack's own tarball against
+  a recorded sha512 and install it without scripts; the setup guide installs the same `corepack@0.36.0`
+  (`tests/unit/tooling/package-manager-pin.test.ts`).
+- **The runner on a maintained base**: its image starts from `ubuntu:24.04` (pinned by digest) with the Ubuntu updates
+  of the build's day, and installs PowerShell 7.6.7 (the 7.6 LTS line; was 7.5.0) from Microsoft's release archive,
+  checked against the release's SHA-256 before it is unpacked (`tests/guards/runner-powershell-download.test.ts`); its
+  build stage moves to Node 26. MCR's `powershell:7.5-ubuntu-24.04`, last rebuilt on 2025-01-30, had missed about 21
+  months of Ubuntu and .NET security fixes in the container that holds engineers' forwarded Exchange and SharePoint
+  tokens. Dependabot proposes each new `ubuntu:24.04` digest; PowerShell is a reviewed bump
+  (`portal/apps/runner/README.md` → Container image).
 
 ### Platform review (2026-10-21)
 
@@ -483,13 +489,6 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
   (`tests/guards/networkpolicy-private-egress.test.ts`), and the loader pod gets no network at all.
 - **Images pinned by digest** (S-37): both images' bases and the Dockerfile frontend name `image:tag@sha256:…`
   (`tests/guards/image-digests.test.ts`).
-- **The runner on a maintained base**: its image starts from `ubuntu:24.04` (pinned by digest) with the Ubuntu updates
-  of the build's day, and installs PowerShell 7.6.7 (the 7.6 LTS line; was 7.5.0) from Microsoft's release archive,
-  checked against the release's SHA-256 before it is unpacked (`tests/guards/runner-powershell-download.test.ts`); its
-  build stage moves to Node 26. MCR's `powershell:7.5-ubuntu-24.04`, last rebuilt on 2025-01-30, had missed about 21
-  months of Ubuntu and .NET security fixes in the container that holds engineers' forwarded Exchange and SharePoint
-  tokens. Dependabot proposes each new `ubuntu:24.04` digest; PowerShell is a reviewed bump
-  (`portal/apps/runner/README.md` → Container image).
 
 ### Before the platform review
 

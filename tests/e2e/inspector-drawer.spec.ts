@@ -38,7 +38,9 @@ async function openInspector(
     .getByRole('grid', { name: 'Results' })
     .getByRole('row')
     .nth(opts.row ?? 1);
-  await expect(row).toBeVisible();
+  // The first list of the spec waits for the dev server to compile the route and the table on a cold CI runner, which
+  // can take longer than the default 10 s (seen on a slow GitHub runner; never locally).
+  await expect(row).toBeVisible({ timeout: 30_000 });
   // A click focuses the row too (focus must come back to it on close).
   await row.click();
   const drawer = page.getByRole('dialog').first();

@@ -10,14 +10,19 @@ All notable changes to AdminForge are recorded here. The format follows
 
 - **Node.js 26** (from 24): the app image's base (`node:26.11.1-bookworm-slim`, by digest), CI's `setup-node`,
   `.nvmrc`, `engines` (`>=26`) and the bundles' build target. Node 25 and later no longer bundle Corepack: the image
-  installs `corepack@0.36.0` itself, and engineers run `npm install --global corepack` once (setup guide). The
-  runner image's Node stage moves separately.
+  installs `corepack@0.36.0` itself, and engineers install the same version once (setup guide). The runner image's
+  Node stage moves separately.
 - **Every npm dependency at its latest release at least seven days old** (`minimumReleaseAge`): tsup 9 (from 8;
   esbuild 0.28 underneath: the bundles are unchanged but for esbuild's module helpers, and the low esbuild advisory
   through tsup is gone), React 19.3.1, Playwright 1.64.1, the TanStack Router plugin, and pnpm 11.28.5 (from
   11.10.0, with pnpm's own security fixes since). The `undici@8.12.1` release-age exclude is gone (it aged past seven
   days). Held back: TypeScript 7 in `tooling/lint` (typescript-eslint 8.72 supports TypeScript below 6.1) and pnpm 12
   (a native executable that Corepack can't install the way it installs pnpm 11: its own change).
+- **The package manager is pinned by hash** (it sits above the lockfile, outside the release-age floor):
+  `packageManager` carries pnpm's sha512, which Corepack checks; the app image checks Corepack's own tarball against
+  a recorded sha512 and installs it without scripts; the setup guide installs the same `corepack@0.36.0`
+  (`tests/unit/tooling/package-manager-pin.test.ts`). The runner's bundle keeps targeting Node 24 until its image
+  moves.
 
 ### Platform review (2026-10-21)
 

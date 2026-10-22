@@ -531,10 +531,15 @@ on a PersistentVolume (ADR-016).
   `tests/guards/image-digests.test.ts`). A pin moves only by a reviewed commit.
 - **Dependencies** wait seven days: pnpm resolves only versions published at least seven days ago
   (`minimumReleaseAge: 10080`, strict, versions without a publish time refused), and every install — CI and both image
-  builds — runs from the frozen lockfile under that setting. Dependabot waits the same seven days (`cooldown`) on npm,
-  GitHub Actions and both images' base images. Its security updates skip the cooldown but not pnpm's floor, so an
-  urgent fix adds one exact `name@x.y.z` to `minimumReleaseAgeExclude`, with a comment saying why and when it goes, in
-  the same pull request. `.gitignore` keeps env files, key material and SQLite files out of git (images are built from
+  builds — runs from the frozen lockfile under that setting. The package manager above the lockfile doesn't come
+  through that floor, so it is pinned by hash instead: pnpm's exact version with its sha512 in `packageManager`
+  (Corepack refuses a download that doesn't match), and Corepack itself — Node 25 and later no longer bundle it — at
+  an exact version whose registry tarball the app image checks against a recorded sha512 and installs without
+  scripts (`tests/unit/tooling/package-manager-pin.test.ts`); either moves by a reviewed commit of version and hash,
+  once the version is seven days old. Dependabot waits the same seven days (`cooldown`) on npm, GitHub Actions and
+  both images' base images. Its security updates skip the cooldown but not pnpm's floor, so an urgent fix adds one
+  exact `name@x.y.z` to `minimumReleaseAgeExclude`, with a comment saying why and when it goes, in the same pull
+  request. `.gitignore` keeps env files, key material and SQLite files out of git (images are built from
   `git archive HEAD`; `tests/guards/gitignore-secrets.test.ts`).
 - **The database file.** SQLite has no roles: whoever can write the file can do anything to it, including dropping the
   append-only triggers. So the file itself is guarded: no other user may write its folder, the file and its `-wal`/`-shm`

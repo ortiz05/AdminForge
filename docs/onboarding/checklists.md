@@ -5,8 +5,8 @@ Copy what you need into your PR or your notes. Each item links to where it's exp
 ## Your first day
 
 - [ ] Repository access, and you're in the team channel
-- [ ] Node 26, pnpm via Corepack (`npm install --global corepack && corepack enable`), Google Chrome, VS Code + YAML
-      extension, Claude Code ([setup](01-setup.md))
+- [ ] Node 26, pnpm via Corepack (`npm install --global --ignore-scripts corepack@0.36.0 && corepack enable`), Google
+      Chrome, VS Code + YAML extension, Claude Code ([setup](01-setup.md))
 - [ ] `pnpm install`; `git config core.hooksPath` prints `.githooks`; optional commit template configured
 - [ ] Mock mode runs at <http://localhost:5173>; you switched roles and armed write access with the dev toolbar
 - [ ] `pnpm guard`, `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm test:e2e` pass on `main`

@@ -21,7 +21,8 @@ The JSON schemas the editor uses are generated, not committed: run `pnpm --filte
 
 ```bash
 git clone <repository URL> adminforge && cd adminforge
-npm install --global corepack      # Node 25 and later no longer bundle Corepack
+# Node 25 and later no longer bundle Corepack: the version the app image installs (its Dockerfile)
+npm install --global --ignore-scripts corepack@0.36.0
 corepack enable
 pnpm install                       # also runs `git config core.hooksPath .githooks`
 git config core.hooksPath          # must print .githooks
@@ -112,7 +113,7 @@ tenant** (never production) and a portal role there ([`docs/access.md`](../acces
 
 | Symptom                                                | Fix                                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `pnpm` says the version doesn't match `packageManager` | `npm install --global corepack`, `corepack enable`, then open a new shell                              |
+| `pnpm` says the version doesn't match `packageManager` | `npm install --global --ignore-scripts corepack@0.36.0`, `corepack enable`, then open a new shell      |
 | Commits go through without the guard tests running     | `git config core.hooksPath .githooks`                                                                  |
 | Playwright can't find a browser                        | Install Google Chrome system-wide; Playwright doesn't download one here                                |
 | `env check` says DATABASE_PATH contains `CHANGE_ME`    | Run `pnpm --filter @adminforge/api init:local` again                                                   |

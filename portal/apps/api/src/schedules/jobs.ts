@@ -181,11 +181,30 @@ export function createJobRunner(deps: JobDeps): JobRunner {
           message: `No active probe matches this job (${job.select ? `tags ${job.select.tags.join(', ')}` : 'refs'}).`,
         },
       };
+    // A run claimed while the schedule is turned off (Run now queued before it was switched off, F-10): synthetic
+    // transactions act on the tenant, so they don't run on a disabled schedule (ADR-015), whatever was queued.
+    const transactional = probes.filter((p) => isTransaction(p.probe)).map((p) => p.key);
+    // The schedule as it is now: it may have been switched off since the scheduler read it.
+    const off =
+      transactional.length > 0 &&
+      (ctx.fileOnly === true || (await deps.store.getSchedule(ctx.schedule.key))?.enabled === false);
+    const held = off ? transactional : [];
+    const runnable = held.length ? probes.filter((p) => !held.includes(p.key)) : probes;
+    if (!runnable.length)
+      return {
+        status: 'failed',
+        result: { probes: probes.length, held },
+        error: {
+          code: 'schedule_disabled',
+          message:
+            'This schedule was turned off before this run started, and its synthetic transactions send, upload or create on test objects, so they didn’t run.',
+        },
+      };
     const counts = { ok: 0, warn: 0, crit: 0, error: 0 };
     const results: Array<{ key: string; status: string; metric: number | null; code: string }> = [];
     // Synthetic transactions that got as far as acting on the tenant (ADR-015): the run is audited as a write.
     const transactions: Record<string, string> = {};
-    await eachLimited(probes, job.concurrency ?? 4, async ({ key, probe }) => {
+    await eachLimited(runnable, job.concurrency ?? 4, async ({ key, probe }) => {
       if (ctx.signal.aborted) return;
       const outcome = await runProbe(
         key,
@@ -216,18 +235,19 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       ...counts,
       results,
       ...(acted ? { transactions: acted, transactionCodes: transactions } : {}),
+      ...(held.length ? { held } : {}),
     };
     // Every probe waiting for a setting this installation hasn't made (e.g. the synthetic transactions before their
     // test objects exist): nothing failed, there is just nothing to check yet — each probe says what to set.
     if (results.length && results.every((r) => r.code === 'not_configured'))
       return { result: { ...result, waiting: 'Every probe in this job is waiting for its configuration.' } };
-    if (counts.error === probes.length)
+    if (counts.error === runnable.length)
       return {
         status: 'failed',
         result,
         error: {
           code: 'probes_errored',
-          message: `None of the ${probes.length} probe(s) could be evaluated (see each probe's message).`,
+          message: `None of the ${runnable.length} probe(s) could be evaluated (see each probe's message).`,
         },
       };
     return { result };

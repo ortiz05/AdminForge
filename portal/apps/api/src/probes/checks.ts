@@ -21,8 +21,9 @@ import { DEFENDER_NOT_PROVISIONED, OutboundError } from '../execution/outbound';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 import { newPinnedAgent, pinnedFetch, refusedAtConnect } from '../news/fetch-feed';
 import type { ProbeStatus } from '../schedules/types';
-import { defaultLookup, isNonPublicAddress, type HostLookup } from './addresses';
+import type { HostLookup } from './addresses';
 import { fixtureNotFound } from './fixture-network';
+import { assertCertTarget, assertProbeTarget, assertResolver, targetNotAllowed } from './targets';
 import { aggregate, detailRows, runKql } from './kql';
 import { fileRoundTrip, mailFlow, onlineMeeting } from './transactions';
 import { classify, describeThresholds, effectiveThresholds, worst, type Thresholds } from './thresholds';
@@ -79,6 +80,8 @@ export interface TlsInspector {
     port: number;
     servername?: string;
     timeoutMs: number;
+    /** The public address the guard checked for `host`: connected to instead of resolving `host` again. */
+    address?: string;
   }): Promise<PeerCertificate>;
 }
 
@@ -243,42 +246,6 @@ const bodyText = (data: unknown) => (typeof data === 'string' ? data : JSON.stri
 
 /** Bytes of an HTTP probe's response searched for `expect.bodyContains` (the rest is never read). */
 const HTTP_PROBE_MAX_BYTES = 1_000_000;
-
-const targetNotAllowed = (why: string) =>
-  new AppError(400, 'probe_target_not_allowed', `The probe URL ${why}.`, {
-    hint: 'HTTP probes check public endpoints (or this portal itself). Point the probe at a public https URL.',
-  });
-
-/**
- * SSRF guard for HTTP probes: the portal's own origin is always allowed; anything else must be http(s) on the default
- * port range and resolve only to public addresses (no loopback, LAN, link-local or cloud metadata). True for the own
- * origin.
- */
-async function assertProbeTarget(url: URL, x: CheckContext): Promise<boolean> {
-  const own = (() => {
-    try {
-      return new URL(String(x.deps.env().PUBLIC_BASE_URL ?? '')).origin;
-    } catch {
-      return undefined;
-    }
-  })();
-  if (own && url.origin === own) return true;
-  if (url.username || url.password) throw targetNotAllowed('contains credentials');
-  const host = url.hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '');
-  if (!host || /^localhost$/i.test(host) || /\.localhost$/i.test(host))
-    throw targetNotAllowed('points at this host');
-  let addresses: string[];
-  try {
-    addresses = isIP(host) ? [host] : await (x.deps.lookup ?? defaultLookup)(host);
-  } catch (err) {
-    if (err instanceof AppError) throw err; // the lookup could not evaluate (e.g. a broken fixture), not a DNS answer
-    const code = (err as { code?: string }).code;
-    throw Object.assign(new TypeError('fetch failed'), { cause: { code: code ?? 'ENOTFOUND' } });
-  }
-  if (!addresses.length || addresses.some(isNonPublicAddress))
-    throw targetNotAllowed('resolves to a private, loopback or link-local address');
-  return false;
-}
 
 let probeAgent: Agent | undefined;
 
@@ -561,6 +528,7 @@ async function dnsResolve(
       'The name to resolve is empty.',
       'Set the env keys it uses (for example AF_PRIMARY_DOMAIN).',
     );
+  assertResolver(c.resolver, x);
   const t0 = performance.now();
   let answers: string[];
   try {
@@ -616,10 +584,16 @@ async function dnsResolve(
 }
 
 const defaultTls: TlsInspector = {
-  inspect: ({ host, port, servername, timeoutMs }) =>
+  inspect: ({ host, port, servername, timeoutMs, address }) =>
     new Promise<PeerCertificate>((resolve, reject) => {
       const socket = tls.connect(
-        { host, port, ...(servername ? { servername } : {}), rejectUnauthorized: false, timeout: timeoutMs },
+        {
+          host: address ?? host,
+          port,
+          ...(servername ? { servername } : {}),
+          rejectUnauthorized: false,
+          timeout: timeoutMs,
+        },
         () => {
           const cert = socket.getPeerCertificate();
           const out: PeerCertificate = {
@@ -655,11 +629,14 @@ async function certExpiry(
   const servername = c.servername ?? (isIP(host) ? undefined : host);
   let cert: PeerCertificate;
   try {
+    // Live (or a test's lookup); fixtures open no socket. A name that doesn't resolve is unreachable, like a refusal.
+    const address = !x.deps.tls || x.deps.lookup ? await assertCertTarget(host, c.port, x) : undefined;
     cert = await (x.deps.tls ?? defaultTls).inspect({
       host,
       port: c.port,
       servername,
       timeoutMs: x.probe.timeoutMs ?? 10_000,
+      ...(address ? { address } : {}),
     });
   } catch (err) {
     if (err instanceof AppError) throw err; // the inspector could not evaluate (e.g. no fixture), not a handshake

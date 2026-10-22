@@ -14,7 +14,7 @@ import { SessionIdentityResolver } from './identity';
 import { createFixtureRunnerPort } from './fixture-runner';
 import { MemoryRunRepository } from './memory-repository';
 import { SqliteRunRepository } from './sqlite-repository';
-import { createOutboundPort, createRunnerPort } from './ports';
+import { createOutboundPort, createRunnerPort, perPersonRunnerPort } from './ports';
 import { InProcessRunQueue, SqliteRunQueue, type RunQueue } from './queue';
 import { RunWorker } from './run-worker';
 import { SecretBroker } from './secrets';
@@ -125,19 +125,22 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     });
   else if (!testing && ctx.config.RUNNER_URL && ctx.config.RUNNER_SHARED_KEY) {
     try {
-      runner = createRunnerPort({
-        url: ctx.config.RUNNER_URL,
-        key: ctx.config.RUNNER_SHARED_KEY,
-        broker: ctx.broker,
-        tenant: {
-          id: ctx.config.AF_TENANT_ID,
-          domain: ctx.config.AF_PRIMARY_DOMAIN,
-          spoTenantName: ctx.config.AF_SPO_TENANT_NAME,
-        },
-        fetch: ctx.fetch,
-        now: ctx.now,
-        outbound: outbound(),
-      });
+      runner = perPersonRunnerPort(
+        createRunnerPort({
+          url: ctx.config.RUNNER_URL,
+          key: ctx.config.RUNNER_SHARED_KEY,
+          broker: ctx.broker,
+          tenant: {
+            id: ctx.config.AF_TENANT_ID,
+            domain: ctx.config.AF_PRIMARY_DOMAIN,
+            spoTenantName: ctx.config.AF_SPO_TENANT_NAME,
+          },
+          fetch: ctx.fetch,
+          now: ctx.now,
+          outbound: outbound(),
+        }),
+        ctx.config.RUNNER_JOBS_PER_PERSON,
+      );
     } catch (err) {
       log?.warn({ err: { message: (err as Error).message } }, 'PowerShell runner disabled');
     }

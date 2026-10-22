@@ -77,6 +77,24 @@ members` or `/groupſ/{id}/members` was not treated as the sensitive write it is
   (1.1.0, `Set-InboxRuleState.ps1`) doesn't turn on a rule in someone else's mailbox that sends their mail to you
   (by address, alias or legacy DN, read from the recipient rather than the display name).
 
+### Availability limits and probe targets (2026-10-22)
+
+- **Sign-in starts have a fair share per address.** A few addresses, each within its rate limit, could fill the
+  5,000 pending sign-ins within the two minutes each is protected and refuse everyone else's sign-in. When the table
+  is full, the address holding the most pending sign-ins now gives up its oldest if it holds more than the starting
+  address; otherwise the age rule decides as before. The address is recorded pseudonymously (a keyed hash; IPv4, or
+  an IPv6 /64). Migration `0003_preauth_address_hash`.
+- **PowerShell jobs per person** (`RUNNER_JOBS_PER_PERSON`, default 3): one person's pages, exports or playbook steps
+  could hold every runner worker and fail everyone else's jobs after the queue timeout. Beyond three, a page read is
+  refused (429 `runner_busy_for_you`) and a playbook step waits for one of that person's own. The runner's queue is
+  bounded too (`RUNNER_MAX_WAITING`, default 4 × max jobs): past it a job is refused at once (503 `runner_busy`) instead
+  of timing out.
+- **Certificate and DNS probes** follow the HTTP probes' address rule: a certificate probe connects to this portal's
+  host or a host that resolves only to public addresses, at the address it checked; a DNS probe asks the system
+  resolver, a public one by IP, or one listed in `AF_PROBE_RESOLVERS`.
+- **Synthetic transactions on a turned-off schedule:** a Run now queued while the schedule was on and claimed after it
+  was switched off ran its transactions; the probe job now holds them back (`held`) and runs only the other probes.
+
 ### SharePoint sharing at scale (2026-10-22)
 
 - **SharePoint sharing at tens of thousands of sites** (still live, with the engineer's own delegated sign-in; no

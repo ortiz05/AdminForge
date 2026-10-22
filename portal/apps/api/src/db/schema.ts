@@ -124,11 +124,13 @@ export const preauth = sqliteTable(
     sessionIdHash: text('session_id_hash'),
     /** sha256 of the browser-binding cookie that started the round trip (login CSRF protection). */
     bindingHash: text('binding_hash'),
+    /** sha256 of the client's address key (IPv4, or IPv6 /64) for a sign-in: its share of the pending sign-ins. */
+    addressHash: text('address_hash'),
     details: json('details'),
     createdAt: ts('created_at').notNull().$defaultFn(now),
     expiresAt: ts('expires_at').notNull(),
   },
-  (t) => [index('preauth_expires_idx').on(t.expiresAt)],
+  (t) => [index('preauth_expires_idx').on(t.expiresAt), index('preauth_address_idx').on(t.addressHash)],
 );
 
 /** MSAL token cache blobs, AES-256-GCM sealed with AAD = partition key (read:<sidHash> / write:<sidHash>). */

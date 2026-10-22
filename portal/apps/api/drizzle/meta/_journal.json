@@ -22,6 +22,13 @@
       "when": 1792549779275,
       "tag": "0002_definitions_schema_version",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792681707825,
+      "tag": "0003_preauth_address_hash",
+      "breakpoints": true
     }
   ]
 }

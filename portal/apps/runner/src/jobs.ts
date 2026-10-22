@@ -26,6 +26,8 @@ export interface JobManagerOptions {
   pool: WorkerPool;
   scriptsDir: string;
   queueTimeoutMs: number;
+  /** Jobs that may wait for a worker at once; one more is refused (503 runner_busy). Default: unbounded. */
+  maxWaiting?: number;
   logger: RunnerLogger;
   /** Job ids are remembered this long after they finish so a replayed request cannot run a job twice. */
   recentTtlMs?: number;
@@ -33,6 +35,8 @@ export interface JobManagerOptions {
 
 export class JobManager {
   private readonly running = new Map<string, AbortController>();
+  /** Admitted jobs that haven't got a worker yet (counted from admission, so simultaneous requests can't overshoot). */
+  private waiting = 0;
   private readonly recent = new Map<string, number>();
 
   constructor(private readonly opts: JobManagerOptions) {}
@@ -54,6 +58,15 @@ export class JobManager {
         'No runner worker is available (see GET /healthz)',
       );
     }
+    // A bounded queue: past it a job is refused at once (the API retries a 503 as transient) rather than waiting
+    // behind everyone else's until it times out (2026-10-22 review).
+    if (this.opts.maxWaiting !== undefined && this.waiting >= this.opts.maxWaiting) {
+      throw new JobRejectedError(
+        503,
+        'runner_busy',
+        `Every runner worker is busy and ${this.waiting} jobs are already waiting`,
+      );
+    }
     if (job.tokens.sharepointAdmin && !job.tenant.spoTenantName) {
       throw new JobRejectedError(
         400,
@@ -63,10 +76,12 @@ export class JobManager {
     }
     const controller = new AbortController();
     this.running.set(job.jobId, controller);
+    this.waiting++;
     try {
       const script = await resolveScript(this.opts.scriptsDir, job.script.path, job.script.sha256);
       return { job, script, controller };
     } catch (error) {
+      this.waiting--;
       this.running.delete(job.jobId);
       if (error instanceof ScriptError)
         throw new JobRejectedError(error.statusCode, error.code, error.message);
@@ -85,10 +100,12 @@ export class JobManager {
     try {
       let worker;
       try {
-        worker = await this.opts.pool.acquire({
-          timeoutMs: this.opts.queueTimeoutMs,
-          signal: controller.signal,
-        });
+        worker = await this.opts.pool
+          .acquire({
+            timeoutMs: this.opts.queueTimeoutMs,
+            signal: controller.signal,
+          })
+          .finally(() => this.waiting--);
       } catch (error) {
         if (controller.signal.aborted) {
           const reason = controller.signal.reason;

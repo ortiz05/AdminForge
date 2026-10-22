@@ -86,6 +86,7 @@ export async function buildRunnerServer(opts: RunnerServerOptions): Promise<Fast
     pool,
     scriptsDir: config.scriptsDir,
     queueTimeoutMs: config.queueTimeoutMs,
+    maxWaiting: config.maxWaiting,
     logger: log,
   });
   const lock = opts.modulesLock ?? readModulesLock();

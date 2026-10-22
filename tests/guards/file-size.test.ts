@@ -17,7 +17,7 @@ const OVER_CEILING: Record<string, number> = {
   'portal/packages/ui/src/primitives/DataTable.tsx': 1344,
   'portal/packages/expressions/src/helpers.ts': 1247,
   'portal/apps/api/src/datasources/executor.ts': 1205,
-  'portal/apps/api/src/probes/checks.ts': 1170,
+  'portal/apps/api/src/probes/checks.ts': 1147,
   'portal/apps/api/src/schedules/scheduler.ts': 1121,
   'portal/apps/web/src/pages/design/sections.tsx': 1009,
   'portal/packages/expressions/src/taint.ts': 969,

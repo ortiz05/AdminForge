@@ -4,6 +4,7 @@ import type { TokenBroker } from '../auth/token-broker';
 import { NotArmed, ReauthRequired } from '../auth/types';
 import type { Config } from '../config';
 import { AppError } from '../errors';
+import { runnerSlots, type RunnerSlots } from '../execution/runner-slots';
 import { createRunnerPort } from '../runs/ports';
 import type { RunnerExec } from './executor';
 
@@ -16,7 +17,8 @@ export function liveRunner(opts: {
   url: string;
   key: string;
   broker: TokenBroker | null;
-  config: Pick<Config, 'AF_TENANT_ID' | 'AF_PRIMARY_DOMAIN' | 'AF_SPO_TENANT_NAME'>;
+  config: Pick<Config, 'AF_TENANT_ID' | 'AF_PRIMARY_DOMAIN' | 'AF_SPO_TENANT_NAME'> &
+    Partial<Pick<Config, 'RUNNER_JOBS_PER_PERSON'>>;
   fetch?: typeof fetch;
   now?: () => Date;
   log?: { warn(obj: object, msg: string): void };
@@ -39,7 +41,7 @@ export function liveRunner(opts: {
     opts.log?.warn({ err: { message: (err as Error).message } }, 'PowerShell datasources disabled');
     return undefined;
   }
-  return {
+  const exec: RunnerExec = {
     async run(identity, job, { correlationId, signal }) {
       const outputs: unknown[] = [];
       const resolved: ResolvedIdentity = {
@@ -89,9 +91,47 @@ export function liveRunner(opts: {
         if (err instanceof StepError) {
           const status =
             err.opts.status && err.opts.status >= 400 && err.opts.status < 600 ? err.opts.status : 502;
-          throw new AppError(status, err.code, err.message);
+          throw new AppError(
+            status,
+            err.code,
+            err.message,
+            status === 503
+              ? { hint: 'Every PowerShell worker is busy or starting. Try again in a minute.' }
+              : undefined,
+          );
         }
         throw err;
+      }
+    },
+  };
+  return perPersonLimit(exec, opts.config.RUNNER_JOBS_PER_PERSON ?? 3);
+}
+
+/**
+ * At most `limit` PowerShell jobs per signed-in person at once (RunnerSlots, shared with playbook steps): a datasource
+ * read beyond that is refused (429 `runner_busy_for_you`) rather than queued.
+ */
+export function perPersonLimit(
+  exec: RunnerExec,
+  limit: number,
+  slots: RunnerSlots = runnerSlots,
+): RunnerExec {
+  return {
+    async run(identity, job, opts) {
+      const who = identity.kind === 'delegated' ? identity.session.userOid : null;
+      if (!who) return exec.run(identity, job, opts);
+      const release = slots.tryTake(who, limit);
+      if (!release)
+        throw new AppError(
+          429,
+          'runner_busy_for_you',
+          `You already have ${limit} PowerShell jobs running, so AdminForge didn’t start another.`,
+          { hint: 'Wait for them to finish (or close the pages that started them), then try again.' },
+        );
+      try {
+        return await exec.run(identity, job, opts);
+      } finally {
+        release();
       }
     },
   };

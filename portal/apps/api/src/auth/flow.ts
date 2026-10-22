@@ -1,8 +1,9 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { CryptoProvider } from '@azure/msal-node';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AppContext } from '../context';
 import { AppError } from '../errors';
+import { addressKey } from '../rate-limit';
 import { randomToken, sha256Hex } from '../security/tokens';
 import { sessionCookieName, sessionCookieOptions } from './session-plugin';
 import { PREAUTH_TTL_MS, type PreauthDetails, type PreauthKind, type PreauthRecord } from './preauth-store';
@@ -26,6 +27,14 @@ export function browserBinding(ctx: AppContext, request: FastifyRequest, reply: 
 }
 
 /** Starts an authorization-code round trip: random state + nonce, PKCE pair, 10-minute single-use record. */
+/**
+ * A sign-in's address, pseudonymous: keyed with a secret of this process, so a stored value can't be turned back into
+ * an address by trying them all (pending sign-ins live ten minutes; a restart only splits one address's count).
+ */
+const ADDRESS_KEY = randomBytes(32);
+export const addressHash = (ip: string) =>
+  createHmac('sha256', ADDRESS_KEY).update(addressKey(ip)).digest('hex');
+
 export async function beginRoundTrip(
   ctx: AppContext,
   input: {
@@ -35,6 +44,8 @@ export async function beginRoundTrip(
     binding: string;
     sessionIdHash?: string | null;
     details?: PreauthDetails | null;
+    /** A sign-in's client address (`request.ip`): its share of the pending sign-ins. */
+    address?: string;
   },
 ): Promise<{ state: string; nonce: string; challenge: string }> {
   const { verifier, challenge } = await crypto.generatePkceCodes();
@@ -46,6 +57,7 @@ export async function beginRoundTrip(
     returnTo: input.returnTo,
     sessionIdHash: input.sessionIdHash ?? null,
     bindingHash: sha256Hex(input.binding),
+    addressHash: input.address ? addressHash(input.address) : null,
     details: input.details ?? null,
     expiresAt: new Date(ctx.now().getTime() + PREAUTH_TTL_MS),
   };

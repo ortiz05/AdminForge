@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { requireRole, requireSession } from '../auth/guards';
+import { hasRole, requireRole, requireSession } from '../auth/guards';
 import { auditActor, type AppContext } from '../context';
 import { AppError, parseBody } from '../errors';
 import type { SchedulesModule } from '../schedules/module';
@@ -11,7 +11,7 @@ import {
   ScheduleScaffoldRequest,
   scaffoldSchedule,
 } from '../schedules/scaffold';
-import { TimeZone } from '@adminforge/schemas';
+import { TimeZone, type PortalRole } from '@adminforge/schemas';
 import type { Caller } from '../schedules/service';
 
 /**
@@ -119,8 +119,14 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
       now: ctx.now(),
       requiresOf: async (kind, key) => {
         const def = (await ctx.definitions.resolve(kind, key).catch(() => null))?.def as
-          { requires?: { scopes?: unknown; licences?: unknown } } | undefined;
+          { requires?: { scopes?: unknown; licences?: unknown; portalRoles?: PortalRole[] } } | undefined;
         if (!def) throw new AppError(404, 'definition_not_found', `There is no published ${kind} "${key}".`);
+        // The same rule as GET /api/definitions/:kind/:key: a definition's requirements are part of its content.
+        const roles = def.requires?.portalRoles ?? [];
+        if (!roles.every((r) => hasRole(session, r)))
+          throw new AppError(403, 'forbidden', `This ${kind} needs the ${roles.join(' and ')} role.`, {
+            hint: 'Ask a portal administrator for access.',
+          });
         return copiedRequires(def.requires);
       },
     });

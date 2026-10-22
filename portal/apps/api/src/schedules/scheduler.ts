@@ -984,14 +984,14 @@ export class Scheduler {
         },
       })
       .catch(() => undefined);
+    // Every signed-in browser gets this: metadata only (the message is in the role-gated run history).
     this.o.events.publish({
       type: 'schedule.failed',
       data: {
         key: s.key,
-        title: def.title,
         scheduleRunId: run.id,
         status,
-        error: { code: error.code, message: error.message.slice(0, 500) },
+        error: { code: error.code },
         ...(retryAt ? { retryAt: retryAt.toISOString() } : {}),
       },
     });

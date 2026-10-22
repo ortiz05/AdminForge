@@ -8,22 +8,8 @@ import {
   type Schedule,
 } from '@adminforge/schemas';
 
-/** Who may see data a schedule collected with application permissions, unless its `requires.portalRoles` says otherwise. */
-export const SCHEDULED_DATA_ROLES: readonly PortalRole[] = ['Portal.Operator'];
+export { creatorFilesAccess, SCHEDULED_DATA_ROLES } from './run-access';
 
-/**
- * Who opens the files of a schedule that runs with its creator's own access (ADR-014): the creator, or a Portal Admin
- * (`admin`, audited); anyone else is `denied`. `n/a` for other schedules (their roles decide).
- */
-export function creatorFilesAccess(
-  row: Pick<ScheduleRow, 'definition' | 'createdBy'>,
-  session: SessionRecord,
-): 'n/a' | 'creator' | 'admin' | 'denied' {
-  const identity = row.definition.identity;
-  if (!identity || identity === 'automation' || !('user' in identity)) return 'n/a';
-  if (row.createdBy && row.createdBy === session.userOid) return 'creator';
-  return hasRole(session, 'Portal.Admin') ? 'admin' : 'denied';
-}
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { hasRole, requireRole } from '../auth/guards';
 import type { SessionRecord } from '../auth/session-store';
@@ -39,6 +25,15 @@ import { maskRedacted, mayOpen } from '../reports/catalog';
 import type { ScheduleEvents } from './events';
 import type { ScheduleGrantRow, ScheduleGrantStore } from './grants';
 import type { ScheduleStore } from './store';
+import {
+  creatorFilesAccess,
+  fileOnlyReason,
+  restrictedRunError,
+  runRestriction,
+  scheduleDataRoles,
+  schedulerWritten,
+  type RunRestriction,
+} from './run-access';
 import { contentSchedules, contentSignature, syncSchedules } from './sync';
 import type {
   ApprovalStatus,
@@ -126,18 +121,6 @@ export interface ScheduleRunItem {
   error?: { code: string; message: string; hint?: string };
   /** Why a run didn't happen (skipped runs), or sent nothing (Run now while the schedule was disabled). */
   reason?: string;
-}
-
-/** The history line of a file-only run (F-10), in the present while it is waiting or running. */
-function fileOnlyReason(r: Pick<ScheduleRunRow, 'status'>, report: boolean): string {
-  const now = r.status === 'queued' || r.status === 'running';
-  if (report)
-    return now
-      ? 'The schedule is disabled, so this run only writes the file: it sends no email, Teams message or notification.'
-      : 'The schedule was disabled, so this run only wrote the file: it sent no email, Teams message or notification.';
-  return now
-    ? 'The schedule is disabled, so this run sends no email, Teams message or notification.'
-    : 'The schedule was disabled, so this run sent no email, Teams message or notification.';
 }
 
 /** Run now on a disabled schedule (F-10): what the answer says. */
@@ -633,7 +616,7 @@ export class ScheduleService {
   async runs(
     key: string,
     opts: { cursor?: string; limit: number },
-    session?: SessionRecord,
+    session: SessionRecord,
   ): Promise<{ items: ScheduleRunItem[]; cursor?: string }> {
     const { row } = await this.row(key);
     const rows = await this.deps.store.listRuns(row.id, {
@@ -642,15 +625,24 @@ export class ScheduleService {
     });
     const page = rows.slice(0, opts.limit);
     // A schedule that uses its creator's access: only they (or a Portal Admin) get links to its files.
-    const files = !session || creatorFilesAccess(row, session) !== 'denied';
+    const files = creatorFilesAccess(row, session) !== 'denied';
+    // Error details and run ids belong to what the run collected: for the roles that may see the schedule's data.
+    const roles = await scheduleDataRoles(this.deps.definitions, row.definition);
+    const restriction = runRestriction(session, files, roles);
     const report = row.definition.job.kind === 'report';
-    const items = await Promise.all(page.map((r) => this.runItem(r, files, report)));
+    const items = await Promise.all(page.map((r) => this.runItem(r, files, report, restriction)));
     return { items, ...(rows.length > opts.limit ? { cursor: encodeRunCursor(page.at(-1)!) } : {}) };
   }
 
-  private async runItem(r: ScheduleRunRow, files = true, report = false): Promise<ScheduleRunItem> {
+  private async runItem(
+    r: ScheduleRunRow,
+    files = true,
+    report = false,
+    restriction: RunRestriction | null = null,
+  ): Promise<ScheduleRunItem> {
     let artifact: ScheduleRunItem['artifact'];
-    if (r.artifactPath && files) {
+    // No link a viewer can't open (the download asks for the same roles).
+    if (r.artifactPath && files && !restriction) {
       const listed = (
         r.result?.artifacts as Array<{ path?: string; name?: string; size?: number }> | undefined
       )?.find((a) => a.path === r.artifactPath);
@@ -666,9 +658,14 @@ export class ScheduleService {
       status: r.status,
       startedAt: r.startedAt.toISOString(),
       endedAt: iso(r.endedAt),
-      ...(r.runId ? { runId: r.runId } : {}),
+      ...(r.runId && !restriction ? { runId: r.runId } : {}),
       ...(artifact ? { artifact } : {}),
-      ...(r.error ? { error: r.error } : {}),
+      ...(r.error
+        ? {
+            error:
+              restriction && !schedulerWritten(r) ? restrictedRunError(r.error.code, restriction) : r.error,
+          }
+        : {}),
       // Why a run didn't happen (overlap, paused, deleted, needs sign-in): written by the scheduler, never tenant data.
       ...(r.status === 'skipped' && typeof r.result?.reason === 'string' ? { reason: r.result.reason } : {}),
       // Run now while the schedule was disabled: the history says why nobody heard about it.
@@ -709,14 +706,8 @@ export class ScheduleService {
       throw new AppError(403, 'forbidden', 'Only the person who created this schedule can open its files.', {
         hint: 'It runs with their own access, so its files hold what they can see. Ask them for the file, or ask a portal administrator.',
       });
-    for (const role of schedule?.requires?.portalRoles ?? SCHEDULED_DATA_ROLES)
+    for (const role of await scheduleDataRoles(this.deps.definitions, schedule))
       requireRole(session, role, action);
-    if (schedule?.job.kind === 'report') {
-      const ref = schedule.job.ref;
-      const report = (await this.deps.definitions.list('report')).find((d) => d.key === ref)?.def as
-        { requires?: { portalRoles?: PortalRole[] } } | undefined;
-      for (const role of report?.requires?.portalRoles ?? []) requireRole(session, role, action);
-    }
     return creator === 'admin';
   }
 

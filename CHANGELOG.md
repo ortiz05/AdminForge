@@ -30,6 +30,18 @@ All notable changes to AdminForge are recorded here. The format follows
   an app-only identity on the write opt-in alone (`Exchange.ManageAsApp` excepted: it reaches nothing until an Exchange
   role is assigned to the app, and provisioning assigns none).
 
+### Scheduled-run details for the roles that may see them (2026-10-22)
+
+- **Schedule run history** (`GET /api/schedules/:key/runs`) gave every Portal.Reader a failed run's error message,
+  hint and run id, though the run collected its data with application permissions and the run itself and its files
+  are for the schedule's roles (default Portal.Operator) plus its report's or playbook's own. Others now see the
+  status and the error code, with a message naming the roles that see more, and no link to a file they can't open.
+  The scheduler's own messages (a missed or interrupted run, a timeout, why a run was skipped) stay for everyone.
+- **`schedule.failed`**, sent to every signed-in browser whatever its roles, carried the error message (up to 500
+  characters) and the schedule's title; it now carries the error code only. Nothing in the portal read either field.
+- **The schedule editor's scaffold** copied the requirements of any report or playbook a Reader named, including ones
+  whose `requires.portalRoles` they don't hold; it now refuses them (`forbidden`), as the definitions route does.
+
 ### SharePoint sharing at scale (2026-10-22)
 
 - **SharePoint sharing at tens of thousands of sites** (still live, with the engineer's own delegated sign-in; no

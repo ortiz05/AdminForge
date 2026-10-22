@@ -120,41 +120,21 @@ Generic: "how many items this row holds at a path", natively — `$count(members
 - Docs: `docs/content-recipes.md` › Labelling, capping and joining.
 - Commit: `feat(expressions): $withItemCount counts the items each row holds at a path, natively`
 
-## Task 2: Exports follow the table the view shows
+## Task 2: Exports follow the table the view shows — done
 
-Today the export reads `export.data`, or the first table **in the definition**, whatever the `when` says
-(`portal/apps/api/src/reports/export.ts:105`, `portal/apps/web/src/renderer/PageView.tsx:360`). So in the Users MFA
-view, the export already holds the hidden users table. Make the default the first table **whose `when` holds** for the
-current params, in the browser and on the server, so a page can leave `export.data` out.
+Built differently from the first draft (which evaluated each table's `when` — the browser's `when` sees datasource
+values, the server only params, so the two could disagree): **`export.data` may be a `${ … }` template over params**
+that names the path to export, rendered alike by the server (`planExport`) and the browser (`useTemplate` in
+`PageView`), and the export takes its columns from `exportTable` (`portal/packages/schemas/src/path.ts`, shared): the
+table bound to that path, else the table bound to a `source: static` view of it (the "capped table that exports every
+row" recipe — before, that case fell back to the first table's columns). `validate` checks each quoted path's
+datasource (`exportDataSources`, `page.ts`).
 
-**Files:**
-
-- Modify: `portal/apps/api/src/reports/export.ts` (`planExport`: filter `tables(page)` by each table's `when`, evaluated
-  with the same scope the datasource executor gives `when` — find it with
-  `grep -rn "\.when" portal/apps/api/src/datasources | head`)
-- Modify: `portal/apps/web/src/renderer/PageView.tsx` (`exportTable`: choose from the active blocks — `activeBlocks(def, …)`
-  in `renderer/page-model.ts` — when `def.export.data` is unset)
-- Modify: `portal/packages/schemas/src/page.ts:113` (doc comment: "default: the first table the params show")
-- Test: `tests/api/export-follows-view.test.ts`, `tests/unit/web/export-table.test.ts`
-- Docs: `docs/widgets.md` (export section), `.claude/skills/adding-a-page-or-report/SKILL.md` (wherever it says how the
-  export picks its data)
-
-**Step 1: Failing tests.**
-
-- API: a page definition with two tables (`a` with `when: ${ params.v != 'b' }`, `b` with `when: ${ params.v = 'b' }`)
-  and an export without `data`. `planExport(page, { v: 'b' }, 'csv', …)` exports `b`'s data and columns; with `{}` it
-  exports `a`.
-- Web: the same definition, `v = 'b'` → `exportTable` is `b`.
-- With `export.data` set, nothing changes (existing export tests keep passing).
-
-**Step 2:** run both — expect FAIL. **Step 3:** implement. **Step 4:** run — expect PASS, then the `api` and
-`component` projects in full.
-
-**Step 5:** in `identity.users`, drop `export.data: users.value` (the MFA view now exports the registrations it shows).
-
-**Step 6: Commit** — `feat(api,web): an export follows the table the selected view shows`
-
----
+- Tests: `tests/api/export-follows-view.test.ts` (end to end, both views; validation), `tests/unit/web/export-table.test.ts`.
+- Docs: `docs/content-recipes.md` (Views that switch tables), `adding-a-page-or-report` skill, the schema comment.
+- The Groups and Users pages use it in Tasks 4 and 6 (`export.data` templates naming `memberMatches.rows` /
+  `inactiveMatches.rows` / `registrations.value`).
+- Commit: `feat(api,web): an export can follow the table the selected view shows`
 
 ## Task 3: Groups — the views Graph filters
 

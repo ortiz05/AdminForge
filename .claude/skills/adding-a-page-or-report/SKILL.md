@@ -32,7 +32,8 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
    - Filter and count **at the source** (`$filter`, `$select`, `$top`, `$count`, KQL `where` / `summarize`), not in
      `transform`: transforms run on the API thread with a 250 ms budget. Tenant-wide questions that would need many
      Graph calls → KQL. Lists that can reach thousands of rows get no per-row transform and their numbers from a
-     second query (`docs/content-recipes.md` › Big lists, exports and partial data).
+     second query (`docs/content-recipes.md` › Big lists, exports and partial data). A view that switches to another
+     table names the path it exports in `export.data` as a template over params (same section).
    - **User data** goes through `$encode()` / `$odata()` / `$odataSearch()` / `$kql()` / `$guid()`, placed as
      `docs/content-recipes.md` › Quoting user data shows; validation follows it through wrappers, lambdas and
      variables. Advanced filters: declare `filters.advanced.fields` and use `${ advanced }`.

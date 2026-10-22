@@ -45,23 +45,27 @@ What this design does not do, by design: more than one replica, autoscaling, rol
 
 ### CPU architecture
 
-**linux/amd64 only, today.** The app image could also be built for arm64; the runner image can't:
+**linux/amd64 only, today.** Both images' bases also exist for arm64; neither image has been built or tried there:
 
 | Image                                    | Base (pinned by digest)                         | The base's platforms                                        | So                                                                                                                                                                                                                                                                      |
 | ---------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | app (`Dockerfile`)                       | `node:26.11.1-bookworm-slim`                    | amd64, arm64/v8, ppc64le (a multi-platform index)           | better-sqlite3 13.0.3 ships prebuilt `linux-x64` and `linux-arm64` binaries (glibc ≥ 2.34; bookworm has 2.36) and the lockfile has the arm64 builds of the build tools (rollup, rolldown, lightningcss, Tailwind's oxide): it builds for arm64 as it is — not tried yet |
-| runner (`portal/apps/runner/Dockerfile`) | `mcr.microsoft.com/powershell:7.5-ubuntu-24.04` | **amd64 only** (a single image, not a multi-platform index) | amd64 only. MCR's arm64 PowerShell 7.5 images are separate tags on other distributions (`7.5-azurelinux-3.0-arm64`, `7.5-mariner-2.0-arm64`)                                                                                                                            |
+| runner (`portal/apps/runner/Dockerfile`) | `ubuntu:24.04` and the PowerShell 7.6.7 archive | amd64, arm64/v8 and four more; release archives: x64, arm64 | amd64: the Dockerfile installs the `linux-x64` archive and stops, saying so, on a machine of another architecture                                                                                                                                                       |
 
 `build-images.sh` runs `docker build`, which builds for the platform of the machine it runs on: build on an amd64
 machine. The Deployment selects `kubernetes.io/arch: amd64`, so on a cluster with arm64 nodes as well the pod only
-lands on amd64 ones. **The PowerShell tag was last rebuilt on 2025-01-30** (PowerShell 7.5.0 with the .NET runtime
-and Ubuntu packages of that day) and the image installs no updates; because the tag isn't rebuilt, no newer digest
-will ever be offered for it. The runner holds engineers' forwarded Exchange and SharePoint tokens, so moving it to a
-maintained base — the release archive below, on a pinned `ubuntu:24.04` — comes before go-live (`docs/backlog.md`).
+lands on amd64 ones.
 
-What arm64 would take (size M, plus a test on arm64 hardware): a runner base that exists for both
-platforms — PowerShell's release archive (`powershell-7.5.<n>-linux-<arch>.tar.gz`) installed on `ubuntu:24.04` or on
-the node base, which also brings current PowerShell patches — instead of the MCR tag; a check that the five pinned
+The runner's base is `ubuntu:24.04` pinned by digest, with the Ubuntu updates published by the day of the build
+installed on top (`build-images.sh` passes the day, so a build cache doesn't keep older ones), and PowerShell 7.6.7 —
+the 7.6 LTS line — from Microsoft's release archive, checked against the SHA-256 the release publishes before it is
+unpacked (`tests/guards/runner-powershell-download.test.ts`). How it moves: Dependabot proposes each new
+`ubuntu:24.04` digest (and Node tag) weekly; the PowerShell version is a reviewed bump of the version and hash in the
+Dockerfile (`portal/apps/runner/README.md` → Container image). An image keeps the updates of the day it was built:
+rebuilding and deploying it brings the ones published since.
+
+What arm64 would take (size M, plus a test on arm64 hardware): the runner's Dockerfile choosing the `linux-arm64`
+archive and its own SHA-256 (the same release's `hashes.sha256`) by `TARGETARCH`; a check that the five pinned
 modules (`portal/apps/runner/modules.lock.json`) load under arm64 PowerShell (they are .NET modules; not checked);
 `docker buildx build --platform linux/amd64,linux/arm64` in `build-images.sh` (emulated or on an arm64 builder) so
 each tag is a multi-platform index — the app build already keeps the right better-sqlite3 binary per platform; then
@@ -348,11 +352,12 @@ commit), `remote` (origin's URL without credentials) and `contentDir`; `publish`
 the pushed digests in your overlay.
 
 The images the builds start from are pinned by digest too (`name:tag@sha256:…` in each `FROM`, and the `# syntax=`
-frontend; `tests/guards/image-digests.test.ts`), so rebuilding a commit gets the same bases. To move to a newer base,
-change tag and digest together — Dependabot's docker ecosystem does that for the directories `.github/dependabot.yml`
-watches, or by hand with the index digest from `docker buildx imagetools inspect <image>:<tag>` — and rebuild. A pin
-only moves when someone moves it: a tag that is no longer rebuilt (the runner's, CPU architecture above) never offers
-a newer digest.
+frontend; `tests/guards/image-digests.test.ts`), so rebuilding a commit gets the same bases (the runner then adds the
+Ubuntu updates of the build's day, and the PowerShell archive its Dockerfile pins by version and SHA-256). To move to
+a newer base, change tag and digest together — Dependabot's docker ecosystem does that for the directories
+`.github/dependabot.yml` watches, or by hand with the index digest from `docker buildx imagetools inspect <image>:<tag>`
+— and rebuild. A pin only moves when someone moves it, and a tag that is no longer rebuilt never offers a newer digest:
+the reason the runner left MCR's PowerShell image, whose `7.5-ubuntu-24.04` was last rebuilt on 2025-01-30.
 
 ## 2. Secrets
 

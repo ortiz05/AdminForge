@@ -528,13 +528,16 @@ on a PersistentVolume (ADR-016).
   (`tests/guards/networkpolicy-private-egress.test.ts`). The loader pod
   gets no network at all.
 - **Images** start from bases pinned by digest (`name:tag@sha256:…`, and the `# syntax=` frontend;
-  `tests/guards/image-digests.test.ts`). A pin moves only by a reviewed commit.
+  `tests/guards/image-digests.test.ts`). A pin moves only by a reviewed commit. The runner's build also installs
+  Ubuntu's updates of its day (signed by Canonical; outside git and any waiting period, so that a rebuild brings
+  security fixes) and PowerShell from the release archive its Dockerfile pins by version and SHA-256, checked before it
+  is unpacked (`tests/guards/runner-powershell-download.test.ts`).
 - **Dependencies** wait seven days: pnpm resolves only versions published at least seven days ago
   (`minimumReleaseAge: 10080`, strict, versions without a publish time refused), and every install — CI and both image
   builds — runs from the frozen lockfile under that setting. The package manager above the lockfile doesn't come
   through that floor, so it is pinned by hash instead: pnpm's exact version with its sha512 in `packageManager`
   (Corepack refuses a download that doesn't match), and Corepack itself — Node 25 and later no longer bundle it — at
-  an exact version whose registry tarball the app image checks against a recorded sha512 and installs without
+  an exact version whose registry tarball both images check against a recorded sha512 and install without
   scripts (`tests/unit/tooling/package-manager-pin.test.ts`); either moves by a reviewed commit of version and hash,
   once the version is seven days old. Dependabot waits the same seven days (`cooldown`) on npm, GitHub Actions and
   both images' base images. Its security updates skip the cooldown but not pnpm's floor, so an urgent fix adds one
@@ -619,7 +622,7 @@ README.md` → Backups). Every `db backup` is itself in the audit log: a `databa
 | Someone with a copy of the volume rewrites the audit log          | With `AUDIT_CHAIN_KEY` and `AUDIT_CHAIN_KEYED_SINCE` pinning the first cut-over, changing any event or removing the keyed part fails verification; without the pin the whole log can be stripped of its cut-over and re-hashed unkeyed; removing the newest events shows only against the shipped checkpoints                                 |
 | Hostile tenant text takes a page down or a link leaves the portal | Linear text and Markdown reduction, range-checked character references, a per-block error boundary; one link rule (`safeUrl`) for every link and navigation from data                                                                                                                                                                         |
 | An Operator reads what someone else's run found                   | Someone else's delegated run is metadata only (run page, stream, approvals inbox) unless you are its approver, the person a manual step waits for or a Portal Admin                                                                                                                                                                           |
-| A compromised dependency release reaches the cluster              | Seven-day floor in pnpm and Dependabot; frozen lockfile on every install; `pnpm audit` in CI                                                                                                                                                                                                                                                  |
+| A compromised dependency release reaches the cluster              | Seven-day floor in pnpm and Dependabot; frozen lockfile on every install; `pnpm audit` in CI; the runner's PowerShell checked against its release's SHA-256                                                                                                                                                                                   |
 
 ## Known gaps and accepted risks
 
@@ -711,8 +714,9 @@ Tracked in `docs/backlog.md`:
 - Not yet verified on a real cluster: that its CNI enforces the NetworkPolicies, Pod Security admission of the
   manifests, the storage class's behaviour (zonal disks), the Ingress's handling of Server-Sent Events, and
   `preflight.sh` itself (docs/backlog.md).
-- **The runner's base image is stale.** `mcr.microsoft.com/powershell:7.5-ubuntu-24.04` was last rebuilt on
-  2025-01-30 and will offer no newer digest, and the runner holds engineers' forwarded Exchange and SharePoint tokens:
-  move it to a maintained base before go-live (`portal/deploy/kubernetes/README.md`).
+- **The runner is as current as its last build.** Its PowerShell, and the .NET runtime inside it, moves only by a
+  reviewed bump of the version and hash in `portal/apps/runner/Dockerfile` (Dependabot doesn't see it, and nothing yet
+  says a newer 7.6.x exists: `docs/backlog.md`), and its Ubuntu packages are those of the day it was built: rebuild and
+  deploy it monthly and after a PowerShell or .NET security release (`docs/operations.md` → Upgrade).
 - Egress is filtered by address, not by name: the pod may reach any public address on 443. Filtering by host name
   needs a firewall in front of the cluster.

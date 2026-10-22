@@ -483,6 +483,13 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
   (`tests/guards/networkpolicy-private-egress.test.ts`), and the loader pod gets no network at all.
 - **Images pinned by digest** (S-37): both images' bases and the Dockerfile frontend name `image:tag@sha256:…`
   (`tests/guards/image-digests.test.ts`).
+- **The runner on a maintained base**: its image starts from `ubuntu:24.04` (pinned by digest) with the Ubuntu updates
+  of the build's day, and installs PowerShell 7.6.7 (the 7.6 LTS line; was 7.5.0) from Microsoft's release archive,
+  checked against the release's SHA-256 before it is unpacked (`tests/guards/runner-powershell-download.test.ts`); its
+  build stage moves to Node 26. MCR's `powershell:7.5-ubuntu-24.04`, last rebuilt on 2025-01-30, had missed about 21
+  months of Ubuntu and .NET security fixes in the container that holds engineers' forwarded Exchange and SharePoint
+  tokens. Dependabot proposes each new `ubuntu:24.04` digest; PowerShell is a reviewed bump
+  (`portal/apps/runner/README.md` → Container image).
 
 ### Before the platform review
 

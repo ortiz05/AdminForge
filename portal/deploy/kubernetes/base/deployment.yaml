@@ -26,7 +26,7 @@ spec:
       enableServiceLinks: false
       # Long enough for running playbook steps to reach a checkpoint (the API gives them 10 s, then 5 s more).
       terminationGracePeriodSeconds: 60
-      # The runner image is built for linux/amd64 only (its PowerShell base is published for amd64 only; README.md →
+      # The runner image is built for linux/amd64 only (it installs PowerShell's linux-x64 archive; README.md →
       # Requirements › CPU architecture): on a cluster with arm64 nodes as well, never schedule the pod there.
       nodeSelector:
         kubernetes.io/arch: amd64

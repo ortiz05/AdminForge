@@ -42,6 +42,22 @@ All notable changes to AdminForge are recorded here. The format follows
 - **The schedule editor's scaffold** copied the requirements of any report or playbook a Reader named, including ones
   whose `requires.portalRoles` they don't hold; it now refuses them (`forbidden`), as the definitions route does.
 
+### Protected-object guard: keys and path spellings (2026-10-22)
+
+- A declared Graph write addressing a group, app, service principal or directory object by anything but its id is
+  refused (`object_not_by_id`): an alternate key (`groups(uniqueName='sg-adminforge-…')`, the key provisioning sets
+  on AdminForge's own groups and apps), also after a type cast or in a segment of its own, a GUID without hyphens, or
+  any other segment after the collection. The guard matches ids, so such a write could change AdminForge's own access
+  unnoticed. `appId='{id}'` and `id='{id}'` keys still work. An id written without hyphens, which Graph accepts, is
+  matched as that id in a request body. Every form was checked live (`docs/licensing/findings/2026-10-22-…`).
+- While the protected set can't be read, a write to `/groups//{id}/members`, `/groups/{id}/microsoft.graph.group/
+members` or `/groupſ/{id}/members` was not treated as the sensitive write it is: paths are now read segment by
+  segment, decoded and folded as .NET does, and every write under `/directoryObjects` is sensitive.
+- `$batch` spelled `/$Batch`, `/$batch/` or `/%24batch` was sent as one opaque write; those are now normalised,
+  checked request by request and sent as `/$batch`, and anything else that starts like `$batch` (`/$batch;x`), or a
+  batch inside a batch, is refused (`execution/batch.ts`, moved out of `outbound.ts`; `isBatchPath` in
+  `@adminforge/schemas`, shared with the engine).
+
 ### SharePoint sharing at scale (2026-10-22)
 
 - **SharePoint sharing at tens of thousands of sites** (still live, with the engineer's own delegated sign-in; no

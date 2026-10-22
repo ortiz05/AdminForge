@@ -127,7 +127,7 @@ export interface UsersWriteProblem {
 }
 
 /** `/users/` or `/users(` (optionally `/users('`), with what follows in the same text. */
-const USERS_AT = /(?:^|\/)users(\/|\('?)/gi;
+const USERS_AT = /(?:^|\/)users(\/|\('?)/giu;
 const SAFE_METHODS = new Set(['GET', 'HEAD']);
 
 interface AstNode {

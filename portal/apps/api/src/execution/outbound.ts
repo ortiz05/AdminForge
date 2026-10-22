@@ -2,7 +2,6 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 import {
   ApiError,
   buildUrl,
-  cleanPath,
   createArmClient,
   createFunctionClient,
   createGraphClient,
@@ -12,7 +11,6 @@ import {
   describePath,
   evaluate,
   hasControlChars,
-  isForbiddenHeader,
   LOG_ANALYTICS_BASE_URL,
   RESOURCE_GRAPH_API_VERSION,
   RESOURCE_GRAPH_PATH,
@@ -38,6 +36,7 @@ import {
   type TokenBroker,
 } from '../auth/token-broker';
 import { NotArmed, partitionKey, ReauthRequired, type AuthClient } from '../auth/types';
+import { batchPath, normaliseBatch, startsLikeBatch, type BatchItem } from './batch';
 import type { Config } from '../config';
 import { AppError, toAppError } from '../errors';
 import { writesPausedError } from './emergency';
@@ -789,105 +788,6 @@ class Limiter {
   }
 }
 
-// ── $batch normalisation ────────────────────────────────────────────────────
-
-interface BatchItem {
-  id: string;
-  method?: string;
-  path: string;
-  query?: Record<string, string | number | boolean | undefined | null>;
-  headers?: Record<string, string>;
-  body?: unknown;
-  beta?: boolean;
-}
-
-/**
- * `$batch` bodies may use Graph's wire format (`url`) or AdminForge's request spec (`path` + `query`); both become
- * the wire format for the policy check and BatchItems for the (auto-chunked) connector call.
- */
-function normaliseBatch(
-  body: unknown,
-  beta: boolean | undefined,
-): { wire: { requests: Array<Record<string, unknown>> }; items: BatchItem[] } {
-  const requests = (body as { requests?: unknown } | undefined)?.requests;
-  if (!Array.isArray(requests) || requests.length === 0)
-    throw new AppError(400, 'invalid_request', '$batch needs a non-empty requests array.');
-  const items: BatchItem[] = requests.map((raw, i) => {
-    const r = raw as Record<string, unknown>;
-    const id = typeof r.id === 'string' && r.id ? r.id : String(i + 1);
-    const method = typeof r.method === 'string' ? r.method.toUpperCase() : 'GET';
-    const headers = r.headers as Record<string, string> | undefined;
-    // The headers AdminForge owns (S-02) can't be set on a sub-request either: a raw `$batch` body bypasses the
-    // datasource's and the engine's own checks.
-    if (headers && typeof headers === 'object' && Object.keys(headers).some(isForbiddenHeader))
-      throw new AppError(
-        400,
-        'invalid_request',
-        `$batch request ${describePath(id)} sets a request header AdminForge always sets itself.`,
-        {
-          hint: 'For the content author: remove the header from the request and publish the definition again.',
-        },
-      );
-    const itemBeta = typeof r.beta === 'boolean' ? r.beta : beta;
-    // Checked before parsing: the URL parser would silently drop control characters and resolve `..` segments.
-    const target = typeof r.url === 'string' ? r.url : typeof r.path === 'string' ? r.path : undefined;
-    if (
-      target !== undefined &&
-      (hasControlChars(target) || cleanPath(target.startsWith('/') ? target : `/${target}`) === undefined)
-    )
-      throw new AppError(
-        400,
-        'invalid_request',
-        `$batch request ${describePath(id)} has a path that isn't a clean service path (${describePath(target)}).`,
-      );
-    if (typeof r.url === 'string') {
-      const u = new URL(`https://graph.invalid${r.url.startsWith('/') ? '' : '/'}${r.url}`);
-      const query: Record<string, string> = {};
-      for (const [k, v] of u.searchParams) query[k] = v;
-      return {
-        id,
-        method,
-        path: u.pathname.replace(/^\/(v1\.0|beta)(?=\/)/, ''),
-        query,
-        headers,
-        body: r.body,
-        beta: itemBeta,
-      };
-    }
-    if (typeof r.path !== 'string')
-      throw new AppError(400, 'invalid_request', `$batch request ${id} needs a url or a path.`);
-    return {
-      id,
-      method,
-      path: r.path,
-      query: r.query as BatchItem['query'],
-      headers,
-      body: r.body,
-      beta: itemBeta,
-    };
-  });
-  if (new Set(items.map((i) => i.id)).size !== items.length)
-    throw new AppError(400, 'invalid_request', '$batch request ids must be unique.');
-  const wire = {
-    requests: items.map((i) => {
-      let url: string;
-      try {
-        url = buildUrl('', { path: i.path, query: i.query }).replace(/^\/(v1\.0|beta)/, '');
-      } catch {
-        url = i.path;
-      }
-      return {
-        id: i.id,
-        method: i.method ?? 'GET',
-        url,
-        ...(i.headers ? { headers: i.headers } : {}),
-        ...(i.body !== undefined ? { body: i.body } : {}),
-      };
-    }),
-  };
-  return { wire, items };
-}
-
 // ── What is actually sent ───────────────────────────────────────────────────
 
 /**
@@ -1117,10 +1017,9 @@ export class Outbound implements OutboundExecutor {
       fn = await this.resolveFunction(call);
       method = fn.method;
       path = fn.path;
-    } else if (service === 'graph' && method === 'POST' && path === '/$batch') {
-      const n = normaliseBatch(call.body, call.beta);
-      body = n.wire;
-      batch = n.items;
+    } else if (service === 'graph' && startsLikeBatch(path)) {
+      path = batchPath(path); // `/$batch` (any spelling), checked request by request; anything else is refused
+      if (method === 'POST') ({ wire: body, items: batch } = normaliseBatch(call.body, call.beta));
     }
 
     // Policy (ADR-003). `declaredRead` for functions comes from the published connection, never from the caller.

@@ -34,8 +34,8 @@ async function view(
   ds: Record<string, unknown>,
 ): Promise<Def> {
   const d = PAGE.datasources[name];
-  const value = await renderString(d.data, scope(params, { ds }));
-  return renderString(d.transform, scope(params, { value }));
+  const value = typeof d.data === 'string' ? await renderString(d.data, scope(params, { ds })) : d.data;
+  return renderString(d.transform, scope(params, { value, ds }));
 }
 
 let n = 0;

@@ -44,8 +44,7 @@ const inactive = {
 async function matches(params: Record<string, unknown>): Promise<Def> {
   const p = { ...DEFAULTS, activity: 'Inactive90', ...params };
   const ds = PAGE.datasources.inactiveMatches;
-  const value = await renderString(ds.data, { now: '2026-10-22T12:00:00Z', params: p, ds: { inactive } });
-  return atScale(ds.transform, { params: p, value });
+  return atScale(ds.transform, { params: p, value: {}, ds: { inactive } });
 }
 
 describe('identity.users inactivity views at 50,000 accounts', () => {
@@ -72,7 +71,8 @@ describe('identity.users inactivity views at 50,000 accounts', () => {
     const all = await matches({});
     const list = await atScale(PAGE.datasources.userList.transform, {
       params: { ...DEFAULTS, activity: 'Inactive90' },
-      value: all,
+      value: {},
+      ds: { inactiveMatches: all },
     });
     expect(list).toMatchObject({ matched: USERS, listCapped: true });
     expect(list.rows).toHaveLength(10_000);

@@ -42,12 +42,13 @@ export function splitDataRef(ref: string): { root: string; rest: string } {
 /**
  * The table an export takes its columns from (the browser sends that table's visible columns): without `export.data`,
  * the first table; else the table bound to `ref` — the path `export.data` names, rendered for the current params — or,
- * when no table is, the one bound to a `source: static` view of that datasource (`data: ${ ds.<name> }`: a table capped
- * for the browser whose export has every row, docs/content-recipes.md). None while `ref` isn't a path.
+ * when no table is, the one bound to a `source: static` view of that datasource (its `data` or `transform` reads
+ * `ds.<name>`: a table capped for the browser whose export has every row, docs/content-recipes.md). None while `ref`
+ * isn't a path.
  */
 export function exportTable<T extends { widget?: unknown; data?: unknown }>(
   blocks: readonly T[],
-  datasources: Record<string, { source?: unknown; data?: unknown }> | undefined,
+  datasources: Record<string, { source?: unknown; data?: unknown; transform?: unknown }> | undefined,
   data: string | undefined,
   ref: unknown,
 ): T | undefined {
@@ -62,6 +63,7 @@ export function exportTable<T extends { widget?: unknown; data?: unknown }>(
   return tables.find((t) => {
     if (typeof t.data !== 'string') return false;
     const view = datasources?.[splitDataRef(t.data).root];
-    return view?.source === 'static' && typeof view.data === 'string' && readsRoot.test(view.data);
+    if (view?.source !== 'static') return false;
+    return [view.data, view.transform].some((s) => typeof s === 'string' && readsRoot.test(s));
   });
 }

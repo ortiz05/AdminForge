@@ -202,6 +202,15 @@ datasources:
     paging: all
     maxItems: 50000
     cache: { ttl: 900 }
+    # Each group's member count, natively, in the pass that drops the expanded members (most of the ~90 MB at 50,000
+    # groups), keeping only the groups under 5 members — both member views are subsets, and every value a result holds
+    # is copied once more on the way out. Doesn't read params: the cached read serves every facet.
+    transform: >-
+      ${ {
+        "rows": $applyAdvanced($withItemCount(value.value, 'members', 'memberCount', true),
+          { "join": "and", "clauses": [{ "path": "memberCount", "type": "number", "op": "lt", "value": 5 }] }),
+        "truncated": value.truncated = true
+      } }
   # The owner views over the member read: the groups Graph counts no owner (or one) for, as ids.
   ownerIds:
     source: graph
@@ -223,12 +232,12 @@ datasources:
   memberMatches:
     source: static
     when: ${ params.members in ['None', 'UnderFive'] }
-    data: >-
-      ${ { "rows": ds.everyGroup.value, "owners": $append([], ds.ownerIds.value.id),
-           "partial": ds.everyGroup.truncated = true or ds.ownerIds.truncated = true } }
+    # Reads ds.everyGroup in the transform: through `data` the rows would be copied once more.
+    data: {}
     transform: >-
       ${ (
         $p := params;
+        $owners := $append([], ds.ownerIds.value.id);
         $c := function($path, $type, $op, $v) { { "path": $path, "type": $type, "op": $op, "value": $v } };
         $f := function($rows, $cl) { $applyAdvanced($rows, { "join": "and", "clauses": $cl }) };
         $unified := $c('groupTypes', 'string', 'eq', 'Unified');
@@ -260,10 +269,10 @@ datasources:
           $p.lifecycle = 'Expiring' ? $c('expirationDateTime', 'date', 'le', $daysAgo(-30)),
           $p.lifecycle = 'NotRenewed' ? $unified,
           $p.lifecycle = 'NotRenewed' ? $c('renewedDateTime', 'date', 'le', $daysAgo(365)),
-          $p.owners in ['None', 'One'] ? $c('id', 'guid', 'in', value.owners),
+          $p.owners in ['None', 'One'] ? $c('id', 'guid', 'in', $owners),
           $p.q ? $c('displayName', 'string', 'containsAny', [$substring($p.q, 0, 256)])
         ];
-        $matched := $f($withItemCount(value.rows, 'members', 'memberCount'), $clauses);
+        $matched := $f(ds.everyGroup.rows, $clauses);
         $kinds := $append($append($append(
           $withFields($f($matched, [$unified]), { "kind": "Microsoft 365" }),
           $withFields($f($matched, [$notUnified, $security, $mail]), { "kind": "Mail-enabled security" })),
@@ -276,16 +285,19 @@ datasources:
           "rows": $append(
             $withFields($f($byMembership, [$synced]), { "sourceLabel": "Synced" }),
             $withFields($f($byMembership, [$cloud]), { "sourceLabel": "Cloud" })),
-          "partial": value.partial = true
+          "partial": ds.everyGroup.truncated = true or ds.ownerIds.truncated = true
         }
       ) }
   # What the browser gets in a member view: the first 10,000 matching groups (the export has every one).
   groupList:
     source: static
     when: ${ params.members in ['None', 'UnderFive'] }
-    data: ${ ds.memberMatches }
+    data: {}
     transform: >-
-      ${ $merge([value, { "rows": $take(value.rows, 10000), "matched": $count(value.rows), "listCapped": $count(value.rows) > 10000 }]) }
+      ${ (
+        $m := ds.memberMatches;
+        { "rows": $take($m.rows, 10000), "matched": $count($m.rows), "listCapped": $count($m.rows) > 10000, "partial": $m.partial }
+      ) }
 
 actions:
   - playbook: identity.create-group

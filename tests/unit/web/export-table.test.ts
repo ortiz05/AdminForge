@@ -13,7 +13,8 @@ const blocks = [
 const datasources = {
   groups: { source: 'graph' },
   memberMatches: { source: 'static', data: '${ ds.everyGroup }' },
-  groupList: { source: 'static', data: '${ ds.memberMatches }' },
+  groupList: { source: 'static', data: {}, transform: '${ $take(ds.memberMatches.rows, 10000) }' },
+  userList: { source: 'static', data: '${ ds.inactiveMatches }' },
 } as never;
 
 describe('the table an export reads', () => {
@@ -34,7 +35,14 @@ describe('the table an export reads', () => {
   });
 
   it('is the table bound to a static view of the exported list (a capped table that exports every row)', () => {
+    // The view reads the list in its transform …
     expect(exportTableId(blocks, datasources, '${ x }', 'memberMatches.rows')).toBe('groupList');
+    // … or through its data.
+    const withUsers = [
+      ...blocks,
+      { id: 'userList', widget: 'table', data: 'userList.rows' },
+    ] as unknown as Block[];
+    expect(exportTableId(withUsers, datasources, '${ x }', 'inactiveMatches.rows')).toBe('userList');
   });
 
   it('is none while the template renders, or when it names no table', () => {

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.sharepoint-site
-version: 1.0.1
+version: 1.0.2
 title: SharePoint site
 summary: One SharePoint site — storage quota, document libraries and lists.
 owner: m365-team
@@ -24,6 +24,12 @@ params:
     pattern: "^[A-Za-z0-9.-]+,[0-9a-fA-F-]{36},[0-9a-fA-F-]{36}$"
 
 datasources:
+  # The SharePoint admin center link, worked out here: action expressions run in the browser, which has no env.
+  admin:
+    source: static
+    data: {}
+    transform: >-
+      ${ env.AF_SPO_TENANT_NAME ? { "url": "https://" & $encode(env.AF_SPO_TENANT_NAME) & "-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement" } : {} }
   site:
     source: graph
     request:
@@ -79,8 +85,8 @@ actions:
     href: ${ site.webUrl }
   - label: Open in SharePoint admin center
     icon: arrow-square-out
-    href: "${ 'https://' & env.AF_SPO_TENANT_NAME & '-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' }"
-    when: ${ $boolean(env.AF_SPO_TENANT_NAME) }
+    href: ${ admin.url }
+    when: ${ $boolean(admin.url) }
   - label: Review sharing settings
     icon: share-network
     href: /p/m365.sharepoint-sharing

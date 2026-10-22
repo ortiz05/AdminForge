@@ -228,7 +228,7 @@ Describe 'Content scripts' {
             $o.tenant.sharingCapability | Should -Be 'ExternalUserSharingOnly'
             $o.summary.total | Should -Be 2
             $o.summary.anyoneLinks | Should -Be 1
-            $o.sites[1].lastContentModified | Should -BeNullOrEmpty
+            $r.Output[1].sites[1].lastContentModified | Should -BeNullOrEmpty
         }
 
         It 'Get-SiteSharing filters by template and validates it' {

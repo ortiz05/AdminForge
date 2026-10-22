@@ -189,8 +189,9 @@
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
     "m365.anyone-link-sites#links": {
-      "knownSlow": "per-row transform, capped at 1,500 rows (partial note) — rewrite natively (backlog)",
-      "knownTruncated": "stops at maxItems: per-row transform, capped at 1,500 rows (partial note) — rewrite natively (backlog)"
+      "knownSlow": "every site of the usage report (no server-side filter on usage reports, 2,000 a page) up to 60,000; filtered, summed and sorted natively, only sites holding Anyone links kept",
+      "maxRequests": 35,
+      "maxBytes": 44850000
     },
     "m365.inactive-licensed-users#userList": {
       "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 30k (partial note) — snapshot follow-up",

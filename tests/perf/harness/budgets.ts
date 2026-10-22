@@ -125,7 +125,7 @@ const SURVEY: Array<[RegExp, string]> = [
     'every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows',
   ],
   [
-    /^m365\.(inactive-licensed-users|mailbox-storage|onedrive-usage|sharepoint-site-usage|teams-activity|anyone-link-sites|sharepoint-sites)#/,
+    /^m365\.(inactive-licensed-users|mailbox-storage|onedrive-usage|sharepoint-site-usage|teams-activity|sharepoint-sites)#/,
     'usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports',
   ],
   [

@@ -25,9 +25,16 @@
 # ── Build the supervisor bundle (one self-contained file, no node_modules at runtime) ──────────────
 FROM node:26.11.1-bookworm-slim@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567 AS build
 WORKDIR /src
-# Node 25 and later no longer bundle Corepack: install it (pinned), and it provides the pnpm that package.json's
-# packageManager names.
-RUN npm install --global --ignore-scripts corepack@0.36.0 && corepack enable pnpm
+# Node 25 and later no longer bundle Corepack, so the build installs it as the app image does: corepack@0.36.0, its
+# registry tarball checked against the sha512 recorded here, without install scripts; it then provides the pnpm that
+# package.json's packageManager names, checked against the sha512 there (tests/unit/tooling/package-manager-pin.test.ts).
+RUN cd /tmp \
+ && npm pack --silent corepack@0.36.0 \
+ && echo "4a2889b01859a9d0623c74c497a393dec012ad1aca21c61340cb15197c7a104fe033c5853306237885fc4edf11894e08bf627a2db4fc2a919f08eb01a51581ff  corepack-0.36.0.tgz" \
+      | sha512sum -c - \
+ && npm install --global --ignore-scripts ./corepack-0.36.0.tgz \
+ && rm corepack-0.36.0.tgz \
+ && corepack enable pnpm
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY portal/apps/runner/package.json portal/apps/runner/tsconfig.json portal/apps/runner/tsup.config.ts portal/apps/runner/
 RUN pnpm install --frozen-lockfile --filter @adminforge/runner

@@ -5,6 +5,7 @@ import {
   type BrowserContext,
   type Page,
 } from '@playwright/test';
+import { createServer, request as forward, type Server } from 'node:http';
 import { loadEnv } from '@adminforge/config';
 import { signInWithEntra, testUserCredentials } from './entra-login';
 import { maskError } from './mask';
@@ -66,9 +67,40 @@ export function createApiCall(request: APIRequestContext, origin = ''): ApiCall 
 }
 
 /**
+ * Stands in for the web dev server on PUBLIC_BASE_URL: `/auth` and `/api` go to the API (as Vite's proxy does), anything
+ * else gets a placeholder page. A real server, not `context.route`: Chrome leaves the sign-in binding cookie off a
+ * request rerouted to another port, and Playwright doesn't route the redirect a fulfilled response leads to.
+ */
+async function standInWebServer(base: string, apiOrigin: string): Promise<Server> {
+  const api = new URL(apiOrigin);
+  const server = createServer((req, res) => {
+    if (!/^\/(auth|api)\//.test(req.url ?? '')) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<!doctype html><title>AdminForge</title><p>spa placeholder</p>');
+      return;
+    }
+    const upstream = forward(
+      { hostname: api.hostname, port: api.port, path: req.url, method: req.method, headers: req.headers },
+      (answer) => {
+        res.writeHead(answer.statusCode ?? 502, answer.headers);
+        answer.pipe(res);
+      },
+    );
+    upstream.on('error', () => res.writeHead(502).end());
+    req.pipe(upstream);
+  });
+  const { hostname, port } = new URL(base);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(Number(port || 80), hostname, resolve);
+  });
+  return server;
+}
+
+/**
  * Signs the validation user into a running AdminForge instance through the real Entra flow.
  * `apiOrigin` lets tests talk to the API directly while the browser uses PUBLIC_BASE_URL
- * (requests to PUBLIC_BASE_URL are forwarded to the API when no web server is running).
+ * (`forwardToApi`: a stand-in web server forwards PUBLIC_BASE_URL's `/auth` and `/api` when no web server is running).
  */
 export async function openPortalSession(
   opts: { apiOrigin?: string; forwardToApi?: boolean } = {},
@@ -81,17 +113,7 @@ export async function openPortalSession(
   const creds = testUserCredentials(env);
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const context = await browser.newContext();
-  if (opts.forwardToApi) {
-    await context.route(`${base}/**`, async (route) => {
-      const url = route.request().url();
-      if (/\/(auth|api)\//.test(url)) return route.continue({ url: url.replace(base, apiOrigin) });
-      return route.fulfill({
-        status: 200,
-        contentType: 'text/html',
-        body: '<!doctype html><title>AdminForge</title><p>spa placeholder</p>',
-      });
-    });
-  }
+  const stand = opts.forwardToApi ? await standInWebServer(base, apiOrigin) : null;
   const page = await context.newPage();
   await page.goto(`${base}/auth/login?returnTo=%2F`);
   await signInWithEntra(page, creds);
@@ -102,7 +124,10 @@ export async function openPortalSession(
     page,
     base,
     api: createApiCall(context.request, apiOrigin),
-    close: () => browser.close(),
+    close: async () => {
+      await browser.close();
+      await new Promise((resolve) => (stand ? stand.close(resolve) : resolve(undefined)));
+    },
   };
 }
 

@@ -95,6 +95,12 @@ members` or `/groupſ/{id}/members` was not treated as the sensitive write it is
 - **Synthetic transactions on a turned-off schedule:** a Run now queued while the schedule was on and claimed after it
   was switched off ran its transactions; the probe job now holds them back (`held`) and runs only the other probes.
 
+### Publish review gate: main's own commits only (2026-10-22)
+
+- **Publish's review gate** counted any commit reachable from origin's `main` as reviewed, so an intermediate commit of
+  a branch merged with a merge commit passed. Only `main`'s own commits (its first-parent chain) count now, in
+  `adminforge publish` and in `build-images.sh`.
+
 ### SharePoint sharing at scale (2026-10-22)
 
 - **SharePoint sharing at tens of thousands of sites** (still live, with the engineer's own delegated sign-in; no

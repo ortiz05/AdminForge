@@ -10,7 +10,10 @@
  *     fixtures/, scripts/ and node_modules — the same set @adminforge/schemas `loadContentDir` reads);
  *   - `remote get-url origin` (recorded without credentials) and `ls-remote origin refs/heads/main`: the commit main is
  *     at on origin. Origin unreachable, or no main there, fails closed: unreviewed;
- *   - `merge-base --is-ancestor HEAD <that commit>` (a commit this checkout hasn't fetched: unreviewed, fetch first).
+ *   - `merge-base --is-ancestor HEAD <that commit>` (a commit this checkout hasn't fetched: unreviewed, fetch first),
+ *     then HEAD must be one of main's own commits (`<main>~n` for n = `rev-list --first-parent --count HEAD..<main>`),
+ *     not a commit of a branch merged into it with a merge commit, which no reviewer approved as a whole. (Main takes
+ *     squash merges only: a rebase merge would put each of a branch's commits on main itself.)
  * Returns the state plus one problem per reason it isn't reviewed; publish prints them, refuses unless
  * --allow-unreviewed, and records the reasons, the content commit, the main commit and the remote in the audit event.
  * `git` is injectable, so tests run without a repo.
@@ -239,6 +242,29 @@ export function reviewState(
   state.mainCommit = main;
   const merged = git(['merge-base', '--is-ancestor', 'HEAD', main], contentDir);
   state.onOriginMain = merged.ok ? true : merged.status === 1 ? false : null;
+  // Reachable isn't reviewed: an intermediate commit of a branch merged with a merge commit (or rebased) is reachable
+  // from main without ever having been main. Only main's own commits are states a reviewer approved as a whole.
+  if (merged.ok) {
+    // On the chain when HEAD is main's n-th first parent (n = first-parent commits from HEAD to main): constant-size
+    // answers, however long the history.
+    const full = git(['rev-parse', 'HEAD'], contentDir);
+    const count = git(['rev-list', '--first-parent', '--count', `HEAD..${main}`], contentDir);
+    const nth = count.ok
+      ? git(['rev-parse', '--verify', '--quiet', `${main}~${count.out.trim()}`], contentDir)
+      : count;
+    const chain = { ok: full.ok && count.ok && /^\d+$/.test(count.out.trim()) };
+    const own = full.ok && chain.ok && nth.ok && nth.out.trim() === full.out.trim();
+    if (!own) {
+      state.onOriginMain = chain.ok && full.ok ? false : null;
+      state.problems.push({
+        reason: 'not-on-origin-main',
+        message:
+          chain.ok && full.ok
+            ? `HEAD (${state.commit}) is a commit of a branch merged into ${REVIEWED_REF}, not one of main's own commits: publish from main's commit (the merge or squash commit) instead.`
+            : `git couldn't list ${REVIEWED_REF}'s commits (git rev-list --first-parent), so HEAD can't be matched to reviewed commits.`,
+      });
+    }
+  }
   if (!merged.ok)
     state.problems.push({
       reason: 'not-on-origin-main',

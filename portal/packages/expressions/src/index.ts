@@ -1,5 +1,6 @@
 export * from './template';
 export * from './helpers';
+export * from './scalars';
 export * from './evaluate';
 export * from './render';
 export * from './validate';

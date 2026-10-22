@@ -7,7 +7,7 @@ export default defineConfig({
   entry: { main: 'src/main.ts' },
   format: ['esm'],
   platform: 'node',
-  target: 'node24',
+  target: 'node26',
   outDir: 'dist',
   clean: true,
   splitting: false,

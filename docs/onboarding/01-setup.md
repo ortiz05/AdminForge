@@ -5,14 +5,14 @@ checks on your commits as CI does. You don't need a Microsoft tenant for any of 
 
 ## Install the tools
 
-| Tool                  | Version                         | Why                                                                                   |
-| --------------------- | ------------------------------- | ------------------------------------------------------------------------------------- |
-| Node.js               | 24 (`.nvmrc`)                   | Everything in `portal/` and `tests/`. `nvm use` or `fnm use` picks it up.             |
-| pnpm                  | 11.10.0 (`packageManager`)      | The workspace. `corepack enable` installs the pinned version — don't install another. |
-| Google Chrome         | current, installed system-wide  | Playwright uses `channel: 'chrome'` and never downloads a browser                     |
-| PowerShell (`pwsh`)   | 7.4+                            | Only if you work on the PowerShell runner (Exchange, Teams, SharePoint) or its tests  |
-| VS Code (recommended) | with the Red Hat YAML extension | `.vscode/settings.json` maps content files to their JSON schemas (autocomplete)       |
-| Claude Code           | current                         | How most extensions are made here ([guide 12](12-claude-code.md))                     |
+| Tool                  | Version                         | Why                                                                                  |
+| --------------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| Node.js               | 26 (`.nvmrc`)                   | Everything in `portal/` and `tests/`. `nvm use` or `fnm use` picks it up.            |
+| pnpm                  | 11.10.0 (`packageManager`)      | The workspace. Corepack installs the pinned version — don't install another.         |
+| Google Chrome         | current, installed system-wide  | Playwright uses `channel: 'chrome'` and never downloads a browser                    |
+| PowerShell (`pwsh`)   | 7.4+                            | Only if you work on the PowerShell runner (Exchange, Teams, SharePoint) or its tests |
+| VS Code (recommended) | with the Red Hat YAML extension | `.vscode/settings.json` maps content files to their JSON schemas (autocomplete)      |
+| Claude Code           | current                         | How most extensions are made here ([guide 12](12-claude-code.md))                    |
 
 The JSON schemas the editor uses are generated, not committed: run `pnpm --filter @adminforge/schemas build` once
 (and after schema changes) to create `portal/packages/schemas/generated/`.
@@ -21,6 +21,7 @@ The JSON schemas the editor uses are generated, not committed: run `pnpm --filte
 
 ```bash
 git clone <repository URL> adminforge && cd adminforge
+npm install --global corepack      # Node 25 and later no longer bundle Corepack
 corepack enable
 pnpm install                       # also runs `git config core.hooksPath .githooks`
 git config core.hooksPath          # must print .githooks
@@ -111,7 +112,7 @@ tenant** (never production) and a portal role there ([`docs/access.md`](../acces
 
 | Symptom                                                | Fix                                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `pnpm` says the version doesn't match `packageManager` | `corepack enable`, then open a new shell                                                               |
+| `pnpm` says the version doesn't match `packageManager` | `npm install --global corepack`, `corepack enable`, then open a new shell                              |
 | Commits go through without the guard tests running     | `git config core.hooksPath .githooks`                                                                  |
 | Playwright can't find a browser                        | Install Google Chrome system-wide; Playwright doesn't download one here                                |
 | `env check` says DATABASE_PATH contains `CHANGE_ME`    | Run `pnpm --filter @adminforge/api init:local` again                                                   |

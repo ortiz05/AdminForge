@@ -13,15 +13,18 @@
 #
 # Base images are pinned by digest, the tag kept beside it (S-37; tests/guards/image-digests.test.ts), and named
 # literally in each FROM so Dependabot's docker ecosystem bumps tag and digest together:
-#   node:24.13.1-bookworm-slim — the multi-platform index (linux/amd64, linux/arm64/v8, linux/ppc64le, linux/s390x),
-#   looked up 2026-10-21. The image is built for the platform of the machine that builds it (README.md →
-#   Requirements › CPU architecture); better-sqlite3 ships prebuilt linux-x64 and linux-arm64 binaries.
+#   node:26.11.1-bookworm-slim — the multi-platform index (linux/amd64, linux/arm64/v8, linux/ppc64le), looked up
+#   2026-10-22: the newest Node 26 image whose digest is at least seven days old (the 26.12 tags were rebuilt on
+#   2026-10-21). The image is built for the platform of the machine that builds it (README.md → Requirements › CPU
+#   architecture); better-sqlite3 ships prebuilt linux-x64 and linux-arm64 binaries.
 #   docker/dockerfile:1.7 (the `# syntax=` frontend) — pinned the same way.
 
 # ── Build: install, build the four bundles, then keep production dependencies only ─────────────────────
-FROM node:24.13.1-bookworm-slim@sha256:a81a03dd965b4052269a57fac857004022b522a4bf06e7a739e25e18bce45af2 AS build
+FROM node:26.11.1-bookworm-slim@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567 AS build
 WORKDIR /src
-RUN corepack enable
+# Node 25 and later no longer bundle Corepack: install it (pinned), and it provides the pnpm that package.json's
+# packageManager names.
+RUN npm install --global --ignore-scripts corepack@0.36.0 && corepack enable pnpm
 COPY . .
 RUN pnpm install --frozen-lockfile \
       --filter @adminforge/api... --filter @adminforge/web... --filter @adminforge/cli... --filter @adminforge/scheduler...
@@ -41,7 +44,7 @@ RUN find . -name node_modules -type d -prune -exec rm -rf {} + \
       ! -name "linux-$(node -p process.arch).node" -exec rm -rf {} +
 
 # ── Runtime ───────────────────────────────────────────────────────────────────────────────────────────
-FROM node:24.13.1-bookworm-slim@sha256:a81a03dd965b4052269a57fac857004022b522a4bf06e7a739e25e18bce45af2 AS runtime
+FROM node:26.11.1-bookworm-slim@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567 AS runtime
 ARG ADMINFORGE_COMMIT=unknown
 ARG ADMINFORGE_REVIEWED=false
 # The origin/main commit build-images.sh fetched and checked against, and origin's URL (no credentials). Without them

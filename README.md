@@ -41,7 +41,8 @@ Licensing gaps are explained in the UI ("Requires …") and tracked in `docs/lic
 
 ## Prerequisites
 
-- **Node.js 24** (`.nvmrc`) and **pnpm 11.10.0** (`packageManager` in `package.json`; `corepack enable` picks it up).
+- **Node.js 26** (`.nvmrc`) and **pnpm 11.10.0** (`packageManager` in `package.json`; Corepack picks it up — Node 26
+  doesn't bundle it: `npm install --global corepack`, then `corepack enable`).
 - **PowerShell 7.4+** (`pwsh`) for the runner (Exchange, Teams, SharePoint) and its Pester tests.
 - **Google Chrome** installed on the system: Playwright uses `channel: 'chrome'` and downloads no browser.
 - **Docker**, `kubectl` and a Kubernetes cluster only to build and deploy the images (`portal/deploy/kubernetes/README.md`).

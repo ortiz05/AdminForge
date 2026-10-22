@@ -6,6 +6,13 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Dependencies (2026-10-22)
+
+- **Node.js 26** (from 24): the app image's base (`node:26.11.1-bookworm-slim`, by digest), CI's `setup-node`,
+  `.nvmrc`, `engines` (`>=26`) and the bundles' build target. Node 25 and later no longer bundle Corepack: the image
+  installs `corepack@0.36.0` itself, and engineers run `npm install --global corepack` once (setup guide). The
+  runner image's Node stage moves separately.
+
 ### Platform review (2026-10-21)
 
 The SQLite-on-Kubernetes build was reviewed for security, functionality, design and organization

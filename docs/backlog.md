@@ -314,7 +314,8 @@ dated heading, a known status and owner type on every row.
 | `db backup -`: stage the copy on the data volume, then bring the api container's `/tmp` back to 1 GiB. | open, low | 2026-10-21 | code | `portal/deploy/kubernetes/base` |
 | arm64 images (the runner's base is amd64 only until it moves). | open | 2026-10-21 | code | `portal/deploy/kubernetes/Dockerfile` |
 | Replace ingress-nginx (retired upstream) in the example overlay. | open | 2026-10-21 | code | `portal/deploy/kubernetes/overlays` |
-| Bump Node 24.13.1 (24.20.0 exists): a reviewed digest move. | open | 2026-10-21 | code | `portal/deploy/kubernetes/Dockerfile` |
+| Move the app image from Node 26.11.1 to 26.12.1 (a security release of 2026-10-21) once that tag's digest is seven days old, from 2026-10-28: Dependabot's docker entry proposes it. | open | 2026-10-22 | code | `portal/deploy/kubernetes/Dockerfile` |
+| The interim host's service still runs Node 24.13.0 (`~/.nvm/versions/node/v24.13.0`) while `engines` asks for 26: move it to Node 26 with the next deploy from `main`, or retire the host first. | decide | 2026-10-22 | owner | `package.json` |
 | Faster image builds: copy the package manifests and install before copying the sources (layer cache). | open, low | 2026-10-21 | code | `portal/deploy/kubernetes/Dockerfile` |
 | CI-built, signed images (S-37, with S-06's CI question): `BUILD.json` is self-asserted by whoever builds the image until then. | deferred | 2026-10-21 | owner | [S-37](plans/2026-10-21-platform-review-security.md) |
 | Alerting on AdminForge itself: the probe sweeps and the backup notify on failure; a readiness check from another host; probes for backup freshness and disk space. | open | 2026-10-16 | code | [operations.md](operations.md) |

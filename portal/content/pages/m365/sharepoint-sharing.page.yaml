@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.sharepoint-sharing
-version: 1.2.0
+version: 1.3.0
 title: SharePoint sharing
 summary: Tenant-wide SharePoint and OneDrive sharing settings and each site's sharing level — find sites that allow Anyone links.
 owner: m365-team
@@ -53,11 +53,24 @@ savedViews:
     - { name: Guest sharing enabled, params: { sharing: ExternalUserSharingOnly } }
 
 datasources:
-  sharing:
+  # The SharePoint admin center link, worked out here: action expressions run in the browser, which has no env.
+  admin:
+    source: static
+    data: {}
+    transform: >-
+      ${ env.AF_SPO_TENANT_NAME ? { "url": "https://" & $encode(env.AF_SPO_TENANT_NAME) & "-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement" } : {} }
+  # Every site, read live with the engineer's own SharePoint admin token. The script sends a summary, then the sites in
+  # chunks of 2,000 (runner line limit). This transform doesn't read params, so the cached read (15 minutes) serves
+  # every search and filter; only Include OneDrive and the template, which the script itself uses, read again.
+  # Ceiling: beyond about 80,000 sites (with Include OneDrive, every person's OneDrive counts) the read is larger than
+  # one cache entry (DATASOURCE_CACHE_MAX_MB) and runs again for each search; searching well over 100,000 sites can
+  # exceed the transform budget; and at roughly 170,000 sites the script's output passes the runner's 64 MiB cap
+  # (DEFAULT_MAX_OUTPUT_BYTES) and the read fails (docs/backlog.md).
+  sites:
     source: runner
     label: Sharing settings (PowerShell)
     script: sharepoint/Get-SiteSharing.ps1
-    sha256: 5875541d03d15d067d7f19c4e326b2d83b87ad2551893918cf77d4213d58e1c3
+    sha256: b72f53aeb6172f3fd977c7ee32f07515ca26d0a9621b5bc64e99c0c3631705ce
     services: [sharepointAdmin]
     timeoutSeconds: 900
     parameters:
@@ -65,13 +78,25 @@ datasources:
       template: "${ params.template != 'All' ? params.template }"
       includeSites: true
     cache: { ttl: 900 }
-    # value = [script output] — one object { tenant, summary, sites }. Labels the sharing levels and link settings, gives
-    # untitled sites (OneDrive host, search centre) their URL as title, converts MB to bytes.
+    transform: "${ { 'head': value[0], 'all': [value.sites] } }"
+  # Search and the sharing level over the cached sites, natively ($applyAdvanced): no JSONata per site, so tens of
+  # thousands of sites fit the 250 ms budget. Not cached itself (cheap, and each search would hold another copy of the
+  # list); the export reads every match from here.
+  matches:
+    source: static
+    data: ${ ds.sites }
     transform: >-
       ${ (
-        $v := value[0];  /* runner result = [output data]; one summary object */
-        $p := params;
-        $labels := {
+        $head := value.head;
+        $t := $head.tenant;
+        $q := $substring($trim(params.q ? params.q : ''), 0, 200);
+        $text := function($path) { { "path": $path, "type": "string", "op": "containsAny", "value": [$q] } };
+        $clauses := $append(
+          $q = '' ? [] : [{ "join": "or", "clauses": [$text('title'), $text('url'), $text('owner')] }],
+          params.sharing and params.sharing != 'All'
+            ? [{ "path": "sharingCapability", "type": "string", "op": "eq", "value": params.sharing }] : []
+        );
+        $names := {
           "ExternalUserAndGuestSharing": "Anyone",
           "ExternalUserSharingOnly": "New and existing guests",
           "ExistingExternalUserSharingOnly": "Existing guests only",
@@ -85,21 +110,11 @@ datasources:
         };
         $permissions := { "None": "Not set (SharePoint default)", "View": "View", "Edit": "Edit" };
         $domains := { "None": "No domain restriction", "AllowList": "Only the allowed domains", "BlockList": "All but the blocked domains" };
-        $t := $v.tenant;
-        $q := $lowercase($trim($p.q ? $p.q : ''));
-        $all := [$v.sites.$merge([$, {
-          "title": title ? title : url,
-          "storageUsedInBytes": storageUsedMB ? storageUsedMB * 1048576 : 0,
-          "sharingLabel": $lookup($labels, sharingCapability)
-        }])];
-        $rows := [$all[
-            ($q = '' or $contains($lowercase(title & ' ' & url & ' ' & (owner ? owner : '')), $q))
-            and ($p.sharing = 'All' or $not($exists($p.sharing)) or sharingCapability = $p.sharing)
-          ]];
+        $rows := $count($clauses) > 0 ? $applyAdvanced(value.all, { "join": "and", "clauses": $clauses }) : value.all;
         {
           "tenant": $merge([$t, {
-            "sharingLabel": $lookup($labels, $t.sharingCapability),
-            "oneDriveSharingLabel": $lookup($labels, $t.oneDriveSharingCapability),
+            "sharingLabel": $lookup($names, $t.sharingCapability),
+            "oneDriveSharingLabel": $lookup($names, $t.oneDriveSharingCapability),
             "defaultLinkLabel": $exists($lookup($linkTypes, $t.defaultSharingLinkType)) ? $lookup($linkTypes, $t.defaultSharingLinkType) : $t.defaultSharingLinkType,
             "defaultPermissionLabel": $exists($lookup($permissions, $t.defaultLinkPermission)) ? $lookup($permissions, $t.defaultLinkPermission) : $t.defaultLinkPermission,
             "domainRestrictionLabel": $exists($lookup($domains, $t.sharingDomainRestrictionMode)) ? $lookup($domains, $t.sharingDomainRestrictionMode) : $t.sharingDomainRestrictionMode,
@@ -107,13 +122,20 @@ datasources:
               ? $string($t.requireAnonymousLinksExpireInDays) & ' days' : 'Never'
           }]),
           "rows": $rows,
-          "total": $v.summary.total,
-          "anyone": $v.summary.anyoneLinks,
-          "guests": $count($all[sharingCapability = 'ExternalUserSharingOnly']),
-          "internal": $count($all[sharingCapability = 'Disabled']),
-          "byLevel": [$v.summary.bySharingCapability.{ "level": $lookup($labels, sharingCapability), "count": count }]
+          "total": $head.summary.total,
+          "anyone": $head.summary.anyoneLinks,
+          "guests": $head.summary.guests,
+          "internal": $head.summary.internal,
+          "byLevel": [$head.summary.bySharingCapability.{ "level": $lookup($names, sharingCapability), "count": count }]
         }
       ) }
+  # What the browser gets: the figures and the first 10,000 matching sites (the export has every match). Not cached,
+  # like matches.
+  sharing:
+    source: static
+    data: ${ ds.matches }
+    transform: >-
+      ${ $merge([value, { "rows": $take(value.rows, 10000), "matched": $count(value.rows), "listCapped": $count(value.rows) > 10000 }]) }
 
 layout:
   - widget: kpi
@@ -175,6 +197,12 @@ layout:
     x: level
     y: count
     format: number
+  - widget: markdown
+    span: 12
+    when: ${ sharing.listCapped = true }
+    text: >-
+      **The first 10,000 of ${ $formatNumber(sharing.matched, '#,##0') } matching sites are listed.** Search, the sharing level and the template
+      narrow the list for every site; column filters and sorting apply to the 10,000 listed. The export has every match.
   - widget: table
     id: sites
     span: 12
@@ -207,8 +235,8 @@ layout:
         when: ${ $boolean(row.groupId) }
       - label: Open in SharePoint admin center
         icon: arrow-square-out
-        href: "${ 'https://' & env.AF_SPO_TENANT_NAME & '-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' }"
-        when: ${ $boolean(env.AF_SPO_TENANT_NAME) }
+        href: ${ admin.url }
+        when: ${ $boolean(admin.url) }
     empty:
       title: No sites match
       body: Clear the filters. Reading sharing settings needs the SharePoint Administrator role.
@@ -216,5 +244,5 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: sharepoint-sharing
-  data: sharing.rows
+  data: matches.rows
   columns: all

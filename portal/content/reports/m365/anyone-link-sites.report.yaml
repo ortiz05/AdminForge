@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.anyone-link-sites
-version: 1.3.0
+version: 1.4.0
 title: Public and Anyone-link sites
 summary: SharePoint sites whose sharing allows Anyone links (optionally also new guests), plus the sites where Anyone links actually exist.
 owner: m365-team
@@ -25,36 +25,52 @@ filters:
   facets: [includeGuestSharing, includeOneDrive]
 
 datasources:
-  sharing:
+  # Every site's sharing level, read live with the engineer's own SharePoint admin token (summary first, then the sites
+  # in chunks of 2,000). No params in the transform: the cached read serves both sharing views.
+  sites:
     source: runner
     label: Site sharing settings (PowerShell)
     script: sharepoint/Get-SiteSharing.ps1
-    sha256: 5875541d03d15d067d7f19c4e326b2d83b87ad2551893918cf77d4213d58e1c3
+    sha256: b72f53aeb6172f3fd977c7ee32f07515ca26d0a9621b5bc64e99c0c3631705ce
     services: [sharepointAdmin]
     timeoutSeconds: 900
     parameters:
       includeOneDrive: ${ params.includeOneDrive = true }
       includeSites: true
     cache: { ttl: 900 }
+    transform: "${ { 'head': value[0], 'all': [value.sites] } }"
+  # Sites that allow Anyone links (and, optionally, new guests), picked and labelled natively; the export reads them all.
+  # Not cached itself: the read above is, and this is cheap.
+  sharingList:
+    source: static
+    data: ${ ds.sites }
     transform: >-
       ${ (
-        $v := value[0];  /* runner result = [output data]; one summary object */
-        $p := params;
-        $levels := $p.includeGuestSharing = true ? ['ExternalUserAndGuestSharing', 'ExternalUserSharingOnly'] : ['ExternalUserAndGuestSharing'];
-        $rows := [$v.sites[sharingCapability in $levels].$merge([$, {
-          "title": title ? title : url,
-          "level": sharingCapability = 'ExternalUserAndGuestSharing' ? 'anyone' : 'guests',
-          "storageUsedInBytes": storageUsedMB ? storageUsedMB * 1048576 : 0
-        }])];
+        $s := value.head.summary;
+        $t := value.head.tenant;
+        $levels := params.includeGuestSharing = true ? ['ExternalUserAndGuestSharing', 'ExternalUserSharingOnly'] : ['ExternalUserAndGuestSharing'];
+        $open := $applyAdvanced(value.all, { "join": "and", "clauses": [{ "path": "sharingCapability", "type": "string", "op": "in", "value": $levels }] });
         {
-          "rows": $rows,
-          "anyone": $v.summary.anyoneLinks,
-          "guests": $count($v.sites[sharingCapability = 'ExternalUserSharingOnly']),
-          "tenantLevel": $v.tenant.sharingCapability,
-          "tenantAnyone": $v.tenant.sharingCapability = 'ExternalUserAndGuestSharing' ? 1 : 0,
-          "linkExpiryDays": $v.tenant.requireAnonymousLinksExpireInDays
+          "rows": $attach($open, 'sharingCapability', {
+            "ExternalUserAndGuestSharing": { "level": "anyone" },
+            "ExternalUserSharingOnly": { "level": "guests" }
+          }),
+          "anyone": $s.anyoneLinks,
+          "guests": $s.guests,
+          "tenantLevel": $t.sharingCapability,
+          "tenantAnyone": $t.sharingCapability = 'ExternalUserAndGuestSharing' ? 1 : 0,
+          "linkExpiryDays": $t.requireAnonymousLinksExpireInDays
         }
       ) }
+  # What the browser gets: the figures and the first 10,000 of those sites.
+  sharing:
+    source: static
+    data: ${ ds.sharingList }
+    cache: { ttl: 900 }
+    transform: >-
+      ${ $merge([value, { "rows": $take(value.rows, 10000), "listed": $count(value.rows), "listCapped": $count(value.rows) > 10000 }]) }
+  # Where Anyone links exist: Microsoft's site usage report, every site up to 60,000 (about 30 requests), filtered and
+  # sorted natively — no JSONata per site; only the sites holding links are kept. The list keeps the 10,000 with the most.
   links:
     source: graph
     label: Sites holding Anyone links (usage report, last 7 days)
@@ -63,20 +79,23 @@ datasources:
       path: /reports/getSharePointSiteUsageDetail(period='D7')
       query: { $format: application/json }
     paging: all
-    maxItems: 1500
+    maxItems: 60000
     cache: { ttl: 3600 }
     transform: >-
       ${ (
-        $rows := [$sort(value.value[$not(isDeleted = true) and anonymousLinkCount > 0], function($a, $b) { $a.anonymousLinkCount < $b.anonymousLinkCount }).{
-          "siteId": siteId,
-          "siteUrl": siteUrl,
-          "site": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://' ? siteUrl : siteId,
-          "ownerDisplayName": ownerDisplayName,
-          "anonymousLinkCount": anonymousLinkCount,
-          "guestLinkCount": secureLinkForGuestCount,
-          "lastActivityDate": lastActivityDate
-        }];
-        { "rows": $rows, "sites": $count($rows), "links": $sum([0, $rows.anonymousLinkCount]) }
+        $with := $applyAdvanced(value.value, { "join": "and", "clauses": [
+          { "path": "isDeleted", "type": "boolean", "op": "ne", "value": true },
+          { "path": "anonymousLinkCount", "type": "number", "op": "gt", "value": 0 }
+        ] });
+        $first := $with[0];
+        {
+          "rows": $pick($take($with^(>anonymousLinkCount), 10000), ['siteId', 'siteUrl', 'ownerDisplayName', 'anonymousLinkCount', 'secureLinkForGuestCount', 'lastActivityDate']),
+          "sites": $count($with),
+          "links": $sum($pluck($with, 'anonymousLinkCount')),
+          "listCapped": $count($with) > 10000,
+          "partial": value.truncated = true,
+          "concealed": $type($first.siteUrl) = 'string' and $substring($first.siteUrl, 0, 8) != 'https://'
+        }
       ) }
 
 layout:
@@ -104,6 +123,12 @@ layout:
     text: |
       **Anyone links never expire in this tenant.** Set an expiry for Anyone links in the SharePoint admin center →
       **Policies → Sharing → Choose expiration and permissions options for Anyone links**, so forgotten links stop working.
+  - widget: markdown
+    span: 12
+    when: ${ sharing.listCapped = true }
+    text: >-
+      **The first 10,000 of ${ $formatNumber(sharing.listed, '#,##0') } sites are listed.** Column filters and sorting apply to those; the
+      export has every one.
   - widget: table
     id: sites
     title: Sites that allow Anyone links
@@ -133,6 +158,17 @@ layout:
     empty:
       title: No site allows Anyone links
       body: Every site restricts sharing to people in the organization or guests.
+  - widget: markdown
+    span: 12
+    when: ${ links.concealed = true }
+    text: |
+      **Site names are concealed in usage reports.** URLs and owners show as hashes. A Global Administrator can turn off
+      *Display concealed user, group, and site names in all reports* in the Microsoft 365 admin center → **Settings →
+      Org settings → Services → Reports**.
+  - widget: markdown
+    span: 12
+    when: ${ links.listCapped = true }
+    text: The 10,000 sites with the most Anyone links are listed; the counts above include every site read.
   - widget: table
     id: links
     title: Sites where Anyone links exist
@@ -140,10 +176,11 @@ layout:
     data: links.rows
     rowKey: siteId
     columns:
-      - { field: site, label: Site, kind: identity, secondary: ownerDisplayName }
+      - { field: siteUrl, label: Site, kind: identity, secondary: siteId }
+      - { field: ownerDisplayName, label: Owner }
       - { field: anonymousLinkCount, label: Anyone links, kind: number, align: end, sortable: true }
-      - { field: guestLinkCount, label: Guest links, kind: number, align: end }
-      - { field: lastActivityDate, label: Last activity, kind: date }
+      - { field: secureLinkForGuestCount, label: Guest links, kind: number, align: end, sortable: true }
+      - { field: lastActivityDate, label: Last activity, kind: date, sortable: true }
     empty:
       title: No Anyone links in use
       body: The usage report shows no site with Anyone links in the last 7 days.
@@ -151,5 +188,5 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: anyone-link-sites
-  data: sharing.rows
+  data: sharingList.rows
   columns: all

@@ -17,20 +17,24 @@
           "count": 7
         },
         {
-          "sharingCapability": "ExternalUserSharingOnly",
-          "count": 1
+          "sharingCapability": "ExistingExternalUserSharingOnly",
+          "count": 2
         },
         {
           "sharingCapability": "ExternalUserAndGuestSharing",
           "count": 3
         },
         {
-          "sharingCapability": "ExistingExternalUserSharingOnly",
-          "count": 2
+          "sharingCapability": "ExternalUserSharingOnly",
+          "count": 1
         }
       ],
-      "anyoneLinks": 3
-    },
+      "anyoneLinks": 3,
+      "guests": 1,
+      "internal": 7
+    }
+  },
+  {
     "sites": [
       {
         "url": "https://exampleorg.sharepoint.com/sites/allcompany",
@@ -40,8 +44,8 @@
         "groupId": "10000000-0000-4000-8000-000000000208",
         "sharingCapability": "Disabled",
         "lastContentModified": "2026-10-15T09:00:00Z",
-        "storageUsedMB": 392914,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 412000190464
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/intranet",
@@ -51,8 +55,8 @@
         "groupId": null,
         "sharingCapability": "Disabled",
         "lastContentModified": "2026-10-15T09:00:00Z",
-        "storageUsedMB": 36240,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 38000394240
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/ProjectAtlas",
@@ -62,8 +66,8 @@
         "groupId": "10000000-0000-4000-8000-000000000201",
         "sharingCapability": "ExternalUserSharingOnly",
         "lastContentModified": "2026-10-14T09:00:00Z",
-        "storageUsedMB": 91553,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 96000278528
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/PartnerCollaborationFabrikam",
@@ -73,8 +77,8 @@
         "groupId": "10000000-0000-4000-8000-000000000207",
         "sharingCapability": "ExternalUserAndGuestSharing",
         "lastContentModified": "2026-10-13T09:00:00Z",
-        "storageUsedMB": 20981,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 22000173056
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/MarketingCampaigns",
@@ -84,8 +88,8 @@
         "groupId": "10000000-0000-4000-8000-000000000203",
         "sharingCapability": "ExternalUserAndGuestSharing",
         "lastContentModified": "2026-10-09T09:00:00Z",
-        "storageUsedMB": 134468,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 140999917568
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/SalesEMEA",
@@ -95,8 +99,8 @@
         "groupId": "10000000-0000-4000-8000-000000000202",
         "sharingCapability": "ExistingExternalUserSharingOnly",
         "lastContentModified": "2026-10-12T09:00:00Z",
-        "storageUsedMB": 51498,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 53999566848
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/HRPolicies",
@@ -106,8 +110,8 @@
         "groupId": null,
         "sharingCapability": "Disabled",
         "lastContentModified": "2026-10-01T09:00:00Z",
-        "storageUsedMB": 3910,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 4099932160
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/ProjectOrion",
@@ -117,8 +121,8 @@
         "groupId": "10000000-0000-4000-8000-000000000209",
         "sharingCapability": "ExternalUserAndGuestSharing",
         "lastContentModified": "2026-03-17T09:00:00Z",
-        "storageUsedMB": 69618,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 72999763968
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/LegalReview",
@@ -128,8 +132,8 @@
         "groupId": "10000000-0000-4000-8000-000000000205",
         "sharingCapability": "Disabled",
         "lastContentModified": "2026-09-04T09:00:00Z",
-        "storageUsedMB": 9155,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 9599713280
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/ITOperations",
@@ -139,8 +143,8 @@
         "groupId": "10000000-0000-4000-8000-000000000204",
         "sharingCapability": "ExistingExternalUserSharingOnly",
         "lastContentModified": "2026-10-15T09:00:00Z",
-        "storageUsedMB": 16212,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 16999514112
       },
       {
         "url": "https://exampleorg.sharepoint.com/sites/Archive2019",
@@ -150,30 +154,30 @@
         "groupId": null,
         "sharingCapability": "Disabled",
         "lastContentModified": "2024-11-14T09:00:00Z",
-        "storageUsedMB": 247955,
-        "lockState": "ReadOnly"
+        "lockState": "ReadOnly",
+        "storageUsedInBytes": 259999662080
       },
       {
         "url": "https://exampleorg-my.sharepoint.com/",
-        "title": "",
+        "title": "https://exampleorg-my.sharepoint.com/",
         "template": "SPSMSITEHOST#0",
         "owner": "",
         "groupId": null,
         "sharingCapability": "Disabled",
         "lastContentModified": "2026-10-01T09:00:00Z",
-        "storageUsedMB": 1,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 1048576
       },
       {
         "url": "https://exampleorg.sharepoint.com/search",
-        "title": "",
+        "title": "https://exampleorg.sharepoint.com/search",
         "template": "SRCHCEN#0",
         "owner": "",
         "groupId": null,
         "sharingCapability": "Disabled",
         "lastContentModified": "2026-09-01T09:00:00Z",
-        "storageUsedMB": 1,
-        "lockState": "Unlock"
+        "lockState": "Unlock",
+        "storageUsedInBytes": 1048576
       }
     ]
   }

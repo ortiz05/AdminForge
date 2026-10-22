@@ -8,9 +8,20 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ### SharePoint sharing at scale (2026-10-22)
 
+- **SharePoint sharing at tens of thousands of sites** (still live, with the engineer's own delegated sign-in; no
+  file-level data). `Get-SiteSharing.ps1` sends a summary, then the sites in chunks of 2,000 (one output line held
+  every site and broke the runner's 8 MB line limit around 23,000 sites), shaping each site itself. The SharePoint
+  sharing page (1.3) caches that read apart from search and filters — before, every search or filter ran the script
+  again — and searches title, URL and owner natively; the browser gets the first 10,000 matches and the export every
+  one. Public and Anyone-link sites (1.4) reads up to 60,000 sites of the usage report instead of the first 1,500,
+  filtered, summed and sorted natively, keeps only the fields it shows, falls back to the site id when names are
+  concealed, and lists the 10,000 sites with the most links. Each transform takes about 80 ms at 50,000 sites, within
+  the 250 ms budget (`content-at-scale-sharepoint-sharing.scale.test.ts`); the OneDrive-sized ceiling is in the backlog.
 - A page fetched every datasource whose name appeared anywhere in a templated text, prose included: a note saying
   "10,000 sites are listed" made the browser download a datasource called `sites`. Only the `${ … }` parts count now
   (`templateExpressions` in the renderer; the perf harness uses the same).
+- The "Open in SharePoint admin center" actions (SharePoint sharing and site pages) never appeared: they read
+  `AF_SPO_TENANT_NAME` in the browser, which has no `env`. The pages now work the link out on the server.
 
 ### Dependencies (2026-10-22)
 

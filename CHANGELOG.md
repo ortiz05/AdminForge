@@ -6,6 +6,18 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Borderline app-only permissions are tier 0 (2026-10-22)
+
+- **Decided by the owner after the 2026-10-22 security review.** Application permissions that change what Conditional
+  Access and sign-in decide on (`Device.ReadWrite.All`, `CustomSecAttributeAssignment.ReadWrite.All`,
+  `IdentityRiskyUser.ReadWrite.All`), token-issuance hooks (`EventListener`, `CustomAuthenticationExtension`), app
+  proxy publishing, multi-tenant organizations, SharePoint tenant settings, administrative units, the Intune cloud CA,
+  `User.ManageIdentities.All`, PIM alerts and removals, and agent identities, blueprints and instances now need
+  `AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true` for any app-only identity, and rank critical in
+  `identity.app-permissions` and `identity.app-registration-risks` (2.2.0). No shipped content asks for them.
+- **`UserAuthenticationMethod.ReadWrite.All` stays an ordinary delegated write scope** (decided): the Temporary Access
+  Pass, password and MFA playbooks refuse yourself and Playbook Approvers, so they keep working on a default install.
+
 ### Read-mode scripts can't change SharePoint client objects (2026-10-22)
 
 - **Property sets only on hashtables the script builds.** A `Get-PnP*` cmdlet returns SharePoint client objects; a

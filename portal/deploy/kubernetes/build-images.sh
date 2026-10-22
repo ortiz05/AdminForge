@@ -86,7 +86,10 @@ git archive --format=tar HEAD | docker build -f portal/deploy/kubernetes/Dockerf
   --build-arg "ADMINFORGE_COMMIT=$COMMIT" --build-arg "ADMINFORGE_REVIEWED=$REVIEWED" \
   --build-arg "ADMINFORGE_MAIN_COMMIT=$MAIN" --build-arg "ADMINFORGE_REMOTE=$REMOTE" \
   -t "$APP" -
-git archive --format=tar HEAD | docker build -f portal/apps/runner/Dockerfile -t "$RUNNER" -
+# The day: the runner's Ubuntu layer is rebuilt with that day's security updates once per day, not kept from the first
+# build this machine's cache holds (portal/apps/runner/Dockerfile, the os stage).
+git archive --format=tar HEAD | docker build -f portal/apps/runner/Dockerfile \
+  --build-arg "UBUNTU_UPDATES=$(date -u +%Y-%m-%d)" -t "$RUNNER" -
 echo "✓ built $APP (content reviewed: $REVIEWED against origin/main ${MAIN:0:12}) and $RUNNER"
 if [ "$PUSH" = 1 ]; then
   docker push "$APP"

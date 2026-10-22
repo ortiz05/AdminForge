@@ -72,6 +72,12 @@ REVIEWED=true
 if ! git merge-base --is-ancestor HEAD "$MAIN"; then
   REVIEWED=false
   echo "⚠ HEAD ($COMMIT) is not on origin/main (${MAIN:0:12}): publishing from this image will need --allow-unreviewed." >&2
+# Reachable isn't reviewed: only main's own commits (its first-parent chain), never a commit of a branch merged into it.
+# HEAD is on that chain when it is main's n-th first parent, n = the first-parent commits from HEAD to main.
+elif ! FIRST_PARENTS="$(git rev-list --first-parent --count "HEAD..$MAIN")" ||
+  [ "$(git rev-parse --verify --quiet "$MAIN~$FIRST_PARENTS")" != "$(git rev-parse HEAD)" ]; then
+  REVIEWED=false
+  echo "⚠ HEAD ($COMMIT) is a commit of a branch merged into origin/main, not one of main's own: publishing from this image will need --allow-unreviewed." >&2
 fi
 
 if [ "$DRY_RUN" = 1 ]; then

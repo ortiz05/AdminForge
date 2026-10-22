@@ -95,7 +95,7 @@ describe('tier-0 application permissions', () => {
       'RoleManagement.ReadWrite.Exchange',
     ])
       expect(isPrivilegedAppRole(v), v).toBe(true);
-    for (const v of ['User.ReadWrite.All', 'Device.ReadWrite.All', 'Policy.Read.All', 'Group.Read.All'])
+    for (const v of ['User.ReadWrite.All', 'Team.Create', 'Policy.Read.All', 'Group.Read.All'])
       expect(isPrivilegedAppRole(v), v).toBe(false);
   });
 

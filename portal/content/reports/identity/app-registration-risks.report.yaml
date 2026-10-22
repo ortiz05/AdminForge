@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.app-registration-risks
-version: 2.1.0
+version: 2.2.0
 title: App registration configuration risks
 summary: >-
   App registrations configured in ways that make token theft or misuse easier — wildcard or plain-HTTP redirect URIs,
@@ -67,7 +67,9 @@ datasources:
           'OnPremDirectorySynchronization.ReadWrite.All', 'Synchronization.ReadWrite.All', 'Group.ReadWrite.All',
           'GroupMember.ReadWrite.All', 'DelegatedAdminRelationship.ReadWrite.All', 'DeviceManagementConfiguration.ReadWrite.All',
           'DeviceManagementScripts.ReadWrite.All', 'DeviceManagementApps.ReadWrite.All', 'DeviceManagementRBAC.ReadWrite.All',
-          'DeviceManagementManagedDevices.PrivilegedOperations.All', 'Mail.ReadWrite', 'Mail.Send', 'Files.ReadWrite.All',
+          'DeviceManagementManagedDevices.PrivilegedOperations.All',
+          'Device.ReadWrite.All', 'CustomSecAttributeAssignment.ReadWrite.All', 'IdentityRiskyUser.ReadWrite.All', 'EventListener.ReadWrite.All', 'CustomAuthenticationExtension.ReadWrite.All', 'OnPremisesPublishingProfiles.ReadWrite.All', 'MultiTenantOrganization.ReadWrite.All', 'SharePointTenantSettings.ReadWrite.All', 'AdministrativeUnit.ReadWrite.All', 'DeviceManagementCloudCA.ReadWrite.All', 'User.ManageIdentities.All', 'RoleManagementAlert.ReadWrite.Directory', 'RoleAssignmentSchedule.Remove.Directory', 'RoleEligibilitySchedule.Remove.Directory', 'PrivilegedAssignmentSchedule.Remove.AzureADGroup', 'PrivilegedEligibilitySchedule.Remove.AzureADGroup', 'AgentIdentity.Create.All', 'AgentIdentity.CreateAsManager', 'AgentIdentity.DeleteRestore.All', 'AgentIdentity.EnableDisable.All', 'AgentIdentity.ReadWrite.All', 'AgentIdentityBlueprint.Create', 'AgentIdentityBlueprint.DeleteRestore.All', 'AgentIdentityBlueprint.UpdateBranding.All', 'AgentIdentityBlueprintPrincipal.Create', 'AgentIdentityBlueprintPrincipal.DeleteRestore.All', 'AgentIdentityBlueprintPrincipal.EnableDisable.All', 'AgentIdentityBlueprintPrincipal.ReadWrite.All', 'AgentInstance.ReadWrite.All', 'AgentInstance.ReadWrite.ManagedBy',
+          'Mail.ReadWrite', 'Mail.Send', 'Files.ReadWrite.All',
           'Sites.ReadWrite.All', 'Sites.FullControl.All', 'User.ReadWrite.All'];
         $criticalFamily := /^(RoleManagement|RoleManagementPolicy|RoleAssignmentSchedule|RoleEligibilitySchedule|PrivilegedAccess|PrivilegedAssignmentSchedule|PrivilegedEligibilitySchedule|Policy)\.ReadWrite\.|^UserAuth(entication)?Method(-[A-Za-z]+)?\.(ReadWrite|Delete)\.|^LifecycleWorkflows(-Workflow)?\.(ReadWrite\.All|Activate)$|^AgentIdentityBlueprint\.(AddRemoveCreds|ReadWrite|UpdateAuthProperties)\.|^TeamsAppInstallation\.ReadWriteAndConsent/i;
         $roles := ds.graphApi ? ds.graphApi : {};

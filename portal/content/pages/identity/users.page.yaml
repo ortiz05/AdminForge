@@ -453,7 +453,7 @@ layout:
         kind: enum
         map: { Cloud: Cloud, Synced: Synced from AD }
         filter: { type: facet, param: source }
-      - { field: signInActivity.lastSuccessfulSignInDateTime, label: Last successful sign-in, kind: relativeTime }
+      - { field: signInActivity.lastSuccessfulSignInDateTime, label: Last sign-in, kind: relativeTime, sortable: true }
       - { field: signInActivity.lastSignInDateTime, label: Last interactive sign-in, kind: relativeTime, hidden: true }
       - { field: signInActivity.lastNonInteractiveSignInDateTime, label: Last non-interactive sign-in, kind: relativeTime, hidden: true }
       - { field: createdDateTime, label: Created, kind: date, hidden: true, filter: date }

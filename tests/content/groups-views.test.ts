@@ -270,6 +270,14 @@ describe('identity.groups — member views', () => {
     expect(await renderString(PAGE.export.data, scope({}))).toBe('groups.value');
   });
 
+  it('lists the fewest members first, then by name', async () => {
+    const matches = await memberView({});
+    const list = await view('groupList', { members: 'UnderFive' }, { memberMatches: matches });
+    const counts = list.rows.map((r: Def) => r.memberCount);
+    expect(counts).toEqual([...counts].sort((a: number, b: number) => a - b));
+    expect(list.rows.slice(0, 2).map((r: Def) => r.displayName)).toEqual(['Mail Security', 'New Team']);
+  });
+
   it('says when a read stopped at its cap', async () => {
     expect((await memberView({}, [], { truncated: true })).partial).toBe(true);
     expect((await memberView({})).partial).toBe(false);

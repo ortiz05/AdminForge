@@ -1,10 +1,10 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.anyone-link-sites-weekly
-version: 1.0.0
+version: 1.0.1
 title: Weekly Anyone-link SharePoint sites report
 summary: >-
-  Every Monday at 07:00 UTC, writes SharePoint sites that allow Anyone links as XLSX. Disabled until the automation identity has a certificate credential (SharePoint refuses app-only tokens from client secrets) and the SharePoint Sites.FullControl.All application permission.
+  Every Monday at 07:00 UTC, writes SharePoint sites that allow Anyone links as XLSX. Disabled until the automation identity has a certificate credential (SharePoint refuses app-only tokens from client secrets) and the SharePoint Sites.FullControl.All application permission. Full control of every site reads every file, so provisioning grants it only once an administrator allows the automation identity both write permissions and sensitive reads.
 owner: m365-team
 tags: [m365, sharepoint, security, report]
 cron: "0 7 * * 1"
@@ -23,6 +23,9 @@ retry: { max: 2, backoff: exponential, delay: 5m }
 timeoutSeconds: 1800
 overlap: skip
 requires:
+  # Sites.FullControl.All is an application write permission and a sensitive read: provisioning grants it only with
+  # AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true and AF_AUTOMATION_ALLOW_SENSITIVE_READS=true
+  # (docs/operations.md › Permission opt-ins).
   scopes:
     sharepointAdmin: [Sites.FullControl.All]
     graph: [Reports.Read.All]

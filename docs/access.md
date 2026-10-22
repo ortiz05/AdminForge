@@ -69,8 +69,7 @@ validate --scopes` compares them), within ceilings that need a deliberate opt-in
   policies — only with `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`. The lists are in
   `portal/tools/cli/src/provision/privilege.ts`.
 - **Automation identity** (schedules): read-only application permissions; writes need
-  `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`, sensitive reads (mail, files, sites, chats, calendars, BitLocker keys,
-  …) need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`. It requires assignment and can use a certificate instead of a
+  `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`, sensitive reads (mail, files, sites — full control of every site included — chats, calendars, call records, BitLocker keys, Windows LAPS passwords, …) need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`, which the write opt-in doesn't replace. It requires assignment and can use a certificate instead of a
   secret. **Sites.Selected** (and the `…SelectedOperations.Selected` list and file permissions) is granted without
   the write opt-in: it reaches nothing until a SharePoint administrator grants the app one site.
   Synthetic monitoring adds, for the synthetic transactions (ADR-015), **Sites.Selected** with write on one test site, **OnlineMeetings.ReadWrite.All** (a write
@@ -88,8 +87,7 @@ validate --scopes` compares them), within ceilings that need a deliberate opt-in
 - **Named app identities** (schedules that say `identity: { app: <name> }`, ADR-014): one app registration per name in
   `AF_SCHEDULE_IDENTITIES`, with only the application permissions of the schedules naming it, under the automation
   identity's ceilings plus opt-ins of its own (`AF_IDENTITY_<NAME>_ALLOW_*`) — so one team's schedules don't need the
-  union of everyone's permissions. Any Operator may pick any configured identity for a report schedule. Tier-0
-  application permissions need `AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true` for every app-only identity.
+  union of everyone's permissions. Any Operator may pick any configured identity for a report schedule. Tier-0 application permissions (role management, tenant policies and organization settings, authentication methods, group membership; `privilege.ts`) need `AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true` for every app-only identity.
 - **A creator's own access** (portal report schedules set to "Run as: Me"): no new app or permission. The creator
   signs in once for the schedule through the Read app; it reads only what they can, never writes, and stops (the
   stored sign-in is deleted) when they lose `Portal.Operator` or a role the report needs, or the schedule is deleted,

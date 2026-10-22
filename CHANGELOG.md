@@ -6,6 +6,30 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Provisioning ceilings for app-only identities (2026-10-22)
+
+- **Tier-0 application permissions have a list of their own.** The automation identity and named schedule identities
+  were held to the delegated tier-0 list, so `Organization.ReadWrite.All` (certificate-based authentication trust),
+  `Policy.ReadWrite.SecurityDefaults`, `Directory.Write.Restricted`, password profiles, directory sync and owned-app
+  credentials were granted with `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS` alone. They now need
+  `AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS`, as do certificate and federation trust (`PublicKeyInfrastructure`,
+  `MutualTlsOauthConfiguration`, `Domain-InternalFederation`), authentication contexts, every user's authentication
+  methods (one method at a time too, `UserAuthMethod-*`), group membership (AdminForge's own role groups are ordinary
+  groups), app and agent-blueprint credentials, Intune scripts, apps, configuration and roles, lifecycle workflows,
+  partner admin relationships, Teams app consent and the whole role-management, PIM and `Policy.ReadWrite.*` families
+  (`isPrivilegedAppRole`). The Write app's delegated list is unchanged.
+- **Sensitive reads cover every verb.** `Sites.FullControl.All` and `Sites.Manage.All` (Graph and SharePoint),
+  `full_access_as_app`, `Mail-Advanced`, mailbox exports and inbox rules, team, channel and chat membership, Windows
+  LAPS passwords, call records, recordings and transcripts, joining calls, meeting AI notes, Copilot interactions,
+  group and Viva Engage conversations, print jobs, user data exports and sticky notes need
+  `AF_AUTOMATION_ALLOW_SENSITIVE_READS`; before, the write opt-in or no opt-in at all granted them.
+  The weekly Anyone-link sites schedule (1.0.1) therefore needs both opt-ins for its `Sites.FullControl.All`. An
+  identity that already holds a permission it would no longer be granted shows under unexpected privilege in
+  `provision status` until the opt-in is set or `provision entra --prune` removes it.
+- A test keeps provisioning in step with the application-permission report: no name it ranks critical is granted to
+  an app-only identity on the write opt-in alone (`Exchange.ManageAsApp` excepted: it reaches nothing until an Exchange
+  role is assigned to the app, and provisioning assigns none).
+
 ### SharePoint sharing at scale (2026-10-22)
 
 - **SharePoint sharing at tens of thousands of sites** (still live, with the engineer's own delegated sign-in; no

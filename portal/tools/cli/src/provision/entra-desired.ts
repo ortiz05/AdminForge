@@ -27,6 +27,7 @@ import {
 } from './catalog';
 import { appRoleId } from './ids';
 import {
+  isPrivilegedAppRole,
   isPrivilegedDelegatedScope,
   isReadOnlyPermission,
   isSensitiveReadAppRole,
@@ -264,12 +265,12 @@ export const CEILINGS = {
   automationSensitive: {
     envKey: 'AF_AUTOMATION_ALLOW_SENSITIVE_READS',
     reason:
-      'reads mail, files, chats or other personal content tenant-wide; set AF_AUTOMATION_ALLOW_SENSITIVE_READS=true to grant it to the automation identity',
+      'reads mail, files, sites, chats, recovery keys or other personal or secret content tenant-wide; set AF_AUTOMATION_ALLOW_SENSITIVE_READS=true to grant it to the automation identity',
   },
   appPrivileged: {
     envKey: 'AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS',
     reason:
-      'tier-0 application permission (an unattended identity could change who holds privilege); set AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true and AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true to grant it',
+      'tier-0 application permission (an unattended identity could change tenant trust or who holds privilege); set AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true and AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true to grant it',
   },
   // A named app identity (ADR-014) needs its own opt-in on top of the global one; AF_IDENTITY_<NAME>_ is filled in.
   identityWrite: {
@@ -280,7 +281,7 @@ export const CEILINGS = {
   identitySensitive: {
     envKey: 'AF_IDENTITY_<NAME>_ALLOW_SENSITIVE_READS',
     reason:
-      'reads mail, files, chats or other personal content tenant-wide; set AF_IDENTITY_<NAME>_ALLOW_SENSITIVE_READS=true and AF_AUTOMATION_ALLOW_SENSITIVE_READS=true to grant it to this app identity',
+      'reads mail, files, sites, chats, recovery keys or other personal or secret content tenant-wide; set AF_IDENTITY_<NAME>_ALLOW_SENSITIVE_READS=true and AF_AUTOMATION_ALLOW_SENSITIVE_READS=true to grant it to this app identity',
   },
   identityPrivileged: {
     envKey: 'AF_IDENTITY_<NAME>_ALLOW_PRIVILEGED_PERMISSIONS',
@@ -327,7 +328,7 @@ export function ceilingFor(
     const named = isIdentityApp(app);
     const own = named ? settings.identities?.find((i) => i.name === identityNameOf(app)) : undefined;
     const lifted = (global: boolean | undefined, mine: boolean | undefined) => !!global && (!named || !!mine);
-    if (isPrivilegedDelegatedScope(value) && !lifted(settings.allowAppPrivileged, own?.allowPrivileged))
+    if (isPrivilegedAppRole(value) && !lifted(settings.allowAppPrivileged, own?.allowPrivileged))
       return named ? 'identityPrivileged' : 'appPrivileged';
     if (
       !isReadOnlyAppRole(value) &&

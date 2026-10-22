@@ -127,6 +127,12 @@
     "identity.group-lifecycle#singleOwner": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
+    "identity.groups#everyGroup": {
+      "knownSlow": "member views only: every group with its direct members expanded (Graph can't filter on member count; 999 a page, up to 50,000), counted and slimmed natively to the groups under 5 members",
+      "maxRequests": 60,
+      "maxBytes": 100000000,
+      "maxEstimatedLiveMs": 16000
+    },
     "identity.groups-without-owners#owned": {
       "knownSlow": "apps-only owners: Graph can't filter owner type; groups read with owners expanded, capped (partial note)",
       "knownTruncated": "stops at maxItems: apps-only owners: Graph can't filter owner type; groups read with owners expanded, capped (partial note)",
@@ -187,6 +193,11 @@
     },
     "identity.unused-apps#grants": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "identity.users#inactive": {
+      "knownSlow": "inactivity views only: Graph filters on the last successful sign-in alone (it can't be combined; signInActivity caps pages at 120), the page's facets run natively",
+      "maxRequests": 114,
+      "maxEstimatedLiveMs": 34378
     },
     "m365.anyone-link-sites#links": {
       "knownSlow": "every site of the usage report (no server-side filter on usage reports, 2,000 a page) up to 60,000; filtered, summed and sorted natively, only sites holding Anyone links kept",

@@ -28,16 +28,19 @@ const filter = (params: Record<string, unknown>) =>
   renderString(PAGE.datasources.groups.request.query.$filter, { ...scope(params), advanced: '' });
 const when = (ds: string, params: Record<string, unknown>) =>
   renderString(PAGE.datasources[ds].when, scope(params));
-/** A static datasource as the executor runs it: its `data` over its dependencies, then its transform. */
+/** A static datasource as the executor runs it: its `data` over its dependencies, then its transform (which sees them too). */
 async function view(
   name: string,
   params: Record<string, unknown>,
   ds: Record<string, unknown>,
 ): Promise<Def> {
   const d = PAGE.datasources[name];
-  const value = await renderString(d.data, scope(params, { ds }));
-  return renderString(d.transform, scope(params, { value }));
+  const value = typeof d.data === 'string' ? await renderString(d.data, scope(params, { ds })) : d.data;
+  return renderString(d.transform, scope(params, { value, ds }));
 }
+/** The member read as Graph answers it (members expanded), through its own transform. */
+const everyGroupFrom = (groups: Def[], extra: Record<string, unknown> = {}) =>
+  renderString(PAGE.datasources.everyGroup.transform, scope({}, { value: { value: groups, ...extra } }));
 
 let n = 0;
 const group = (over: Record<string, unknown>) => ({
@@ -91,7 +94,7 @@ const OLD_M365 = group({
   members: members(1),
 });
 const ALL = [SECURITY, M365, MAIL_SEC, DL, DYNAMIC, SYNCED, NEW, ROLE, OLD_M365];
-const memberView = (
+const memberView = async (
   params: Record<string, unknown>,
   owners: Def[] = [],
   extra: Record<string, unknown> = {},
@@ -100,7 +103,7 @@ const memberView = (
     'memberMatches',
     { members: 'UnderFive', ...params },
     {
-      everyGroup: { value: ALL, ...extra },
+      everyGroup: await everyGroupFrom(ALL, extra),
       ownerIds: { value: owners.map((g) => ({ id: g.id })) },
     },
   );
@@ -183,6 +186,14 @@ describe('identity.groups — member views', () => {
     expect(await when('ownerIds', { owners: 'None' })).toBe(false);
   });
 
+  it('counts members as the read arrives and keeps only the fields the views use', async () => {
+    const out = await everyGroupFrom([DL, ROLE], { truncated: true });
+    expect(out.truncated).toBe(true);
+    // Only groups under 5 members go on (both member views are subsets of them).
+    expect(out.rows.map((r: Def) => r.memberCount)).toEqual([4]);
+    for (const r of out.rows) expect(r).not.toHaveProperty('members');
+  });
+
   it('reads members expanded without an advanced query (Graph refuses $expand in one)', () => {
     const req = PAGE.datasources.everyGroup.request;
     expect(req.query.$expand).toBe('members($select=id)');
@@ -246,7 +257,11 @@ describe('identity.groups — member views', () => {
 
   it('lists the first 10,000 matches in the browser; the export has every one', async () => {
     const many = Array.from({ length: 10_050 }, () => group({ members: members(1) }));
-    const matches = await view('memberMatches', { members: 'UnderFive' }, { everyGroup: { value: many } });
+    const matches = await view(
+      'memberMatches',
+      { members: 'UnderFive' },
+      { everyGroup: await everyGroupFrom(many) },
+    );
     expect(matches.rows).toHaveLength(10_050);
     const list = await view('groupList', { members: 'UnderFive' }, { memberMatches: matches });
     expect(list).toMatchObject({ matched: 10_050, listCapped: true });

@@ -43,18 +43,23 @@ const everyGroup = {
 };
 const ownerIds = { value: everyGroup.value.filter((_, i) => i % 3 === 0).map((g) => ({ id: g.id })) };
 
+let counted: Def;
+/** The member read's own transform (count and slim), then memberMatches over it — each under the budget. */
 async function matches(params: Record<string, unknown>): Promise<Def> {
+  counted ??= await atScale(PAGE.datasources.everyGroup.transform, { params: DEFAULTS, value: everyGroup });
   const p = { ...DEFAULTS, ...params };
-  const ds = PAGE.datasources.memberMatches;
-  const value = await renderString(ds.data, {
-    now: '2026-10-22T12:00:00Z',
-    params: p,
-    ds: { everyGroup, ownerIds },
-  });
-  return atScale(ds.transform, { params: p, value });
+  const ds = { everyGroup: counted, ownerIds };
+  return atScale(PAGE.datasources.memberMatches.transform, { params: p, value: {}, ds });
 }
 
 describe('identity.groups member views at 50,000 groups', () => {
+  it('the member read counts and slims 50,000 groups within the budget', async () => {
+    const out = await atScale(PAGE.datasources.everyGroup.transform, { params: DEFAULTS, value: everyGroup });
+    // Only the groups under 5 members go on (both member views are subsets), without their member lists.
+    expect(out.rows).toHaveLength(everyGroup.value.filter((g) => g.members.length < 5).length);
+    expect(out.rows[0]).not.toHaveProperty('members');
+  });
+
   it('fewer than 5 members: filtered, counted and labelled within the budget', async () => {
     const out = await matches({ members: 'UnderFive' });
     expect(out.rows.length).toBe(everyGroup.value.filter((g) => g.members.length < 5).length);
@@ -80,7 +85,8 @@ describe('identity.groups member views at 50,000 groups', () => {
     const all = await matches({ members: 'UnderFive' });
     const list = await atScale(PAGE.datasources.groupList.transform, {
       params: { ...DEFAULTS, members: 'UnderFive' },
-      value: all,
+      value: {},
+      ds: { memberMatches: all },
     });
     expect(list.rows).toHaveLength(Math.min(10_000, all.rows.length));
     expect(list.matched).toBe(all.rows.length);

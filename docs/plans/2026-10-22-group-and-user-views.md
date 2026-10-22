@@ -1,7 +1,9 @@
 # Group and user views — Implementation Plan
 
-> **Status:** in progress (2026-10-22). Phase 1 (Tasks 0–10) is being built on `feat/directory-views`. Phase 2
-> (Task 11) waits on D1: this installation has no Log Analytics workspace (`AF_LOG_ANALYTICS_WORKSPACE_ID` missing).
+> **Status:** in progress (2026-10-22). Phase 1 (Tasks 0–10) is built on `feat/directory-views`: the views, the two
+> generic additions, live checks (app-only, `docs/licensing/findings/2026-10-22-group-and-user-views.md`), fleet-size
+> fixes (`CHANGELOG.md` › Group and user views) and the browser tests. Phase 2 (Task 11) waits on D1: this
+> installation has no Log Analytics workspace (`docs/backlog.md`).
 
 **Goal:** New built-in views on the existing **Groups** (`identity.groups`) and **Users** (`identity.users`) pages —
 "No owners", "Fewer than 5 members", "Not renewed in a year", "Inactive 90 days", … — picked from the page's Views menu

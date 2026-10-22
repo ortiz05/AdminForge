@@ -1,4 +1,4 @@
-import { and, asc, count, eq, gt, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import { writeTx, type Db, type Tx } from '../db/client';
 import { preauth } from '../db/schema';
 import { AppError } from '../errors';
@@ -28,6 +28,8 @@ export interface PreauthRecord {
   sessionIdHash: string | null;
   /** sha256 of the browser-binding cookie: the callback must come back to the same browser. */
   bindingHash: string | null;
+  /** Sign-ins: a keyed hash of the client's address key (flow.ts), for its share of the pending sign-ins. */
+  addressHash?: string | null;
   details: PreauthDetails | null;
   expiresAt: Date;
 }
@@ -115,6 +117,47 @@ export class SqlitePreauthStore implements PreauthStore {
         const [row] = tx.select({ n: count() }).from(preauth).where(gt(preauth.expiresAt, start)).all();
         const over = (row?.n ?? 0) - this.maxPending + 1;
         if (over > 0) {
+          // A fair share first: the address holding the most pending sign-ins gives up its oldest, whatever their age,
+          // when it holds more than this start's address — a few addresses can't hold the table against everyone else.
+          if (record.addressHash) {
+            const pendingSignIns = and(isNull(preauth.sessionIdHash), gt(preauth.expiresAt, start));
+            const [heaviest] = tx
+              .select({ address: preauth.addressHash, n: count() })
+              .from(preauth)
+              .where(and(pendingSignIns, isNotNull(preauth.addressHash)))
+              .groupBy(preauth.addressHash)
+              .orderBy(desc(count()))
+              .limit(1)
+              .all();
+            const [mine] = tx
+              .select({ n: count() })
+              .from(preauth)
+              .where(and(pendingSignIns, eq(preauth.addressHash, record.addressHash)))
+              .all();
+            if (
+              heaviest?.address &&
+              heaviest.address !== record.addressHash &&
+              heaviest.n > (mine?.n ?? 0) + over
+            ) {
+              const theirs = tx
+                .select({ state: preauth.state })
+                .from(preauth)
+                .where(and(pendingSignIns, eq(preauth.addressHash, heaviest.address)))
+                .orderBy(asc(preauth.expiresAt))
+                .limit(over)
+                .all();
+              tx.delete(preauth)
+                .where(
+                  inArray(
+                    preauth.state,
+                    theirs.map((r) => r.state),
+                  ),
+                )
+                .run();
+              tx.insert(preauth).values(record).run();
+              return true;
+            }
+          }
           const oldest = tx
             .select({ state: preauth.state, expiresAt: preauth.expiresAt })
             .from(preauth)
@@ -151,6 +194,7 @@ export class SqlitePreauthStore implements PreauthStore {
       returnTo: row.returnTo,
       sessionIdHash: row.sessionIdHash,
       bindingHash: row.bindingHash,
+      ...(row.addressHash ? { addressHash: row.addressHash } : {}),
       details: (row.details as PreauthDetails | null) ?? null,
       expiresAt: row.expiresAt,
     };
@@ -185,6 +229,21 @@ export class MemoryPreauthStore implements PreauthStore {
       const start = startOf(record).getTime();
       const pending = [...this.rows.values()].filter((r) => r.expiresAt.getTime() > start);
       const over = pending.length - this.maxPending + 1;
+      if (over > 0 && record.addressHash) {
+        // A fair share first (see SqlitePreauthStore.put).
+        const byAddress = new Map<string, PreauthRecord[]>();
+        for (const r of pending)
+          if (r.sessionIdHash === null && r.addressHash)
+            byAddress.set(r.addressHash, [...(byAddress.get(r.addressHash) ?? []), r]);
+        const mine = byAddress.get(record.addressHash)?.length ?? 0;
+        const [address, theirs] = [...byAddress.entries()].sort((a, b) => b[1].length - a[1].length)[0] ?? [];
+        if (address && theirs && address !== record.addressHash && theirs.length > mine + over) {
+          for (const r of theirs.sort((a, b) => a.expiresAt.getTime() - b.expiresAt.getTime()).slice(0, over))
+            this.rows.delete(r.state);
+          this.rows.set(record.state, structuredClone(record));
+          return;
+        }
+      }
       if (over > 0) {
         const oldest = pending
           .filter((r) => r.sessionIdHash === null)

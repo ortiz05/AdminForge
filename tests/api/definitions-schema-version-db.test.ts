@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createDatabase, type Database } from '@adminforge/api/src/db/client';
@@ -140,20 +140,23 @@ describe('the content schema version of published rows (SQLite)', () => {
   });
 
   it('upgrading a file from 0001 keeps its rows and gives them schema version 1', async () => {
-    // A file as it was before 0002: migrated, then the column and its journal row taken out again.
+    // A file as it was before 0002: migrated with 0000 and 0001 only (a copy of the folder whose journal stops there).
     const local = createDatabase(path.join(scratch(), 'adminforge.db'), { name: 'cli', pollSignals: false });
     try {
-      migrateDatabase(local);
+      const full = migrationsDir();
+      const journal = JSON.parse(readFileSync(path.join(full, 'meta', '_journal.json'), 'utf8')) as {
+        entries: Array<{ idx: number; tag: string }>;
+      };
+      const old = path.join(scratch(), 'migrations-0001');
+      mkdirSync(path.join(old, 'meta'), { recursive: true });
+      const kept = journal.entries.filter((e) => e.idx <= 1);
+      for (const e of kept) copyFileSync(path.join(full, `${e.tag}.sql`), path.join(old, `${e.tag}.sql`));
+      writeFileSync(path.join(old, 'meta', '_journal.json'), JSON.stringify({ ...journal, entries: kept }));
+      migrateDatabase(local, old);
       const applied = () =>
         (local.sqlite.prepare('select count(*) as n from __drizzle_migrations').get() as { n: number }).n;
-      const total = applied();
-      local.sqlite.exec('alter table definitions drop column schema_version');
-      local.sqlite
-        .prepare(
-          'delete from __drizzle_migrations where created_at = (select max(created_at) from __drizzle_migrations)',
-        )
-        .run();
-      expect(applied()).toBe(total - 1);
+      const total = journal.entries.length;
+      expect(applied()).toBe(2);
       const cols = () =>
         (local.sqlite.prepare('pragma table_info(definitions)').all() as Array<{ name: string }>).map(
           (c) => c.name,

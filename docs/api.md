@@ -530,7 +530,7 @@ delegated **read** identity; the client names a page and a datasource, never a U
   `licence_required` 403, `policy_denied` 403, `dependency_failed` 424 (a `ds.<name>` it uses failed and is not
   `optional: true` — or failed with `forbidden`, `policy_denied`, `licence_required`, `reauth`, `rearm` or `not_armed`
   anywhere up the chain, which `optional` never hides),
-  `content_error` 500, `runner_not_configured` 503 (PowerShell datasources), `outbound_busy` 503,
+  `content_error` 500, `runner_not_configured` 503 (PowerShell datasources), `runner_busy_for_you` 429 (you already have `RUNNER_JOBS_PER_PERSON` PowerShell jobs running), `runner_busy` 503 (every runner worker is busy and its queue is full: try again), `outbound_busy` 503,
   `datasource_timeout` 504, `reauth` 401, upstream codes.
 - **Version:** `version`, if sent, must be the current published version: an older one answers 409 `version_superseded` (reload the page), a retired key 409 `definition_retired`.
 

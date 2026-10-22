@@ -100,7 +100,9 @@ the reason.
   pending sign-in, and the callback must present it. A callback URL captured from someone else's sign-in can't be
   completed in your browser (login CSRF / session swap).
 - `returnTo` is restricted to same-origin paths after normalisation (no `//host`, no dot-segment tricks).
-- At most 5,000 sign-ins may be pending. When the table is full, the oldest pending sign-in that has had two minutes
+- At most 5,000 sign-ins may be pending. When the table is full, the address holding the most pending sign-ins (IPv4,
+  or an IPv6 /64, recorded pseudonymously) gives up its oldest if it holds more than the starting address, so a few
+  addresses can't hold the table against everyone else; otherwise the oldest pending sign-in that has had two minutes
   is dropped to make room (its callback answers `invalid_state`). A start is refused with 503 `signin_busy`, writing
   nothing, only when every pending sign-in is younger than that. Arming and schedule consent are never refused or
   dropped. Refusals log at info, with a warning once a minute.
@@ -431,7 +433,9 @@ the reason.
   at a time; every response body is size-capped (`OUTBOUND_MAX_BYTES`). HTTP probes don't follow redirects, can't
   reach private, loopback or link-local addresses other than the portal itself — re-checked at connect time on a
   pinned connection, as for news feeds, so a DNS change between the check and the connect is refused — and POST only
-  with `allowPost: true`. Content can't set the headers AdminForge owns (`Authorization`, `Cookie`,
+  with `allowPost: true`. Certificate probes follow the same rule (this portal's host, or one that resolves only to
+  public addresses, connected to at the address checked), and DNS probes ask the system resolver, a public one named
+  by IP, or one listed in `AF_PROBE_RESOLVERS` (`probe_target_not_allowed` otherwise). Content can't set the headers AdminForge owns (`Authorization`, `Cookie`,
   `Proxy-Authorization`, `Host`, `client-request-id`, `x-ms-client-request-id`, and the method-override headers
   `X-HTTP-Method-Override`, `X-HTTP-Method` and `X-Method-Override`; any case): validate refuses them, the executor
   refuses them (also on `$batch` sub-requests), and the HTTP client drops them before adding the bearer token and the
@@ -687,9 +691,6 @@ Tracked in `docs/backlog.md`:
   a compensation) that starts a child asking for one unless the parent has a confirmation of its own. The parent's
   risk and kind of confirmation aren't yet required to match the child's: `identity.create-user` and
   `azure.new-subscription-onboarding` confirm with a click and start children that ask for a typed one.
-- Certificate and DNS probes have no address guard: a certificate check connects to whatever host and port its
-  (reviewed) content names, and a DNS check asks whatever resolver it names. Only the cluster's NetworkPolicy limits
-  them (docs/backlog.md).
 - **Query Studio runs whatever KQL the service accepts.** There is no operator blocklist (`externaldata`, `evaluate`,
   `workspace()`, `cluster()`): a query runs with the engineer's own delegated read access, on the sources the
   installation offers (`AF_QUERY_SOURCES`), with a 5,000-row cap, and is audited (`query.executed`, with the query's

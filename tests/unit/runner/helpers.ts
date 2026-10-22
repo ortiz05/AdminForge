@@ -73,6 +73,7 @@ export function testConfig(key: string, overrides: Partial<RunnerConfig> = {}): 
     pwshPath: 'pwsh',
     preload: [],
     queueTimeoutMs: 5000,
+    maxWaiting: 64,
     ...overrides,
   };
 }

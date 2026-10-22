@@ -237,6 +237,8 @@ const Schema = z
     // PowerShell runner (apps/runner; the pod's sidecar on 127.0.0.1); both unset = PowerShell steps/datasources disabled.
     RUNNER_URL: z.url().optional(),
     RUNNER_SHARED_KEY: z.string().min(40).optional(),
+    // PowerShell reads (datasources, exports) one person may have running at once; one more is refused (429).
+    RUNNER_JOBS_PER_PERSON: z.coerce.number().int().min(1).max(64).default(3),
     // Run jobs the API process works on at once (the API is the run worker, ADR-016). Steps mostly wait on Microsoft.
     RUN_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
     // Runs one person may have queued or running at once, previews included (F-08; parked runs don't count).

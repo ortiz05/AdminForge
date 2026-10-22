@@ -22,6 +22,7 @@ import type { BrokerService, TokenBroker } from '../auth/token-broker';
 import { NotArmed, ReauthRequired } from '../auth/types';
 import { AppError } from '../errors';
 import type { ExecutionIdentity, OutboundExecutor, ServiceCall } from '../execution/types';
+import { runnerSlots, type RunnerSlots } from '../execution/runner-slots';
 
 /** Token/session failures from the API become engine parks (awaiting_arm / awaiting_reauth). */
 function identityError(err: unknown): IdentityUnavailable | undefined {
@@ -289,6 +290,29 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
         output: outputs.length <= 1 ? (outputs[0] ?? null) : outputs,
         ...(error ? { error } : {}),
       };
+    },
+  };
+}
+
+/**
+ * A playbook's PowerShell steps share the person's runner slots with their pages (RUNNER_JOBS_PER_PERSON): a step
+ * beyond them waits for one of that person's own jobs to finish, so a bulk run can't hold every runner worker.
+ */
+export function perPersonRunnerPort(
+  port: RunnerPort,
+  limit: number,
+  slots: RunnerSlots = runnerSlots,
+): RunnerPort {
+  return {
+    async run(identity, job, opts) {
+      const who = identity.actor.kind === 'delegated' ? identity.actor.oid : null;
+      if (!who) return port.run(identity, job, opts);
+      const release = await slots.take(who, limit, opts.signal);
+      try {
+        return await port.run(identity, job, opts);
+      } finally {
+        release();
+      }
     },
   };
 }

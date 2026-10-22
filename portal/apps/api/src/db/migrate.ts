@@ -11,8 +11,8 @@ import { createDatabase, type Database } from './client';
  * pod, `strategy: Recreate`, so no older version is running against the file (ADR-017) — and `db:migrate` runs it by
  * hand. Take a volume snapshot (or `adminforge db backup`) before an upgrade that changes the schema.
  */
-export function migrateDatabase(database: Pick<Database, 'db'>): void {
-  migrate(database.db, { migrationsFolder: migrationsDir() });
+export function migrateDatabase(database: Pick<Database, 'db'>, migrationsFolder = migrationsDir()): void {
+  migrate(database.db, { migrationsFolder });
 }
 
 /**

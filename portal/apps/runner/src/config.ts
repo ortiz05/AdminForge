@@ -27,6 +27,8 @@ export interface RunnerConfig {
   preload: PreloadService[];
   /** How long an accepted job may wait for a worker. */
   queueTimeoutMs: number;
+  /** Jobs that may wait for a worker at once; one more is refused (503 runner_busy). */
+  maxWaiting: number;
 }
 
 export class ConfigError extends Error {
@@ -91,12 +93,13 @@ export function loadRunnerConfig(env: NodeJS.ProcessEnv = process.env): RunnerCo
     throw new ConfigError((err as Error).message);
   }
   const poolSize = intFrom(env, 'RUNNER_POOL_SIZE', 2, 1, 16);
+  const maxJobs = intFrom(env, 'RUNNER_MAX_JOBS', Math.max(2, poolSize * 2), 1, 64);
   return {
     host: env.RUNNER_HOST?.trim() || '127.0.0.1',
     port: intFrom(env, 'RUNNER_PORT', 3101, 0, 65535),
     sharedKey,
     poolSize,
-    maxJobs: intFrom(env, 'RUNNER_MAX_JOBS', Math.max(2, poolSize * 2), 1, 64),
+    maxJobs,
     scriptsDir: path.resolve(
       env.ADMINFORGE_SCRIPTS_DIR?.trim() || path.join(RUNNER_ROOT, '..', '..', 'content', 'scripts'),
     ),
@@ -105,6 +108,7 @@ export function loadRunnerConfig(env: NodeJS.ProcessEnv = process.env): RunnerCo
     pwshPath: findPwsh(env),
     preload: parsePreload(env.RUNNER_PRELOAD_MODULES),
     queueTimeoutMs: intFrom(env, 'RUNNER_QUEUE_TIMEOUT_SECONDS', 60, 1, 3600) * 1000,
+    maxWaiting: intFrom(env, 'RUNNER_MAX_WAITING', 4 * maxJobs, 0, 1024),
   };
 }
 

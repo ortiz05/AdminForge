@@ -153,6 +153,7 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
         kind: 'read',
         returnTo,
         binding: browserBinding(ctx, request, reply),
+        address: request.ip,
       });
       const url = await auth.authUrl({
         kind: 'read',

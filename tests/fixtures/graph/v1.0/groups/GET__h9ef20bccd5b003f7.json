@@ -1,0 +1,284 @@
+{
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000301",
+      "displayName": "SG-Example-Approvers",
+      "description": "Approvers for expense claims",
+      "mail": null,
+      "mailEnabled": false,
+      "securityEnabled": true,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "createdDateTime": "2024-03-04T09:00:00Z",
+      "renewedDateTime": "2024-03-04T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": false,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000108"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000109"
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000302",
+      "displayName": "Example Project Falcon",
+      "description": null,
+      "mail": "falcon@example.com",
+      "mailEnabled": true,
+      "securityEnabled": true,
+      "groupTypes": [
+        "Unified"
+      ],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "createdDateTime": "2024-03-04T09:00:00Z",
+      "renewedDateTime": "2026-05-01T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": "Private",
+      "isAssignableToRole": false,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000110"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000111"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000112"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000113"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000114"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000115"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000116"
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000303",
+      "displayName": "Example Old Workspace",
+      "description": null,
+      "mail": "oldworkspace@example.com",
+      "mailEnabled": true,
+      "securityEnabled": true,
+      "groupTypes": [
+        "Unified"
+      ],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "createdDateTime": "2024-03-04T09:00:00Z",
+      "renewedDateTime": "2025-02-10T09:00:00Z",
+      "expirationDateTime": "2026-11-12T09:00:00Z",
+      "visibility": "Public",
+      "isAssignableToRole": false,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000118"
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000304",
+      "displayName": "Example Mail Security",
+      "description": null,
+      "mail": "mailsec@example.com",
+      "mailEnabled": true,
+      "securityEnabled": true,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "createdDateTime": "2024-03-04T09:00:00Z",
+      "renewedDateTime": "2024-03-04T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": false,
+      "members": []
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000305",
+      "displayName": "Example All Staff",
+      "description": null,
+      "mail": "allstaff@example.com",
+      "mailEnabled": true,
+      "securityEnabled": false,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "createdDateTime": "2024-03-04T09:00:00Z",
+      "renewedDateTime": "2024-03-04T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": false,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000128"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000129"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000012a"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000012b"
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000306",
+      "displayName": "Example Dynamic Sales",
+      "description": null,
+      "mail": null,
+      "mailEnabled": false,
+      "securityEnabled": true,
+      "groupTypes": [
+        "DynamicMembership"
+      ],
+      "membershipRule": "(user.department -eq \"Sales\")",
+      "membershipRuleProcessingState": "Paused",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "createdDateTime": "2024-03-04T09:00:00Z",
+      "renewedDateTime": "2024-03-04T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": false,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000130"
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000307",
+      "displayName": "SG-Example-Ops-Synced",
+      "description": null,
+      "mail": null,
+      "mailEnabled": false,
+      "securityEnabled": true,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": true,
+      "onPremisesLastSyncDateTime": "2026-10-22T08:30:00Z",
+      "createdDateTime": "2024-03-04T09:00:00Z",
+      "renewedDateTime": "2024-03-04T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": false,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000138"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000139"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000013a"
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000308",
+      "displayName": "SG-Example-New-Team",
+      "description": null,
+      "mail": null,
+      "mailEnabled": false,
+      "securityEnabled": true,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "createdDateTime": "2026-10-12T09:00:00Z",
+      "renewedDateTime": "2026-10-12T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": false,
+      "members": []
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000309",
+      "displayName": "SG-Example-Tier0-Admins",
+      "description": null,
+      "mail": null,
+      "mailEnabled": false,
+      "securityEnabled": true,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "createdDateTime": "2024-03-04T09:00:00Z",
+      "renewedDateTime": "2024-03-04T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": true,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000148"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000149"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000014a"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000014b"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000014c"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000014d"
+        }
+      ]
+    }
+  ]
+}

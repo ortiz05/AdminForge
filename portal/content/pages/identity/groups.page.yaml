@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.groups
-version: 1.2.0
+version: 1.3.0
 title: Groups
 summary: >-
   Security groups, Microsoft 365 groups, mail-enabled security groups and distribution lists — filter by type,
@@ -38,6 +38,7 @@ params:
       - { value: Any, label: Assigned or dynamic }
       - { value: Assigned, label: Assigned }
       - { value: Dynamic, label: Dynamic }
+      - { value: Paused, label: "Dynamic, rule paused" }
   source:
     type: enum
     label: Source
@@ -48,10 +49,49 @@ params:
       - { value: Cloud, label: Cloud only }
       - { value: Synced, label: Synced from AD }
   roleAssignable: { type: enum, values: [Any, Yes, No], default: Any, label: Role-assignable, facet: true }
+  owners:
+    type: enum
+    label: Owners
+    facet: true
+    default: Any
+    description: Graph counts apps as owners — Groups without owners tells people from apps.
+    values:
+      - { value: Any, label: Any number }
+      - { value: None, label: No owners }
+      - { value: One, label: One owner }
+  members:
+    type: enum
+    label: Members
+    facet: true
+    default: Any
+    description: Direct members (a nested group counts as one). Reads every group, so it takes longer to open.
+    values:
+      - { value: Any, label: Any number }
+      - { value: None, label: No members }
+      - { value: UnderFive, label: Fewer than 5 }
+  created:
+    type: enum
+    label: Created
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any time }
+      - { value: Last30Days, label: In the last 30 days }
+      - { value: OverAYear, label: More than a year ago }
+  lifecycle:
+    type: enum
+    label: Renewal
+    facet: true
+    default: Any
+    description: Microsoft 365 groups under an expiration policy are renewed automatically while they are in use.
+    values:
+      - { value: Any, label: Any }
+      - { value: Expiring, label: Expires in 30 days }
+      - { value: NotRenewed, label: Not renewed in a year }
 
 filters:
   search: q
-  facets: [kind, membership, source, roleAssignable]
+  facets: [kind, membership, source, roleAssignable, owners, members, created, lifecycle]
   # Compiled server-side into `${ advanced }` (OData). Only properties /groups can filter on.
   advanced:
     dialect: odata
@@ -77,15 +117,29 @@ savedViews:
     - { name: Dynamic groups, params: { membership: Dynamic } }
     - { name: Role-assignable groups, params: { roleAssignable: "Yes" } }
     - { name: Synced from AD, params: { source: Synced } }
+    - { name: No owners, params: { owners: None } }
+    - { name: One owner, params: { owners: One } }
+    - { name: No members, params: { members: None } }
+    - { name: Fewer than 5 members, params: { members: UnderFive } }
+    - { name: Created in the last 30 days, params: { created: Last30Days } }
+    - { name: Created over a year ago, params: { created: OverAYear } }
+    - { name: Paused dynamic rules, params: { membership: Paused } }
+    - name: Microsoft 365 groups expiring in 30 days
+      params: { lifecycle: Expiring }
+      columns: [displayName, kind, expirationDateTime, renewedDateTime, createdDateTime]
+    - name: Microsoft 365 groups not renewed in a year
+      params: { lifecycle: NotRenewed }
+      columns: [displayName, kind, renewedDateTime, expirationDateTime, createdDateTime]
 
 datasources:
   groups:
     source: graph
+    when: ${ $not(params.members in ['None', 'UnderFive']) }
     request:
       path: /groups
       headers: { ConsistencyLevel: eventual }
       query:
-        $select: id,displayName,description,mail,mailEnabled,securityEnabled,groupTypes,membershipRule,membershipRuleProcessingState,onPremisesSyncEnabled,onPremisesLastSyncDateTime,createdDateTime,visibility,isAssignableToRole
+        $select: id,displayName,description,mail,mailEnabled,securityEnabled,groupTypes,membershipRule,membershipRuleProcessingState,onPremisesSyncEnabled,onPremisesLastSyncDateTime,createdDateTime,renewedDateTime,expirationDateTime,visibility,isAssignableToRole
         $count: true
         $top: 100
         # Advanced query (ConsistencyLevel: eventual + $count) is needed for NOT and for $search with $filter.
@@ -101,6 +155,13 @@ datasources:
                params.source = 'Cloud' ? "NOT(onPremisesSyncEnabled eq true)",
                params.roleAssignable = 'Yes' ? "isAssignableToRole eq true",
                params.roleAssignable = 'No' ? "NOT(isAssignableToRole eq true)",
+               params.membership = 'Paused' ? "groupTypes/any(c:c eq 'DynamicMembership') and membershipRuleProcessingState eq 'Paused'",
+               params.owners = 'None' ? "owners/$count eq 0",
+               params.owners = 'One' ? "owners/$count eq 1",
+               params.created = 'Last30Days' ? "createdDateTime ge " & $daysAgo(30),
+               params.created = 'OverAYear' ? "createdDateTime le " & $daysAgo(365),
+               params.lifecycle = 'Expiring' ? "expirationDateTime le " & $daysAgo(-30),
+               params.lifecycle = 'NotRenewed' ? "groupTypes/any(c:c eq 'Unified') and renewedDateTime le " & $daysAgo(365),
                advanced
              ][$], ' and ') }
         $search: >-
@@ -126,6 +187,105 @@ datasources:
       dynamic: { path: /groups/$count, query: { $filter: "groupTypes/any(c:c eq 'DynamicMembership')" }, headers: { ConsistencyLevel: eventual } }
       roleAssignable: { path: /groups/$count, query: { $filter: "isAssignableToRole eq true" }, headers: { ConsistencyLevel: eventual } }
     cache: { ttl: 300 }
+  # The member views. Graph can't filter on member count, and $expand isn't allowed in an advanced query (the `groups`
+  # read is one), so every group is read once with its direct members expanded — 20 at most a group (counts are exact
+  # below 20) and one relationship per request — only while a member view is selected.
+  everyGroup:
+    source: graph
+    when: ${ params.members in ['None', 'UnderFive'] }
+    request:
+      path: /groups
+      query:
+        $select: id,displayName,description,mail,mailEnabled,securityEnabled,groupTypes,membershipRule,membershipRuleProcessingState,onPremisesSyncEnabled,onPremisesLastSyncDateTime,createdDateTime,renewedDateTime,expirationDateTime,visibility,isAssignableToRole
+        $expand: members($select=id)
+        $top: 999
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 900 }
+  # The owner views over the member read: the groups Graph counts no owner (or one) for, as ids.
+  ownerIds:
+    source: graph
+    when: ${ params.members in ['None', 'UnderFive'] and params.owners in ['None', 'One'] }
+    request:
+      path: /groups
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: "${ params.owners = 'One' ? 'owners/$count eq 1' : 'owners/$count eq 0' }"
+        $count: true
+        $select: id
+        $top: 999
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 900 }
+  # Every group of a member view, with the page's facets applied natively (as the Graph list's $filter would) and the
+  # labels the Graph list adds, by partition ($applyAdvanced + $withFields): no JSONata per group. The export reads
+  # this; the table reads the capped view below.
+  memberMatches:
+    source: static
+    when: ${ params.members in ['None', 'UnderFive'] }
+    data: >-
+      ${ { "rows": ds.everyGroup.value, "owners": $append([], ds.ownerIds.value.id),
+           "partial": ds.everyGroup.truncated = true or ds.ownerIds.truncated = true } }
+    transform: >-
+      ${ (
+        $p := params;
+        $c := function($path, $type, $op, $v) { { "path": $path, "type": $type, "op": $op, "value": $v } };
+        $f := function($rows, $cl) { $applyAdvanced($rows, { "join": "and", "clauses": $cl }) };
+        $unified := $c('groupTypes', 'string', 'eq', 'Unified');
+        $notUnified := $c('groupTypes', 'string', 'ne', 'Unified');
+        $dynamic := $c('groupTypes', 'string', 'eq', 'DynamicMembership');
+        $assigned := $c('groupTypes', 'string', 'ne', 'DynamicMembership');
+        $security := $c('securityEnabled', 'boolean', 'eq', true);
+        $mail := $c('mailEnabled', 'boolean', 'eq', true);
+        $synced := $c('onPremisesSyncEnabled', 'boolean', 'eq', true);
+        $cloud := $c('onPremisesSyncEnabled', 'boolean', 'ne', true);
+        $clauses := [
+          $p.members = 'None' ? $c('memberCount', 'number', 'eq', 0),
+          $p.members = 'UnderFive' ? $c('memberCount', 'number', 'lt', 5),
+          $p.kind = 'Microsoft365' ? $unified,
+          $p.kind in ['Security', 'MailSecurity'] ? $security,
+          $p.kind = 'Security' ? $c('mailEnabled', 'boolean', 'ne', true),
+          $p.kind in ['MailSecurity', 'Distribution'] ? $mail,
+          $p.kind in ['MailSecurity', 'Distribution'] ? $notUnified,
+          $p.kind = 'Distribution' ? $c('securityEnabled', 'boolean', 'ne', true),
+          $p.membership in ['Dynamic', 'Paused'] ? $dynamic,
+          $p.membership = 'Paused' ? $c('membershipRuleProcessingState', 'string', 'eq', 'Paused'),
+          $p.membership = 'Assigned' ? $assigned,
+          $p.source = 'Synced' ? $synced,
+          $p.source = 'Cloud' ? $cloud,
+          $p.roleAssignable = 'Yes' ? $c('isAssignableToRole', 'boolean', 'eq', true),
+          $p.roleAssignable = 'No' ? $c('isAssignableToRole', 'boolean', 'ne', true),
+          $p.created = 'Last30Days' ? $c('createdDateTime', 'date', 'ge', $daysAgo(30)),
+          $p.created = 'OverAYear' ? $c('createdDateTime', 'date', 'le', $daysAgo(365)),
+          $p.lifecycle = 'Expiring' ? $c('expirationDateTime', 'date', 'le', $daysAgo(-30)),
+          $p.lifecycle = 'NotRenewed' ? $unified,
+          $p.lifecycle = 'NotRenewed' ? $c('renewedDateTime', 'date', 'le', $daysAgo(365)),
+          $p.owners in ['None', 'One'] ? $c('id', 'guid', 'in', value.owners),
+          $p.q ? $c('displayName', 'string', 'containsAny', [$substring($p.q, 0, 256)])
+        ];
+        $matched := $f($withItemCount(value.rows, 'members', 'memberCount'), $clauses);
+        $kinds := $append($append($append(
+          $withFields($f($matched, [$unified]), { "kind": "Microsoft 365" }),
+          $withFields($f($matched, [$notUnified, $security, $mail]), { "kind": "Mail-enabled security" })),
+          $withFields($f($matched, [$notUnified, $security, $c('mailEnabled', 'boolean', 'ne', true)]), { "kind": "Security" })),
+          $withFields($f($matched, [$notUnified, $c('securityEnabled', 'boolean', 'ne', true)]), { "kind": "Distribution" }));
+        $byMembership := $append(
+          $withFields($f($kinds, [$dynamic]), { "membership": "Dynamic" }),
+          $withFields($f($kinds, [$assigned]), { "membership": "Assigned" }));
+        {
+          "rows": $append(
+            $withFields($f($byMembership, [$synced]), { "sourceLabel": "Synced" }),
+            $withFields($f($byMembership, [$cloud]), { "sourceLabel": "Cloud" })),
+          "partial": value.partial = true
+        }
+      ) }
+  # What the browser gets in a member view: the first 10,000 matching groups (the export has every one).
+  groupList:
+    source: static
+    when: ${ params.members in ['None', 'UnderFive'] }
+    data: ${ ds.memberMatches }
+    transform: >-
+      ${ $merge([value, { "rows": $take(value.rows, 10000), "matched": $count(value.rows), "listCapped": $count(value.rows) > 10000 }]) }
 
 actions:
   - playbook: identity.create-group
@@ -165,6 +325,7 @@ layout:
     id: groups
     span: 12
     data: groups.value
+    when: ${ $not(params.members in ['None', 'UnderFive']) }
     rowKey: id
     selection: multi
     columns:
@@ -193,6 +354,8 @@ layout:
       - { field: description, label: Description, wrap: true }
       - { field: visibility, label: Visibility, hidden: true }
       - { field: createdDateTime, label: Created, kind: date, filter: date }
+      - { field: renewedDateTime, label: Renewed, kind: date, hidden: true }
+      - { field: expirationDateTime, label: Expires, kind: date, hidden: true }
       - { field: onPremisesLastSyncDateTime, label: Last directory sync, kind: relativeTime, hidden: true }
       - { field: membershipRule, label: Membership rule, kind: code, hidden: true }
       - { field: id, label: Object id, kind: guid, hidden: true }
@@ -228,8 +391,90 @@ layout:
       body: Clear a facet or the search. Search matches the start of words in the name or description.
       action: { playbook: identity.create-group, label: New group }
 
+  - widget: markdown
+    id: membersNote
+    span: 12
+    when: ${ params.members in ['None', 'UnderFive'] }
+    text: >-
+      **Direct members**: a nested group counts as one member, and a dynamic group counts the members its rule has
+      added so far. This view reads every group, so it takes longer to open; search matches part of the name, and the
+      advanced filter doesn't apply here.${ groupList.listCapped = true ? ' The first 10,000 of ' & $formatNumber(groupList.matched, '#,##0') & ' groups are listed; the export has every one.' : '' }${ groupList.partial = true ? ' **Partial:** the read stopped at 50,000 groups — narrow it with a facet.' : '' }
+      Graph counts apps as owners: [Groups without owners](/p/identity.groups-without-owners) tells people from apps.
+  - widget: table
+    id: groupList
+    span: 12
+    data: groupList.rows
+    when: ${ params.members in ['None', 'UnderFive'] }
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: displayName, label: Group, kind: identity, secondary: mail, sortable: true }
+      - { field: memberCount, label: Direct members, kind: number, sortable: true }
+      - field: kind
+        label: Type
+        kind: enum
+        map: { Microsoft 365: Microsoft 365, Security: Security, Mail-enabled security: Mail-enabled security, Distribution: Distribution }
+        filter: { type: facet, param: kind }
+      - field: membership
+        label: Membership
+        kind: enum
+        map: { Assigned: Assigned, Dynamic: Dynamic }
+        filter: { type: facet, param: membership }
+      - field: sourceLabel
+        label: Source
+        kind: enum
+        map: { Cloud: Cloud, Synced: Synced from AD }
+        filter: { type: facet, param: source }
+      - { field: isAssignableToRole, label: Role-assignable, kind: boolean, hidden: true, filter: { type: facet, param: roleAssignable } }
+      - field: membershipRuleProcessingState
+        label: Rule processing
+        kind: status
+        map: { On: [ok, On], Paused: [warn, Paused] }
+        hidden: true
+      - { field: description, label: Description, wrap: true }
+      - { field: visibility, label: Visibility, hidden: true }
+      - { field: createdDateTime, label: Created, kind: date, filter: date }
+      - { field: renewedDateTime, label: Renewed, kind: date, hidden: true }
+      - { field: expirationDateTime, label: Expires, kind: date, hidden: true }
+      - { field: onPremisesLastSyncDateTime, label: Last directory sync, kind: relativeTime, hidden: true }
+      - { field: membershipRule, label: Membership rule, kind: code, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.group
+      params:
+        id: ${ row.id }
+    rowActions:
+      # The Graph list's `graphManaged` rule, written out (this list has no per-group transform): assigned, cloud-only,
+      # security or Microsoft 365 — not dynamic, synced, mail-enabled security or a distribution list.
+      - playbook: identity.add-group-members
+        label: Add members
+        icon: user-plus
+        inputs:
+          groupId: ${ row.id }
+        when: ${ row.membership = 'Assigned' and row.sourceLabel = 'Cloud' and row.kind in ['Security', 'Microsoft 365'] }
+      - playbook: identity.add-group-owner
+        label: Add owner
+        icon: crown-simple
+        inputs:
+          groupId: ${ row.id }
+      - playbook: identity.edit-dynamic-rule
+        label: Edit dynamic rule
+        icon: funnel-simple
+        inputs:
+          groupId: ${ row.id }
+          membershipRule: ${ row.membershipRule }
+          processing: ${ row.membershipRuleProcessingState }
+        when: ${ row.membership = 'Dynamic' }
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(row.id) }"
+    empty:
+      title: No groups match these filters
+      body: Every group in scope has more members. Clear a facet or the search.
+
 export:
   formats: [csv, xlsx]
   fileName: groups
-  data: groups.value
+  # The member views export every match (their table lists the first 10,000).
+  data: "${ params.members in ['None', 'UnderFive'] ? 'memberMatches.rows' : 'groups.value' }"
   columns: visible

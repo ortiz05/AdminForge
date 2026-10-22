@@ -933,11 +933,21 @@ export function withCount(rows: unknown, path: unknown, as: unknown, budget?: Bu
  * `$withItemCount(rows, 'members', 'memberCount')`: each row with `as` = how many items it holds at `path` — a list's
  * non-blank items (paths read through lists, as in `$applyAdvanced`), 1 for a single value, 0 when missing, null or
  * '' — natively, where `$count(members)` per row costs JSONata ~15 µs a row (`identity.groups`, "Fewer than 5
- * members"). Unlike `$withCount`, which counts the rows that share a value, this counts within each row.
+ * members"). `drop` (true) leaves a top-level `path` out of the row in the same pass: an expansion read only to be
+ * counted goes no further. Unlike `$withCount`, which counts the rows that share a value, this counts within each row.
  */
-export function withItemCount(rows: unknown, path: unknown, as: unknown, budget?: Budget): unknown[] {
+export function withItemCount(
+  rows: unknown,
+  path: unknown,
+  as: unknown,
+  budget?: Budget,
+  drop?: unknown,
+): unknown[] {
   const keys = pathKeys(path, '$withItemCount');
   const name = writableField(as, '$withItemCount', 'the count field');
+  if (drop !== undefined && typeof drop !== 'boolean')
+    throw new Error('$withItemCount: drop must be true or false');
+  const omitKey = drop === true && keys.length === 1 ? keys[0]! : undefined;
   const list = asRows(rows);
   if (list.length > MAX_SEQUENCE) throw new Error(`$withItemCount: at most ${MAX_SEQUENCE} rows`);
   return list.map((row, i) => {
@@ -948,7 +958,12 @@ export function withItemCount(rows: unknown, path: unknown, as: unknown, budget?
     if (Array.isArray(v)) {
       for (const x of v) if (!blank(x)) n++;
     } else if (!blank(v)) n = 1;
-    return { ...row, [name]: n };
+    if (omitKey === undefined) return { ...row, [name]: n };
+    // A key loop: object rest with a computed key is several times slower in V8 at this size.
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(row)) if (k !== omitKey) out[k] = row[k];
+    out[name] = n;
+    return out;
   });
 }
 
@@ -1102,10 +1117,10 @@ export function registerHelpers(expr: jsonata.Expression): void {
   );
   expr.registerFunction(
     'withItemCount',
-    function (this: jsonata.Focus, rows: unknown, path: unknown, as: unknown) {
-      return withItemCount(rows, path, as, budgetOf(this));
+    function (this: jsonata.Focus, rows: unknown, path: unknown, as: unknown, drop?: unknown) {
+      return withItemCount(rows, path, as, budgetOf(this), drop);
     },
-    '<xss:a>',
+    '<xssb?:a>',
   );
   expr.registerFunction(
     'flagIn',

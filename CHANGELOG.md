@@ -18,6 +18,13 @@ All notable changes to AdminForge are recorded here. The format follows
   `Move…`, `Share…`, …). Every shipped read script passes unchanged. From the 2026-10-22 security review; the method
   list is a deny-list, and what the static policy still can't see is in `docs/backlog.md` (constrained runspace).
 
+### Live sign-in without the web dev server (2026-10-22)
+
+- **`verify-api-live.ts` and the other `forwardToApi` live scripts sign in again.** They rerouted the browser's
+  `PUBLIC_BASE_URL` requests to the API inside Chrome, which left the sign-in binding cookie off Entra's redirect back,
+  so every sign-in ended in `invalid_state`. The live harness now runs a small stand-in for the web dev server on
+  `PUBLIC_BASE_URL` that forwards `/auth` and `/api` to the API, as Vite's proxy does.
+
 ### Provisioning ceilings for app-only identities (2026-10-22)
 
 - **Tier-0 application permissions have a list of their own.** The automation identity and named schedule identities

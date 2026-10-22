@@ -8,7 +8,7 @@ checks on your commits as CI does. You don't need a Microsoft tenant for any of 
 | Tool                  | Version                         | Why                                                                                  |
 | --------------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
 | Node.js               | 26 (`.nvmrc`)                   | Everything in `portal/` and `tests/`. `nvm use` or `fnm use` picks it up.            |
-| pnpm                  | 11.10.0 (`packageManager`)      | The workspace. Corepack installs the pinned version — don't install another.         |
+| pnpm                  | 11.28.5 (`packageManager`)      | The workspace. Corepack installs the pinned version — don't install another.         |
 | Google Chrome         | current, installed system-wide  | Playwright uses `channel: 'chrome'` and never downloads a browser                    |
 | PowerShell (`pwsh`)   | 7.4+                            | Only if you work on the PowerShell runner (Exchange, Teams, SharePoint) or its tests |
 | VS Code (recommended) | with the Red Hat YAML extension | `.vscode/settings.json` maps content files to their JSON schemas (autocomplete)      |

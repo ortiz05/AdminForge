@@ -60,7 +60,7 @@ outcome. Decisions taken in that review:
 ## Platform
 
 - **TypeScript 7** (native compiler) for all packages; the lint toolchain lives in `tooling/lint` with TypeScript 6 because typescript-eslint needs the classic compiler API.
-- **Latest majors everywhere** (React 19.3, Vite 8, Vitest 5, zod 4.6, Fastify 5, MSAL Node 7, ECharts 6). `pnpm outdated -r` is clean except the deliberate TS 6 in `tooling/lint`.
+- **Latest majors everywhere** (Node.js 26, React 19.3, Vite 8, Vitest 5, zod 4.6, Fastify 5, MSAL Node 7, ECharts 6, tsup 9; refreshed 2026-10-22). `pnpm outdated -r` is clean except the deliberate TS 6 in `tooling/lint`. pnpm stays on 11: pnpm 12 is a native executable that Corepack can't provide the way it provides 11, so moving to it changes how every machine, CI job and image installs pnpm.
 - **Fonts**: Fontsource variable packages (Archivo with the width axis, Atkinson Hyperlegible Next and Mono), self-hosted.
 - **Runtime vs tests split**: everything runnable under `portal/`, every test and test-only dependency under `tests/`.
 - **Formatting**: Prettier enforced in CI (`pnpm format:check`); the Claude Code hook formats files as they're written. Content YAML and fixtures are excluded.

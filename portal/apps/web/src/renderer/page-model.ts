@@ -6,6 +6,32 @@ import { blockId, type Block } from './blocks';
 /** Keys whose values are datasource references (not templates). */
 const DATA_KEYS = new Set(['data', 'delta', 'trend']);
 
+/**
+ * The `${ … }` parts of a template, joined: what refers to datasources. Prose around them doesn't — a note saying
+ * "10,000 sites are listed" must not make the browser fetch a datasource called `sites`. Braces inside the
+ * expression's strings don't end it.
+ */
+export function templateExpressions(text: string): string {
+  const out: string[] = [];
+  for (let i = text.indexOf('${'); i >= 0; i = text.indexOf('${', i)) {
+    let depth = 0;
+    let quote = '';
+    let j = i + 1;
+    for (; j < text.length; j++) {
+      const c = text[j]!;
+      if (quote) {
+        if (c === '\\') j++;
+        else if (c === quote) quote = '';
+      } else if (c === '"' || c === "'") quote = c;
+      else if (c === '{') depth++;
+      else if (c === '}' && --depth === 0) break;
+    }
+    out.push(text.slice(i + 2, j));
+    i = j + 1;
+  }
+  return out.join(' ');
+}
+
 /** Datasource names used by these blocks/templates: `data` refs plus identifiers inside `${ … }`. */
 export function neededDatasources(def: PageDefinition, parts: unknown[]): string[] {
   const names = Object.keys(def.datasources ?? {});
@@ -18,7 +44,10 @@ export function neededDatasources(def: PageDefinition, parts: unknown[]): string
         const root = splitDataRef(v).root;
         if (names.includes(root)) found.add(root);
       }
-      if (v.includes('${')) for (const [n, re] of patterns) if (re.test(v)) found.add(n);
+      if (v.includes('${')) {
+        const code = templateExpressions(v);
+        for (const [n, re] of patterns) if (re.test(code)) found.add(n);
+      }
     } else if (Array.isArray(v)) v.forEach((x) => visit(x));
     else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) visit(x, k);
   };

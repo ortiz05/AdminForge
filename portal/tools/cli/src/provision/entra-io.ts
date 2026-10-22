@@ -8,7 +8,7 @@
  * Decides nothing: what to change comes from provision/entra-plan.ts.
  */
 import { ApiError, type GraphClient, type HttpClient } from '@adminforge/connectors';
-import { RESOURCE_KEYS, RESOURCES, type PortalRole } from './catalog';
+import { DIRECTORY_ROLES, RESOURCE_KEYS, RESOURCES, type PortalRole } from './catalog';
 import { armRoleAssignmentName } from './ids';
 import type {
   AppKey,
@@ -105,6 +105,50 @@ export async function listArmAssignments(
   return data.value;
 }
 
+const ROLE_NAMES = new Map(Object.entries(DIRECTORY_ROLES).map(([name, id]) => [id.toLowerCase(), name]));
+
+/** Directory roles each service principal holds, by name. Errors are kept (shown as "could not check"), not thrown. */
+async function fetchDirectoryRoles(
+  graph: GraphClient,
+  sps: EntraState['sps'],
+): Promise<NonNullable<EntraState['directoryRoles']>> {
+  const out: NonNullable<EntraState['directoryRoles']> = { byApp: {} };
+  const why = (err: unknown) => (err instanceof ApiError ? `${err.status} ${err.code}` : String(err));
+  const read = (path: string, principalId: string) =>
+    graph.all<{ roleDefinitionId?: string; roleDefinition?: { displayName?: string } }>({
+      path,
+      query: {
+        $filter: `principalId eq ${odata(principalId)}`,
+        $expand: 'roleDefinition($select=displayName)',
+      },
+    });
+  const name = (a: { roleDefinitionId?: string; roleDefinition?: { displayName?: string } }) =>
+    a.roleDefinition?.displayName ??
+    ROLE_NAMES.get(String(a.roleDefinitionId).toLowerCase()) ??
+    'a custom role';
+  for (const key of Object.keys(sps) as AppKey[]) {
+    const principal = sps[key]!.id;
+    const held: Array<{ role: string; eligible: boolean }> = [];
+    if (!out.error)
+      try {
+        for (const a of await read('/roleManagement/directory/roleAssignments', principal))
+          held.push({ role: name(a), eligible: false });
+      } catch (err) {
+        out.error = why(err);
+      }
+    // Eligibility needs PIM (Entra ID P2): without it the active roles are still checked.
+    if (!out.eligibleError)
+      try {
+        for (const a of await read('/roleManagement/directory/roleEligibilitySchedules', principal))
+          held.push({ role: name(a), eligible: true });
+      } catch (err) {
+        out.eligibleError = why(err);
+      }
+    out.byApp[key] = held;
+  }
+  return out;
+}
+
 /** Reads everything the Entra plan compares against. Read-only. */
 export async function fetchEntraState(
   graph: GraphClient,
@@ -152,6 +196,8 @@ export async function fetchEntraState(
       sp: state.sps[key] ? await ids(`/servicePrincipals/${state.sps[key]!.id}/owners`) : [],
     };
   }
+  // Directory roles held by the apps' service principals (active and PIM-eligible); provisioning assigns none.
+  state.directoryRoles = await fetchDirectoryRoles(graph, state.sps);
   // Named app identities of this environment that are no longer configured (alternate key …--<label>).
   const automationKey = desired.apps.find((a) => a.key === 'automation')?.uniqueName;
   const label = automationKey?.replace(/^adminforge-automation-/, '');

@@ -336,6 +336,15 @@ export interface EntraState {
   /** Object id of the provisioner's own service principal (to tell its ownership apart). */
   provisionerSpId?: string;
   /**
+   * Directory roles the apps' service principals hold, by role name (active, or eligible through PIM), and why either
+   * could not be read. Provisioning assigns none: an app's directory role works without any signed-in user.
+   */
+  directoryRoles?: {
+    byApp: Partial<Record<AppKey, Array<{ role: string; eligible: boolean }>>>;
+    error?: string;
+    eligibleError?: string;
+  };
+  /**
    * App registrations of named app identities of this environment that AF_SCHEDULE_IDENTITIES no longer lists
    * (ADR-014): they keep their application permissions until deleted. AdminForge's write guard still protects them.
    */

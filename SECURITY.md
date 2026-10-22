@@ -23,7 +23,8 @@ restrictions, never privileges.
 **Drift and unexpected privilege:** `adminforge provision status` fails when something provisioning did not grant
 appears: other principals assigned to the apps, extra application permissions, per-user or foreign consent grants,
 owners on the apps or their service principals, extra secrets or certificates, public-client/SPA redirect URIs,
-identifier URIs or exposed scopes, or Azure roles beyond Reader (plus Log Analytics Reader on the test workspace).
+identifier URIs or exposed scopes, directory roles held by the apps (active or PIM-eligible), or Azure roles beyond
+Reader (plus Log Analytics Reader on the test workspace).
 Output is names and counts only.
 
 **Validation user** (live tests): exists only where `AF_ENV_LABEL` is in `AF_TEST_IDENTITY_LABELS` (default

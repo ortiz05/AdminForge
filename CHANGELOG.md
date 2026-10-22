@@ -6,6 +6,33 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Group and user views (2026-10-22)
+
+- **Groups (1.3.0): views for no owners, one owner, no members, fewer than 5 members, created in the last 30 days or
+  over a year ago, paused dynamic rules, and Microsoft 365 groups expiring in 30 days or not renewed in a year** — in
+  the Views menu and as facets, combining with the others. Owners, dates and paused rules are Graph filters on the
+  page's own list. Graph can't filter on member count (and refuses `$expand` in an advanced query), so the member views
+  read every group once with its direct members expanded (20 at most a group; up to 50,000 groups, cached 15 minutes),
+  count them natively and keep the groups under 5; the page's facets then run natively and the table shows "Direct
+  members", fewest first. Graph counts apps as owners: the note links Groups without owners, which tells them apart.
+- **Users (1.4.0): views for pending guest invitations, blocked but licensed, new in the last 30 days, members
+  inactive 90 days and no sign-in for a year.** Graph's sign-in filter can't be combined with another, so the
+  inactivity views read it alone (as Inactive users does) and apply the page's facets and search natively; accounts
+  that never signed in are in the Inactive users report, which the note links.
+- **Exports follow the view:** `export.data` may be a `${ … }` template over params naming the path to export,
+  rendered alike by the server and the browser, and the export takes its columns from the table bound to that path or
+  reading a static view of it (`exportTable`, schemas). The Users MFA view now exports the registrations it shows; the
+  member and inactivity views export every match (their tables list the first 10,000).
+- **`$withItemCount(rows, path, as, drop?)`**: how many items each row holds at a path, natively — the member count
+  (`$count` per row cost ~15 µs a row) — dropping the counted list in the same pass when asked. The one-value helpers
+  moved from `helpers.ts` to `scalars.ts` (organization review O-04).
+- Measured through the executor on the synthetic enterprise tenant, the member view first took 794 ms against the
+  250 ms transform budget: every datasource hand-off copied 50,000 groups with their members again. The views now read
+  their dependencies in the transform and the member read keeps only what they use (126, 105 and 24 ms; the inactivity
+  views 137 and 92 ms). The requests ran live once, read-only, as the automation identity
+  (`docs/licensing/findings/2026-10-22-group-and-user-views.md`). "Not changed in a year" needs the audit log in Log
+  Analytics, which this installation hasn't got (`docs/backlog.md`).
+
 ### Mail-enabled security groups need a second engineer (2026-10-22)
 
 - **`m365.add-distribution-list-members` 1.3.0 asks for approval when the list is a mail-enabled security group**

@@ -796,6 +796,21 @@ delete it in the Entra admin centre (AdminForge keeps refusing writes to it mean
 the schedule editor offer the configured names under **Run as** — to **every** Operator, so list only identities
 whose read access any Operator may use for a report.
 
+### Choosing the account schedules run as
+
+Each read-only schedule that names no identity runs as the installation default for its kind, else the automation
+identity: set `AF_SCHEDULE_DEFAULT_IDENTITY` (all read-only jobs), `AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS` or
+`AF_SCHEDULE_DEFAULT_IDENTITY_PROBES` to `automation` or a name in `AF_SCHEDULE_IDENTITIES`, then run
+`pnpm adminforge provision entra` so that identity holds the permissions of the schedules it now runs (and of the
+probes those sweeps run). Write-capable schedules never take a default.
+
+An Operator can also choose one content schedule's account on its page (**Run as**; a portal schedule changes it in its
+editor): the identity must already hold the permissions the schedule declares — AdminForge checks and names what is
+missing — and choosing **Default** goes back to the definition or the installation default. Changing a write-capable
+schedule's account turns it off; turning it on again asks a second person to approve the new account. Each change is
+audited (`schedule.run_as_changed`) and the page says who chose it and when. Content health checks every schedule
+against the account it runs as now.
+
 ### Schedules that run with their creator's access
 
 "Run as: Me" in the report schedule form (portal report schedules, read-only) needs no setup beyond Entra sign-in.

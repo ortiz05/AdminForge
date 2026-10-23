@@ -61,20 +61,25 @@ export interface RunsAs {
   signIn: 'signed_in' | 'needs_sign_in' | 'not_signed_in' | null;
   /** Creator schedules: the caller created it, so they can sign in for it. */
   canSignIn: boolean;
+  /** Where the account comes from: chosen on this page, its definition, the installation default, or none of them. */
+  source: 'override' | 'definition' | 'default' | 'automation' | null;
+  /** Who chose it and when (`source: override`). */
+  setBy: string | null;
+  setAt: string | null;
 }
 
-const AUTOMATION_RUNS_AS: RunsAs = {
-  kind: 'automation',
-  name: null,
-  label: 'automation identity',
-  signIn: null,
-  canSignIn: false,
-};
+const SOURCES = ['override', 'definition', 'default', 'automation'] as const;
 
 export function readRunsAs(raw: unknown): RunsAs {
   const o = rec(raw);
   const kind = o.kind === 'app' || o.kind === 'user' ? o.kind : 'automation';
-  if (kind === 'automation') return AUTOMATION_RUNS_AS;
+  const origin = {
+    source: SOURCES.find((s) => s === o.source) ?? null,
+    setBy: pick(o, 'setBy') ?? null,
+    setAt: pick(o, 'setAt') ?? null,
+  };
+  if (kind === 'automation')
+    return { kind, name: null, label: 'automation identity', signIn: null, canSignIn: false, ...origin };
   const signIn =
     o.signIn === 'signed_in' || o.signIn === 'needs_sign_in' || o.signIn === 'not_signed_in'
       ? o.signIn
@@ -85,6 +90,7 @@ export function readRunsAs(raw: unknown): RunsAs {
     label: pick(o, 'label') ?? (kind === 'app' ? 'an app identity' : 'its creator'),
     signIn: kind === 'user' ? (signIn ?? 'not_signed_in') : null,
     canSignIn: kind === 'user' && (bool(o.canSignIn) ?? false),
+    ...origin,
   };
 }
 
@@ -300,6 +306,18 @@ export async function setScheduleEnabled(
     method: 'PATCH',
     body: { enabled },
     schema: ToggleResponse,
+  });
+}
+
+/**
+ * PUT /api/schedules/:key/run-as: the account a content schedule runs as (`automation`, `app:<name>`), or null to go
+ * back to its definition or the installation default. `disabled`: a write-capable schedule was turned off.
+ */
+export async function setScheduleRunAs(key: string, identity: string | null): Promise<{ disabled: boolean }> {
+  return api(`/api/schedules/${encodeURIComponent(key)}/run-as`, {
+    method: 'PUT',
+    body: { identity },
+    schema: parser((input) => ({ disabled: bool(rec(input).disabled) ?? false })),
   });
 }
 

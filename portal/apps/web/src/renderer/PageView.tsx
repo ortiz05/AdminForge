@@ -365,7 +365,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle, onFu
   const exportTable = useMemo(
     () =>
       def.export ? exportTableId(allBlocks, def.datasources, def.export.data, exportRef.value) : undefined,
-    [def.export, exportRef.value, allBlocks],
+    [def.export, def.datasources, exportRef.value, allBlocks],
   );
   const exportColumns = useMemo(() => {
     if (!exportTable) return undefined;

@@ -6,6 +6,12 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Schedules and usage reports (2026-10-23)
+
+- **The Schedules page names the five most recent failures** in its "failed on the last run" alert and folds the rest
+  behind "Show n more": an automation identity without Azure access fails every Azure report, and 18 names pushed the
+  page down.
+
 ### Group and user views (2026-10-22)
 
 - **Groups (1.3.0): views for no owners, one owner, no members, fewer than 5 members, created in the last 30 days or

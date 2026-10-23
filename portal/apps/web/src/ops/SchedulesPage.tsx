@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
   button,
   ArrowClockwiseIcon,
+  Button,
   Badge,
   DataTable,
   formatRelative,
@@ -99,6 +100,9 @@ function Upcoming({ schedules, now }: { schedules: ScheduleItem[]; now: number }
   );
 }
 
+/** How many failed schedules the alert names before "Show n more". */
+const FAILED_SHOWN = 5;
+
 /** Schedules (R6): unattended jobs on this host, their cadence in words, next and last runs, enable / run now. */
 export function SchedulesPage() {
   const navigate = useNavigate();
@@ -106,7 +110,12 @@ export function SchedulesPage() {
   const q = useQuery(schedulesQuery);
   useDocumentTitle('Schedules');
   const items = useMemo(() => q.data?.items ?? [], [q.data]);
-  const failing = items.filter((s) => runStatusView(s.lastStatus).tone === 'crit');
+  // Most recent first: the alert names the latest FAILED_SHOWN and folds the rest behind "Show n more".
+  const failing = items
+    .filter((s) => runStatusView(s.lastStatus).tone === 'crit')
+    .sort((a, b) => (b.lastRunAt ?? '').localeCompare(a.lastRunAt ?? ''));
+  const [allFailed, setAllFailed] = useState(false);
+  const failedShown = allFailed ? failing : failing.slice(0, FAILED_SHOWN);
   // Schedules that use the caller's own access and can't run until they sign in for them.
   const mine = items.filter((s) => s.runsAs.canSignIn && signInView(s.runsAs) !== null);
   const pending = items.filter((s) => s.pendingApprovalId && !s.enabled);
@@ -319,8 +328,8 @@ export function SchedulesPage() {
             role="alert"
             title={`${failing.length} schedule${failing.length === 1 ? '' : 's'} failed on the last run`}
           >
-            <span className="flex flex-wrap gap-x-3 gap-y-1">
-              {failing.map((s) => (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {failedShown.map((s) => (
                 <Link
                   key={s.key}
                   to="/schedules/$key"
@@ -330,6 +339,17 @@ export function SchedulesPage() {
                   {s.title}
                 </Link>
               ))}
+              {failing.length > FAILED_SHOWN && (
+                <Button
+                  size="sm"
+                  intent="ghost"
+                  className="-my-1"
+                  aria-expanded={allFailed}
+                  onClick={() => setAllFailed((v) => !v)}
+                >
+                  {allFailed ? 'Show fewer' : `Show ${failing.length - FAILED_SHOWN} more`}
+                </Button>
+              )}
             </span>
           </Callout>
         )}

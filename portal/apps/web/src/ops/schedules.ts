@@ -15,6 +15,7 @@ import { arr, bool, listOf, num, parser, pick, query, rec } from '../runs/json';
  *   DELETE /api/schedules/:key                → 204 (portal report schedules, when `canManage`)
  * Creating a report schedule (POST /api/schedules) lives with the report catalogue (reports/catalog.ts).
  */
+const strings = (v: unknown): string[] => arr(v).filter((x): x is string => typeof x === 'string');
 
 export type JobKind = 'report' | 'playbook' | 'probe' | 'script' | 'contentHealth';
 
@@ -32,6 +33,11 @@ export interface ScheduleItem {
   runsAs: RunsAs;
   /** `params`: report jobs' parameter values (the rest use the report's defaults). */
   job: { kind: JobKind | string; ref: string | null; params: Record<string, unknown> | null };
+  /** The service it belongs to (a navigation section key, or `platform`); null for a probe sweep. */
+  group: string | null;
+  tags: string[];
+  /** A probe sweep's selection: one probe, a list, or the tags its probes must all carry. */
+  covers: { refs: string[] } | { tags: string[] } | null;
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: string | null;
@@ -216,6 +222,16 @@ export function readSchedule(raw: unknown): ScheduleItem | null {
       ref: pick(job, 'ref') ?? null,
       params: isRecord(job.params) ? job.params : null,
     },
+    group: pick(o, 'group') ?? null,
+    tags: strings(o.tags),
+    covers: (() => {
+      if (pick(job, 'kind') !== 'probe') return null;
+      const one = pick(job, 'ref');
+      if (one) return { refs: [one] };
+      if (Array.isArray(job.refs)) return { refs: strings(job.refs) };
+      const sel = rec(job.select);
+      return Array.isArray(sel.tags) ? { tags: strings(sel.tags) } : null;
+    })(),
     nextRunAt: pick(o, 'nextRunAt') ?? null,
     lastRunAt: pick(o, 'lastRunAt') ?? null,
     lastStatus: pick(o, 'lastStatus') ?? null,
@@ -432,6 +448,7 @@ export interface ProbeItem {
   /** What to do when it warns or fails, and where to act. */
   remedy: string | null;
   link: { label: string; href: string } | null;
+  tags: string[];
   latest: (ProbePoint & { unit: string | null; message: string | null }) | null;
   series: ProbePoint[];
   thresholds: { warn: number | null; crit: number | null; unit: string | null; worse: 'higher' | 'lower' };
@@ -493,6 +510,7 @@ export function readProbe(raw: unknown): ProbeItem | null {
     group: pick(o, 'group') ?? null,
     summary: pick(o, 'summary') ?? null,
     remedy: pick(o, 'remedy') ?? null,
+    tags: strings(o.tags),
     link: (() => {
       const l = rec(o.link);
       const label = pick(l, 'label');
@@ -575,6 +593,7 @@ export const PROBE_KIND_LABEL: Record<string, string> = {
   mailFlow: 'Mail flow',
   fileRoundTrip: 'File round trip',
   onlineMeeting: 'Teams meetings',
+  vaultCredentials: 'Credentials from Vault',
 };
 
 export const PROBE_TONE: Record<ProbeStatus, StatusTone> = {

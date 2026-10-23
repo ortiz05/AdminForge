@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: teams.overview
-version: 1.0.0
+version: 1.0.1
 title: Teams overview
 summary: >-
   Microsoft Teams at a glance — Microsoft's service health and open issues for Teams, how many teams there are and
@@ -130,7 +130,7 @@ layout:
     group: teams
     empty:
       title: No Teams checks have reported yet
-      body: The checks report here after their first scheduled run. Every check is on the Synthetic monitoring page.
+      body: The checks report here after their first scheduled run. Every check is on the Monitoring page (Overview).
   - widget: list
     id: activeIssues
     title: Microsoft Teams incidents and advisories

@@ -264,7 +264,7 @@ prefer the feature key.
 ```
 
 A row opens to its latest message, the probe's `remedy` ("What to do", while it warns or fails) and a link to its full
-result on Synthetic monitoring — what it found (the rows behind the result, for Operators), its history and where to
+result on Monitoring — what it found (the rows behind the result, for Operators), its history and where to
 act (the probe's `link`).
 
 ## Optional keys (beyond the examples above)

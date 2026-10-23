@@ -5,7 +5,6 @@ import {
   button,
   ArrowClockwiseIcon,
   Button,
-  Badge,
   DataTable,
   formatRelative,
   formatTimestamp,
@@ -22,6 +21,7 @@ import {
 import { ApiRequestError } from '../lib/api';
 import { describeCron, formatInZone, nextRuns } from './cron';
 import { RunNowButton, ScheduleToggle } from './ScheduleControls';
+import { ScheduleTitle } from './ScheduleTitle';
 import {
   JOB_LABEL,
   lastRunView,
@@ -132,36 +132,7 @@ export function SchedulesPage() {
         header: 'Schedule',
         kind: 'identity',
         value: (s) => ({ primary: s.title, secondary: s.key }),
-        cell: (s) => (
-          <span className="flex min-w-0 flex-col leading-tight">
-            <Link
-              to="/schedules/$key"
-              params={{ key: s.key }}
-              className="truncate font-medium text-fg hover:underline"
-              title={s.title}
-            >
-              {s.title}
-            </Link>
-            <span className="flex min-w-0 items-center gap-1.5 font-mono text-2xs text-fg-3">
-              <span className="truncate">{s.key}</span>
-              {s.writeCapable && (
-                <Badge tone="outline" className="h-4 font-body">
-                  Changes tenant
-                </Badge>
-              )}
-              {s.source === 'portal' && (
-                <Badge
-                  tone="outline"
-                  className="h-4 font-body"
-                  title={s.createdBy ? `Created in the portal by ${s.createdBy}` : 'Created in the portal'}
-                >
-                  Created in portal
-                  {s.createdBy && <span className="sr-only"> by {s.createdBy}</span>}
-                </Badge>
-              )}
-            </span>
-          </span>
-        ),
+        cell: (s) => <ScheduleTitle s={s} />,
         width: 'minmax(240px, 2.4fr)',
       },
       {

@@ -130,6 +130,7 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
       key: 'overview',
       items: [
         { key: 'overview', href: '/' },
+        { key: 'monitoring', href: '/monitoring' },
         { key: 'news', href: '/news' },
       ],
     });

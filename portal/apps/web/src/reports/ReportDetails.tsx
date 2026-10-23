@@ -60,6 +60,9 @@ export function summaryAsItem(s: ScheduleSummary, ref: string): ScheduleItem {
     identity:
       s.runsAs.kind === 'user' ? 'user' : s.runsAs.kind === 'app' ? `app:${s.runsAs.name}` : 'automation',
     job: { kind: 'report', ref, params: null },
+    group: null,
+    tags: [],
+    covers: null,
     writeCapable: false,
     approvedBy: [],
     delivery: [],

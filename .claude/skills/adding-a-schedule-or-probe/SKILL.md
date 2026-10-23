@@ -9,7 +9,7 @@ description: Use when asked to schedule something to run unattended in AdminForg
 
 Schedules (`portal/content/schedules/`) are run by the scheduler inside the API process (`portal/apps/api/src/schedules`;
 ADR-016) as the **automation identity** (app-only; ADR-011) — never as a person. Probes (`portal/content/probes/`) are
-synthetic tests and configuration checks that write time-series results shown on Synthetic monitoring (`/monitoring`).
+synthetic tests and configuration checks that write time-series results shown on Monitoring (Overview, `/monitoring`).
 
 ## When not to use
 
@@ -62,7 +62,7 @@ synthetic tests and configuration checks that write time-series results shown on
      test objects is an administrator's step (`docs/operations.md` › Synthetic transactions).
 4. **Group** every probe by the service it watches: `group:` a navigation section key (`identity`, `m365`,
    `exchange`, `sharepoint`, `teams`, `endpoint`, `azure`, `avd`, `billing`, …) or `platform` for AdminForge itself.
-   Synthetic monitoring groups tiles by it; the section's row in the navigation shows their status, linking to
+   Monitoring groups tiles by it; the section's row in the navigation shows their status, linking to
    `/monitoring?group=<key>`; a dashboard's `probeStatus` with `group:` shows it. Without it the probe lands under
    "Other checks". `platform` probes have no section row.
    **Say what to do** when it warns or fails: `remedy:` (plain sentences, ≤ 1000 characters: the likely causes, the
@@ -70,7 +70,7 @@ synthetic tests and configuration checks that write time-series results shown on
    incidents check that filters `classification eq 'incident'` doesn't cover advisories) and `link: { label, href }` —
    an AdminForge page that lists the items with the same filter (`/p/<key>?<param>=…`; the key must exist and the
    params match the page's own, e.g. `&includeDrained=false`) or a Microsoft admin centre (`https://`; never `//host`
-   or a backslash). The probe's detail on Synthetic monitoring shows the remedy, the link and the rows behind the result
+   or a backslash). The probe's detail on Monitoring shows the remedy, the link and the rows behind the result
    as **What it found** — so the rows (`fields` / `detailsLimit` / the KQL `project`) start with the item's name and the
    value that broke the rule (`displayName, expires, daysRemaining`). Those rows were collected with application
    permissions, so only Operators see them: never put item names into the message (Readers see messages); an

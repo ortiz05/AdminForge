@@ -265,6 +265,12 @@ the reason.
 
 ## Unattended work (schedules)
 
+- **Where the app-only credentials live** (ADR-018): the env file (the `adminforge-env` and `adminforge-automation-cert`
+  Secrets), or HashiCorp Vault when `AF_VAULT_ADDR` is set — then the env file holds none, the pod logs in with a
+  projected service-account token for Vault only (no Kubernetes API token), reads `identities/<name>` read-only, keeps
+  the credentials in memory and never puts a value in a log, error, probe or audit event; Vault's audit log records
+  every read. A rotation is picked up without a restart; while Vault is down the last good credentials stay in use.
+
 - Runs as the schedule's `identity` (ADR-014), audited as "scheduled by X, executed as <identity>" on the run and
   every audit event (`runs.identity_name` keeps the name):
   - the **automation identity** (default);

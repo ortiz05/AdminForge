@@ -241,5 +241,6 @@ must be HTTPS, because the production session cookie is `__Host-` and `Secure`.
 | [015](adr/015-synthetic-transactions.md)            | Synthetic transactions are built-in probes that write only to test objects.           |
 | [016](adr/016-sqlite-on-a-persistent-volume.md)     | One SQLite file on a persistent volume holds all state; one process owns it.          |
 | [017](adr/017-kubernetes-one-pod.md)                | Kubernetes, one pod: one replica, `Recreate`, the runner as a sidecar.                |
+| [018](adr/018-credentials-from-vault.md)            | App-only credentials can come from HashiCorp Vault, read and refreshed in memory.     |
 
 More: `docs/decisions.md` (decision log), `docs/troubleshooting.md` (error codes), `docs/backlog.md` (known gaps).

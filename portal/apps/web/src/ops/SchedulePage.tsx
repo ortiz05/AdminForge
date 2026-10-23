@@ -27,9 +27,16 @@ import { formatBytes } from '@adminforge/widgets';
 import { RouterLink } from '../app/RouterLink';
 import { ApiRequestError } from '../lib/api';
 import { browser } from '../lib/browser';
+import { useMe } from '../lib/session';
 import { formatInZone, nextRuns } from './cron';
 import { cadenceOf } from './SchedulesPage';
-import { DeleteScheduleButton, RunNowButton, ScheduleToggle } from './ScheduleControls';
+import {
+  DeleteScheduleButton,
+  RunAsControl,
+  runAsOrigin,
+  RunNowButton,
+  ScheduleToggle,
+} from './ScheduleControls';
 import {
   JOB_LABEL,
   lastRunView,
@@ -239,7 +246,16 @@ export function SchedulePage({ scheduleKey, signedIn = false }: { scheduleKey: s
   const navigate = useNavigate();
   const now = useNow(60_000);
   const q = useQuery(schedulesQuery);
+  const me = useMe();
   const s = q.data?.items.find((x) => x.key === scheduleKey);
+  // Operators choose the account of a content schedule (a portal one changes it in its editor); AdminForge's own
+  // housekeeping always runs as the automation identity.
+  const canChooseRunAs =
+    !!s &&
+    me.roles.includes('Portal.Operator') &&
+    s.source === 'content' &&
+    s.job.kind !== 'news' &&
+    s.job.kind !== 'contentHealth';
   const { toast } = useToast();
   const announced = useRef(false);
   // Back from the Entra sign-in for this schedule: say it worked (once), then drop the marker from the address.
@@ -370,6 +386,8 @@ export function SchedulePage({ scheduleKey, signedIn = false }: { scheduleKey: s
             {s.approvedBy.length > 0 && (
               <span className="mt-1 block">Approved by {s.approvedBy.join(', ')}.</span>
             )}
+            {runAsOrigin(s) && <span className="mt-1 block">{runAsOrigin(s)}</span>}
+            {canChooseRunAs && <RunAsControl schedule={s} />}
           </Callout>
           <Panel eyebrow="Cadence" title="When it runs">
             <div className="flex flex-col gap-4">

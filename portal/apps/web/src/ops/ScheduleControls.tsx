@@ -1,14 +1,25 @@
 import { useState } from 'react';
 import { errorDescription } from '../lib/errors';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Button, ConfirmDialog, PlayIcon, StatusPill, Switch, TrashIcon, useToast } from '@adminforge/ui';
+import {
+  Button,
+  ConfirmDialog,
+  PlayIcon,
+  Select,
+  StatusPill,
+  Switch,
+  TrashIcon,
+  useToast,
+} from '@adminforge/ui';
 import { formatInZone, nextRuns } from './cron';
 import {
   deleteSchedule,
   runScheduleNow,
   runsAsPhrase,
+  scheduleIdentitiesQuery,
   setScheduleEnabled,
+  setScheduleRunAs,
   type ScheduleItem,
 } from './schedules';
 
@@ -237,5 +248,82 @@ export function DeleteScheduleButton({
         )
       }
     />
+  );
+}
+
+/** The select's value for "no choice here": the schedule's definition or the installation default decides. */
+const DEFAULT_RUN_AS = 'default';
+
+/** Where the account comes from, in a sentence (null when there's nothing to add). */
+export function runAsOrigin(s: ScheduleItem): string | null {
+  const r = s.runsAs;
+  if (r.source === 'override')
+    return `Chosen here${r.setBy ? ` by ${r.setBy}` : ''}${r.setAt ? ` on ${r.setAt.slice(0, 10)}` : ''}.`;
+  if (r.source === 'default') return 'The installation’s default for this kind of schedule.';
+  if (r.source === 'definition') return 'Named by the schedule’s definition in content.';
+  return null;
+}
+
+/**
+ * Choose the account a content schedule runs as (Portal.Operator): the automation identity or an app identity, over
+ * what its definition names, or back to the default. The identity must already hold the permissions the schedule
+ * declares (the API says which are missing); a write-capable schedule is turned off and needs approval again.
+ */
+export function RunAsControl({ schedule }: { schedule: ScheduleItem }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const identities = useQuery(scheduleIdentitiesQuery);
+  const r = schedule.runsAs;
+  const current =
+    r.source === 'override' ? (r.kind === 'app' && r.name ? `app:${r.name}` : 'automation') : DEFAULT_RUN_AS;
+  const [value, setValue] = useState(current);
+  const mutation = useMutation({
+    mutationFn: (v: string) => setScheduleRunAs(schedule.key, v === DEFAULT_RUN_AS ? null : v),
+    onSuccess: ({ disabled }) => {
+      toast({
+        tone: disabled ? 'info' : 'ok',
+        title: 'Account changed',
+        description: disabled
+          ? `${schedule.title} is off: turning it on again asks a second person to approve the new account.`
+          : `${schedule.title} uses it from its next run.`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      void queryClient.invalidateQueries({ queryKey: ['approvals'] });
+    },
+    onError: (e) => {
+      setValue(current);
+      toast({ tone: 'crit', title: 'The account didn’t change', description: errorDescription(e) });
+    },
+  });
+  const apps = identities.data?.apps ?? [];
+  // Without app identities the only account is the automation identity: nothing to choose.
+  if (!apps.length) return null;
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <Select
+        label="Run as"
+        value={value}
+        onValueChange={setValue}
+        options={[
+          { value: DEFAULT_RUN_AS, label: 'Default' },
+          { value: 'automation', label: 'Automation identity' },
+          ...apps.map((name) => ({ value: `app:${name}`, label: `App identity ${name}` })),
+        ]}
+        hint={
+          schedule.writeCapable
+            ? 'Changing it turns the schedule off; turning it on again needs a second person’s approval for the new account.'
+            : 'The identity needs the permissions this schedule declares; AdminForge checks before it saves.'
+        }
+      />
+      <div>
+        <Button
+          size="sm"
+          disabled={value === current || mutation.isPending}
+          onClick={() => mutation.mutate(value)}
+        >
+          {mutation.isPending ? 'Saving…' : 'Save account'}
+        </Button>
+      </div>
+    </div>
   );
 }

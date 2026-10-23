@@ -282,9 +282,12 @@ the reason.
   - which of these a schedule uses can also come from the **installation default** for its kind
     (`AF_SCHEDULE_DEFAULT_IDENTITY…`, read-only jobs only, so a deploy never moves a write-capable schedule) or an
     **Operator's override** on a content schedule (audited `schedule.run_as_changed`). An override may only name an
-    identity that already holds the application permissions the schedule declares; on a write-capable schedule it
-    turns the schedule off, and the enable approval records the account (`policy.identity`) — an approval for another
-    account no longer applies;
+    identity that already holds the application permissions the schedule and its probes declare — checked by reading
+    the identity's app roles with the automation identity, the one read on an Operator's request that uses it
+    (rate-limited, 10 a minute); on a write-capable schedule it turns the schedule off and cancels a pending request,
+    the enable approval records the account (`policy.identity`), and the scheduler runs the schedule only as the
+    account its approval covered (`schedules.approved_identity`). Defaults never apply to probe sweeps, and a sweep
+    that runs synthetic transactions keeps the account its content names;
   - its **creator's own read access** (`identity: { user: creator }`, portal report schedules only, read-only jobs):
     the creator signs in once for the schedule through the **Read app** (`POST /auth/schedule-consent`, CSRF,
     `prompt=login` + `max_age=0`, and the callback requires `auth_time` within 5 minutes, as arming does). The code is

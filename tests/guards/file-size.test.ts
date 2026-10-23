@@ -21,7 +21,6 @@ const OVER_CEILING: Record<string, number> = {
   'portal/apps/api/src/schedules/scheduler.ts': 1121,
   'portal/apps/web/src/pages/design/sections.tsx': 1009,
   'portal/packages/expressions/src/taint.ts': 969,
-  'portal/apps/api/src/schedules/service.ts': 821,
 };
 
 /** Runtime code: TypeScript/JavaScript, PowerShell and shell under portal/ — not generated files. */

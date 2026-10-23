@@ -5,7 +5,6 @@ import {
   TRANSACTION_KINDS,
   type Probe,
   type Schedule,
-  identityFromKey,
   type RunAsDefaults,
   type ScheduleIdentity,
 } from '@adminforge/schemas';
@@ -44,7 +43,7 @@ import type {
   ScheduleRow,
   ScheduleRunRow,
 } from './types';
-import { appNameOf, runAsOf } from './run-as';
+import { runAsOf } from './run-as';
 
 /**
  * Schedules as the API sees them (R6): list, enable/disable (two-person approval for write-capable schedules),
@@ -68,6 +67,7 @@ import {
   type ScheduleItem,
   type ScheduleRunItem,
 } from './views';
+import { setRunAs } from './run-as-api';
 
 export * from './views';
 
@@ -269,74 +269,9 @@ export class ScheduleService {
   }
 
   /** PATCH { enabled }: 200 when done; 202 { approvalId } when a write-capable schedule needs a second person. */
-  /**
-   * PUT /api/schedules/:key/run-as: the account a content schedule runs as, over what its definition names (null =
-   * back to the definition or the installation default). Portal.Operator; audited. The identity must hold the
-   * application permissions the schedule declares; a write-capable schedule is turned off, and turning it on again
-   * goes through two-person approval for the new account.
-   */
+  /** PUT /api/schedules/:key/run-as (run-as-api.ts). */
   async setRunAs(c: Caller, key: string, wanted: string | null): Promise<{ disabled: boolean }> {
-    requireRole(c.session, 'Portal.Operator', 'Choosing the account a schedule runs as');
-    const { row } = await this.row(key);
-    const def = row.definition;
-    if (row.source !== 'content')
-      throw new AppError(
-        409,
-        'run_as_in_editor',
-        'This schedule was made in the portal: change its account in its editor.',
-        {
-          hint: 'Open the schedule and choose Edit.',
-        },
-      );
-    if (def.job.kind === 'news' || def.job.kind === 'contentHealth')
-      throw new AppError(409, 'run_as_fixed', `${def.title} always runs as the automation identity.`);
-    const identity = wanted === null ? null : identityFromKey(wanted);
-    if (
-      wanted !== null &&
-      (!identity || (identity !== 'automation' && !(this.deps.apps?.() ?? []).includes(appNameOf(identity)!)))
-    )
-      throw new AppError(400, 'unknown_identity', 'There is no such identity on this AdminForge.', {
-        hint: 'Choose the automation identity or an app identity listed in AF_SCHEDULE_IDENTITIES.',
-      });
-    const before = runAsOf(row, this.deps.defaults).identity;
-    const after = runAsOf({ ...row, runAs: wanted }, this.deps.defaults).identity;
-    // The application permissions it declares, per service (function connections aren't app roles).
-    const scopes = Object.fromEntries(
-      Object.entries(def.requires?.scopes ?? {}).filter(
-        (e): e is [string, string[]] => Array.isArray(e[1]) && e[1].length > 0,
-      ),
-    );
-    if (identityKey(after) !== identityKey(before) && Object.keys(scopes).length) {
-      const missing = await this.deps.permissionsMissing?.(after, scopes);
-      if (missing?.length)
-        throw new AppError(
-          409,
-          'identity_lacks_permissions',
-          `The ${identityLabel(after)} lacks permissions this schedule needs: ${missing.join(', ')}.`,
-          {
-            hint: 'Name the identity on the schedule in content, or make it the default for this kind of job, then run adminforge provision entra.',
-          },
-        );
-    }
-    const now = this.deps.now();
-    // Write-capable: approval covers the account; a new one needs approving again.
-    const disabled = isWriteCapable(def) && row.enabled;
-    await this.deps.store.updateSchedule(row.id, {
-      runAs: wanted,
-      runAsSetBy: wanted === null ? null : c.session.upn,
-      runAsSetAt: wanted === null ? null : now,
-      ...(disabled ? { enabled: false, nextRunAt: null, approvedBy: null } : {}),
-    });
-    await this.deps.audit.append({
-      ...this.actor(c),
-      action: 'schedule.run_as_changed',
-      targetType: 'schedule',
-      targetId: key,
-      result: 'success',
-      details: { from: identityKey(before), to: identityKey(after), override: wanted, disabled },
-    });
-    this.changed(key);
-    return { disabled };
+    return setRunAs(this, this.deps, c, key, wanted);
   }
 
   async setEnabled(
@@ -350,7 +285,12 @@ export class ScheduleService {
     const now = this.deps.now();
     if (!enabled) {
       if (row.enabled || row.approvedBy)
-        await this.deps.store.updateSchedule(row.id, { enabled: false, nextRunAt: null, approvedBy: null });
+        await this.deps.store.updateSchedule(row.id, {
+          enabled: false,
+          nextRunAt: null,
+          approvedBy: null,
+          approvedIdentity: null,
+        });
       for (const a of (await this.deps.store.listApprovals({ status: 'pending', subjectId: key })).filter(
         (x) => x.subjectId === key,
       ))
@@ -421,7 +361,7 @@ export class ScheduleService {
           version: def.version,
           sha256: row.sha256,
           job: def.job.kind,
-          identity: identityKey(def.identity),
+          identity: identityKey(runningAs),
         },
       });
       return { statusCode: 202, body: { approvalId: a.id } };
@@ -764,8 +704,8 @@ export class ScheduleService {
     if (
       input.decision === 'approve' &&
       row &&
-      a.policy.identity !== undefined &&
-      a.policy.identity !== identityKey(runAsOf(row, this.deps.defaults).identity)
+      (a.policy.identity ?? identityKey(row.definition.identity)) !==
+        identityKey(runAsOf(row, this.deps.defaults).identity)
     ) {
       await this.deps.store.updateApproval(a.id, { status: 'expired', decidedAt: now }, 'pending');
       throw new AppError(
@@ -792,6 +732,8 @@ export class ScheduleService {
           enabled: true,
           approvedBy: s.upn,
           approvedTarget: a.policy.targetFingerprint ?? null,
+          // The account it was approved for: the scheduler runs a write-capable schedule only as that one.
+          approvedIdentity: a.policy.identity ?? identityKey(def.identity),
           nextRunAt: nextRun(def.cron, def.timezone, now),
         },
         { sha256: a.policy.sha256 },
@@ -808,6 +750,7 @@ export class ScheduleService {
         approvalId: a.id,
         requestedBy: a.policy.requestedByUpn,
         decidedBy: s.upn,
+        identity: a.policy.identity ?? (row ? identityKey(row.definition.identity) : null),
         comment: input.comment ?? null,
         version: a.policy.definitionVersion,
         sha256: a.policy.sha256,

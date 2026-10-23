@@ -14,7 +14,7 @@ import {
 
 const config = {
   AF_SCHEDULE_IDENTITIES: 'reports-team,ops-team',
-  AF_SCHEDULE_DEFAULT_IDENTITY_PROBES: 'reports-team',
+  AF_SCHEDULE_DEFAULT_IDENTITY: 'reports-team',
   AF_IDENTITY_REPORTS_TEAM_CLIENT_ID: '00000000-0000-4000-8000-0000000000d1',
   AF_IDENTITY_OPS_TEAM_CLIENT_ID: '00000000-0000-4000-8000-0000000000d2',
 };
@@ -26,9 +26,12 @@ const playbook = {
   mode: 'write',
   steps: [],
 };
+const lookup = { ...playbook, id: 'identity.lookup-user', title: 'Look up a user', mode: 'read' };
 const defs = () =>
   new FakeDefinitions()
     .set(playbook)
+    .set(lookup)
+    .set(schedule('ops.lookup', { job: { kind: 'playbook', ref: 'identity.lookup-user', mode: 'read' } }))
     .set(schedule('probes.sweep'))
     .set(schedule('news.collect', { job: { kind: 'news' } }))
     .set(
@@ -49,21 +52,21 @@ async function setup() {
 describe('PUT /api/schedules/:key/run-as', () => {
   it('runs as the default for its kind until an Operator chooses another, then back', async () => {
     const { t, avery } = await setup();
-    const before = (await avery.get('/api/schedules/probes.sweep')).json();
+    const before = (await avery.get('/api/schedules/ops.lookup')).json();
     expect(before.identity).toBe('app:reports-team');
     expect(before.runsAs).toMatchObject({ kind: 'app', name: 'reports-team', source: 'default' });
 
-    const set = await avery.put('/api/schedules/probes.sweep/run-as', { identity: 'app:ops-team' });
+    const set = await avery.put('/api/schedules/ops.lookup/run-as', { identity: 'app:ops-team' });
     expect(set.statusCode).toBe(200);
     expect(set.json().identity).toBe('app:ops-team');
     expect(set.json().runsAs).toMatchObject({ name: 'ops-team', source: 'override', setBy: AVERY.upn });
     expect(t.audit.rows.find((r) => r.action === 'schedule.run_as_changed')).toMatchObject({
       actorUpn: AVERY.upn,
-      targetId: 'probes.sweep',
+      targetId: 'ops.lookup',
       details: { from: 'app:reports-team', to: 'app:ops-team', override: 'app:ops-team', disabled: false },
     });
 
-    const cleared = (await avery.put('/api/schedules/probes.sweep/run-as', { identity: null })).json();
+    const cleared = (await avery.put('/api/schedules/ops.lookup/run-as', { identity: null })).json();
     expect(cleared.runsAs).toMatchObject({ name: 'reports-team', source: 'default' });
     expect(cleared.runsAs.setBy).toBeUndefined();
     await t.close();
@@ -97,9 +100,9 @@ describe('PUT /api/schedules/:key/run-as', () => {
     expect(
       (await avery.put('/api/schedules/ops.disable-stale/run-as', { identity: 'app:ops-team' })).json(),
     ).toMatchObject({ identity: 'app:ops-team' });
+    // The change cancelled the request: it can't be approved for the old account any more.
     const stale = await blake.post(`/api/approvals/${first.id}`, { decision: 'approve' });
-    expect([stale.statusCode, stale.json().error.code]).toEqual([409, 'definition_changed']);
-    expect(stale.json().error.message).toContain('account this schedule runs as changed');
+    expect([stale.statusCode, stale.json().error.code]).toEqual([409, 'already_decided']);
 
     // Asked again for the new account and approved: enabled. Changing the account turns it off.
     expect((await avery.patch('/api/schedules/ops.disable-stale', { enabled: true })).statusCode).toBe(202);

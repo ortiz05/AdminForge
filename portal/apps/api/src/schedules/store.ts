@@ -113,6 +113,7 @@ export class MemoryScheduleStore implements ScheduleStore {
       runAs: null,
       runAsSetBy: null,
       runAsSetAt: null,
+      approvedIdentity: null,
       createdAt: now,
       updatedAt: now,
       ...clone(row),

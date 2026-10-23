@@ -18,7 +18,7 @@ const named = def(
   'job:\n  kind: report\n  ref: identity.inactive-users\n  delivery: [{ type: file }]\n',
   'identity: { app: intune-ops }\n',
 );
-const defaults = { all: 'ops-team', reports: 'reports-team', probes: 'automation' };
+const defaults = { all: 'ops-team', reports: 'reports-team' };
 
 describe('effectiveIdentity', () => {
   it('runs as the automation identity with nothing configured', () => {
@@ -26,12 +26,13 @@ describe('effectiveIdentity', () => {
       expect(effectiveIdentity(d)).toEqual({ identity: 'automation', source: 'automation' });
   });
 
-  it('takes the default for its kind, then the general one, for read-only jobs', () => {
+  it('takes the default for its kind, then the general one, for read-only jobs but probe sweeps', () => {
     expect(effectiveIdentity(report, { defaults })).toEqual({
       identity: { app: 'reports-team' },
       source: 'default',
     });
-    expect(effectiveIdentity(probe, { defaults })).toEqual({ identity: 'automation', source: 'default' });
+    // Probe sweeps take no default: some run synthetic transactions, which change test objects.
+    expect(effectiveIdentity(probe, { defaults })).toEqual({ identity: 'automation', source: 'automation' });
     expect(effectiveIdentity(readPlaybook, { defaults })).toEqual({
       identity: { app: 'ops-team' },
       source: 'default',

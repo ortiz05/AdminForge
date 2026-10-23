@@ -1,18 +1,17 @@
 import { isWriteCapable } from './definition';
 import type { Probe } from './probe';
-import type { ProbeJob, Schedule, ScheduleIdentity } from './schedule';
+import { IDENTITY_NAME, type ProbeJob, type Schedule, type ScheduleIdentity } from './schedule';
 
 /**
- * The installation's default accounts for read-only schedules (AF_SCHEDULE_DEFAULT_IDENTITY, …_REPORTS, …_PROBES):
- * `automation` or the name of a configured app identity (AF_SCHEDULE_IDENTITIES).
+ * The installation's default accounts for read-only schedules (AF_SCHEDULE_DEFAULT_IDENTITY, …_REPORTS): `automation`
+ * or the name of a configured app identity (AF_SCHEDULE_IDENTITIES). Probe sweeps take none: some run synthetic
+ * transactions, which change test objects, so a sweep's account is set in content or on its page.
  */
 export interface RunAsDefaults {
   /** Every read-only job that names no identity (AF_SCHEDULE_DEFAULT_IDENTITY). */
   all?: string;
   /** Report jobs (AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS); `all` otherwise. */
   reports?: string;
-  /** Probe jobs (AF_SCHEDULE_DEFAULT_IDENTITY_PROBES); `all` otherwise. */
-  probes?: string;
 }
 
 /** Where a schedule's account comes from: set in the portal, named by its definition, a default, or neither. */
@@ -26,14 +25,14 @@ const asIdentity = (name: string): ScheduleIdentity => (name === 'automation' ? 
 /** The identity an `identityKey` string names (`automation`, `app:<name>`); null for anything else (`user` included). */
 export function identityFromKey(key: string | null | undefined): ScheduleIdentity | null {
   if (key === 'automation') return 'automation';
-  const m = /^app:([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(key ?? '');
-  return m ? { app: m[1]! } : null;
+  const name = key?.startsWith('app:') ? key.slice(4) : '';
+  return IDENTITY_NAME.test(name) ? { app: name } : null;
 }
 
 /**
  * Which account a schedule runs as (docs/plans/2026-10-23-run-as-and-vault.md): its portal `override`, else the
- * identity its definition names, else the installation default for its kind — for read-only jobs only, so a deploy
- * never moves a write-capable schedule to another account without the approval that enabling it needs — else the
+ * identity its definition names, else the installation default for its kind — for read-only jobs that aren't probe
+ * sweeps, so a deploy never moves a schedule that changes data without the approval enabling it needs — else the
  * automation identity. A parsed definition that names none says `automation` (the schema's default).
  */
 export function effectiveIdentity(
@@ -43,14 +42,9 @@ export function effectiveIdentity(
   if (ALWAYS_AUTOMATION.has(def.job.kind)) return { identity: 'automation', source: 'automation' };
   if (opts.override) return { identity: opts.override, source: 'override' };
   if (def.identity && def.identity !== 'automation') return { identity: def.identity, source: 'definition' };
-  if (!isWriteCapable(def)) {
+  if (!isWriteCapable(def) && def.job.kind !== 'probe') {
     const d = opts.defaults;
-    const name =
-      def.job.kind === 'report'
-        ? (d?.reports ?? d?.all)
-        : def.job.kind === 'probe'
-          ? (d?.probes ?? d?.all)
-          : d?.all;
+    const name = def.job.kind === 'report' ? (d?.reports ?? d?.all) : d?.all;
     if (name) return { identity: asIdentity(name), source: 'default' };
   }
   return { identity: 'automation', source: 'automation' };

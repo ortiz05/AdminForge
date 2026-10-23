@@ -1,7 +1,7 @@
 import { ScheduleIdentities, MemoryScheduleGrantStore } from '@adminforge/api/src/schedules/grants';
 import { ScheduleService } from '@adminforge/api/src/schedules/service';
 import { MemoryScheduleStore } from '@adminforge/api/src/schedules/store';
-import { FakeDefinitions, schedule } from '../support/scheduler';
+import { FakeDefinitions, probe, schedule } from '../support/scheduler';
 
 // A run uses the account a schedule runs as now (its override, else its definition, else the default), and an Operator
 // can only point a schedule at an identity that already holds the application permissions it declares.
@@ -15,7 +15,10 @@ const session = {
 const caller = { session, correlationId: 'corr-1', ip: null };
 
 async function storeWith(
-  def = schedule('probes.sweep', { requires: { scopes: { graph: ['Sites.Read.All'] } } }),
+  def = schedule('ops.lookup', {
+    job: { kind: 'playbook', ref: 'identity.lookup-user', mode: 'read' },
+    requires: { scopes: { graph: ['Sites.Read.All'] } },
+  }),
 ) {
   const store = new MemoryScheduleStore(now);
   const row = (await store.insertSchedule({
@@ -41,7 +44,7 @@ describe('the account a run uses', () => {
 
   it('is the default for its kind, then an Operator override', async () => {
     const { row } = await storeWith();
-    const byDefault = await identities({ probes: 'reports-team' }).prepare(row, []);
+    const byDefault = await identities({ all: 'reports-team' }).prepare(row, []);
     expect(byDefault).toMatchObject({
       identity: { app: 'reports-team' },
       executedAs: 'app identity reports-team',
@@ -61,12 +64,16 @@ describe('the account a run uses', () => {
 
 describe('choosing an identity that lacks permissions', () => {
   const def = schedule('probes.sweep', { requires: { scopes: { graph: ['Sites.Read.All'] } } });
-  function service(store: MemoryScheduleStore, missing: string[] | null) {
+  function service(
+    store: MemoryScheduleStore,
+    missing: string[] | null,
+    defs = new FakeDefinitions().set(def),
+  ) {
     const audit = { rows: [] as unknown[], append: async (r: unknown) => void audit.rows.push(r) };
     const asked: unknown[] = [];
     const svc = new ScheduleService({
       store,
-      definitions: new FakeDefinitions().set(def) as never,
+      definitions: defs as never,
       audit: audit as never,
       events: { publish: () => undefined } as never,
       artifacts: {} as never,
@@ -101,5 +108,33 @@ describe('choosing an identity that lacks permissions', () => {
         runAsSetBy: 'avery@example.com',
       });
     }
+  });
+
+  it('counts the permissions of the probes a sweep runs, and keeps synthetic transactions on their account', async () => {
+    const sweep = schedule('probes.sweep', { job: { kind: 'probe', select: { tags: ['sweep-15m'] } } });
+    const sites = probe('probes.sites', {
+      tags: ['sweep-15m'],
+      requires: { scopes: { graph: ['Sites.Read.All'] } },
+    });
+    const read = service(new MemoryScheduleStore(now), [], new FakeDefinitions().set(sweep).set(sites));
+    await read.svc.setRunAs(caller, 'probes.sweep', 'app:ops-team');
+    expect(read.asked).toEqual([{ identity: { app: 'ops-team' }, scopes: { graph: ['Sites.Read.All'] } }]);
+
+    const mail = probe('probes.mail', {
+      tags: ['sweep-15m'],
+      check: {
+        kind: 'mailFlow',
+        from: '${ env.AF_MAIL_SENDER }',
+        to: '${ env.AF_SYNTHETIC_MAILBOX }',
+        waitSeconds: 60,
+        cleanup: true,
+      },
+      timeoutMs: 110000,
+    });
+    const tx = service(new MemoryScheduleStore(now), [], new FakeDefinitions().set(sweep).set(mail));
+    await expect(tx.svc.setRunAs(caller, 'probes.sweep', 'app:ops-team')).rejects.toMatchObject({
+      status: 409,
+      code: 'run_as_fixed',
+    });
   });
 });

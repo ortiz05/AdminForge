@@ -113,13 +113,12 @@ export function appFor(def: LoadedDefinition['def'], defaults?: RunAsDefaults): 
   return 'read';
 }
 
-/** The default accounts for read-only schedules from the env file (AF_SCHEDULE_DEFAULT_IDENTITY, …_REPORTS, …_PROBES). */
+/** The default accounts for read-only schedules from the env file (AF_SCHEDULE_DEFAULT_IDENTITY, …_REPORTS). */
 export function runAsDefaultsFrom(env: Readonly<Record<string, string | undefined>>): RunAsDefaults {
   const v = (k: string) => env[k]?.trim() || undefined;
   const all = v('AF_SCHEDULE_DEFAULT_IDENTITY');
   const reports = v('AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS');
-  const probes = v('AF_SCHEDULE_DEFAULT_IDENTITY_PROBES');
-  return { ...(all ? { all } : {}), ...(reports ? { reports } : {}), ...(probes ? { probes } : {}) };
+  return { ...(all ? { all } : {}), ...(reports ? { reports } : {}) };
 }
 
 export function declaredScopes(defs: readonly LoadedDefinition[], defaults?: RunAsDefaults): Declared {

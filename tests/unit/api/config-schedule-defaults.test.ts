@@ -31,9 +31,9 @@ describe('default run-as accounts', () => {
   });
 
   it('refuses a name that is not a configured identity, naming the key and not the value', () => {
-    const run = () => loadConfig({ ...base, AF_SCHEDULE_DEFAULT_IDENTITY_PROBES: 'probe-squad-x' });
+    const run = () => loadConfig({ ...base, AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS: 'probe-squad-x' });
     expect(run).toThrow(
-      /AF_SCHEDULE_DEFAULT_IDENTITY_PROBES: must be automation or a name listed in AF_SCHEDULE_IDENTITIES/,
+      /AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS: must be automation or a name listed in AF_SCHEDULE_IDENTITIES/,
     );
     expect(run).not.toThrow(/probe-squad-x/);
   });

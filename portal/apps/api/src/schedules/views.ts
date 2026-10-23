@@ -1,10 +1,10 @@
 // The schedules API's views and caller helpers, split from service.ts (organization review O-04).
 import {
-  identityKey,
   identityLabel,
   type PortalRole,
   type Schedule,
   type RunAsDefaults,
+  type RunAsSource,
 } from '@adminforge/schemas';
 
 export { creatorFilesAccess, SCHEDULED_DATA_ROLES } from './run-access';
@@ -89,6 +89,12 @@ export interface RunsAsView {
   signIn?: 'signed_in' | 'needs_sign_in' | 'not_signed_in';
   /** Creator schedules: the caller is the creator and may sign in for it. */
   canSignIn?: boolean;
+  /** Where the account comes from (run-as.ts), and who chose it when an Operator did. */
+  source?: RunAsSource;
+  setBy?: string;
+  setAt?: string;
+  /** With an override: the account "Default" means (the definition's or the installation default). */
+  defaultLabel?: string;
 }
 
 export interface ScheduleRunItem {
@@ -165,6 +171,14 @@ export function runsAsView(
     source,
     ...(source === 'override' && row.runAsSetBy ? { setBy: row.runAsSetBy } : {}),
     ...(source === 'override' && row.runAsSetAt ? { setAt: row.runAsSetAt.toISOString() } : {}),
+    ...(source === 'override'
+      ? {
+          defaultLabel: identityLabel(
+            runAsOf({ ...row, runAs: null }, defaults).identity,
+            row.definition.owner,
+          ),
+        }
+      : {}),
   };
   if (!identity || identity === 'automation')
     return { kind: 'automation', name: null, label: identityLabel(identity), ...origin };

@@ -16,6 +16,7 @@ import { realTimers, type LeaderElector, type Timers } from './leader';
 import type { ScheduleStore } from './store';
 import { contentSchedules, contentSignature, syncSchedules } from './sync';
 import type { RunErrorInfo, ScheduleRow, ScheduleRunRow, ScheduleRunStatus, ScheduleTrigger } from './types';
+import { runAsOf, writeRunRefusal } from './run-as';
 
 /**
  * The scheduler (R6, ADR-011). It runs in the API process (ADR-016) and fires schedules only while it holds the
@@ -628,12 +629,10 @@ export class Scheduler {
     let runAs: PreparedIdentity | null = null;
     const asCreator = def.identity !== 'automation' && 'user' in def.identity;
     try {
-      if (isWriteCapable(def) && !s.approvedBy)
-        throw new AppError(
-          403,
-          'approval_required',
-          'This schedule changes data and runs only after a second person approved enabling it.',
-        );
+      // Changes data: only after a second person approved it, and only as the account that approval covered.
+      const refused =
+        isWriteCapable(def) && writeRunRefusal(s, this.o.identities?.runAs(s) ?? runAsOf(s).identity);
+      if (refused) throw refused;
       if (s.source === 'portal' && this.o.creatorAccess) await this.confirmCreator(s, run, correlationId);
       if (this.o.identities)
         runAs = await this.o.identities.prepare(s, await this.creatorRoles(s)).catch(async (err: unknown) => {

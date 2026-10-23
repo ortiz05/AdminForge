@@ -119,6 +119,7 @@ const row = (def: Schedule): ScheduleRow => ({
   runAs: null,
   runAsSetBy: null,
   runAsSetAt: null,
+  approvedIdentity: null,
   approvedBy: null,
   approvedTarget: null,
   nextRunAt: null,

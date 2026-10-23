@@ -417,6 +417,10 @@ vault secrets enable -path=secret kv-v2            # if not there yet
 vault policy write adminforge-read - <<'HCL'
 path "secret/data/adminforge/prod/identities/*" { capabilities = ["read"] }
 HCL
+# Vault checks the pod's token with the cluster's TokenReview API, as its own reviewer: Vault running in the cluster
+# (its own service account), or a dedicated reviewer service account's JWT (token_reviewer_jwt). The adminforge
+# service account gets no RBAC — never system:auth-delegator.
+vault write auth/kubernetes/config kubernetes_host=https://<the cluster's API server>
 vault write auth/kubernetes/role/adminforge \
   bound_service_account_names=adminforge bound_service_account_namespaces=adminforge \
   audience=vault policies=adminforge-read ttl=1h
@@ -425,8 +429,9 @@ vault kv put secret/adminforge/prod/identities/automation client_id=<AF_AUTOMATI
 vault kv put secret/adminforge/prod/identities/reports-team client_id=<…> certificate_pem=@reports-team.pem
 ```
 
-The pod mounts no Kubernetes API token (`automountServiceAccountToken: false`). Give the API container a projected
-token for Vault only, in your overlay, and point `AF_VAULT_K8S_TOKEN_FILE` at it:
+The pod mounts no Kubernetes API token (`automountServiceAccountToken: false`), and AdminForge refuses that token for
+Vault in production. Give the API container a projected token for Vault only, in your overlay, where
+`AF_VAULT_K8S_TOKEN_FILE` expects it by default (`/var/run/secrets/vault/token`):
 
 ```yaml
 # overlays/<yours>/deployment-vault-token.yaml (a strategic-merge patch of the Deployment)
@@ -442,10 +447,11 @@ spec:
         - name: api
           volumeMounts:
             - { name: vault-token, mountPath: /var/run/secrets/vault, readOnly: true }
-# and in adminforge-env: AF_VAULT_K8S_TOKEN_FILE=/var/run/secrets/vault/token
 ```
 
-Vault's address is private: open it in your private-egress policy (`overlays/example/networkpolicy-private-egress.yaml`
+Point `AF_VAULT_ADDR` at Vault's active node, or at a load balancer that forwards to it: AdminForge never follows a
+redirect (a standby's would carry its token elsewhere), and says so in the probe. Vault's address is private: open it
+in your private-egress policy (`overlays/example/networkpolicy-private-egress.yaml`
 has a commented rule). The **Credentials from Vault** probe on the Monitoring page (platform) goes critical when an
 identity has nothing at its path and warns when Vault can't be read — AdminForge keeps using the credentials it last
 read. AppRole instead: `AF_VAULT_AUTH=approle`, `AF_VAULT_ROLE_ID` and the secret id in a file from a Secret

@@ -15,8 +15,15 @@ All notable changes to AdminForge are recorded here. The format follows
   and at once when Entra rejects one, so a rotation needs no restart; the last good credentials stay while Vault is
   unreachable. The env file keeps the client ids and must hold no secret or certificate path for them then. Errors
   name the path and status, never a value. Tested against a stand-in Vault (no instance yet).
-- **Credentials from Vault** probe (platform): critical when an identity has nothing at its path, a warning when Vault
-  can't be read. The platform checks moved from `probes/checks.ts` to `platform-checks.ts` (O-04).
+- **Credentials from Vault** probe (platform): critical when an identity has no usable credential, a warning when a
+  read failed and the credential read earlier stays in use; messages name identities, the Vault path and status are in
+  the Operator-only details. `adminforge env check` counts Vault as the automation identity's credential.
+- From the security review: redirects from Vault are never followed (the token would go with them); each identity is
+  read on its own, so one path the policy refuses leaves the others alone and starts no new login; an identity with
+  nothing loaded asks Vault at most every 30 s; a token AdminForge replaces is revoked; only KV v2's own 404 counts as
+  a deleted secret; a secret written again at the same version is still picked up; the token for Vault defaults to the
+  projected one (`/var/run/secrets/vault/token`) and production refuses the Kubernetes API token; Vault mounts and
+  paths refuse `.` and `..` segments. The platform checks moved from `probes/checks.ts` to `platform-checks.ts` (O-04).
 
 ### Run-as accounts (2026-10-23)
 

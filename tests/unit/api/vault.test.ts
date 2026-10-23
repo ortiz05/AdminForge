@@ -45,6 +45,7 @@ describe('VaultClient', () => {
       clientId: 'app-id',
       clientSecret: SECRET,
       version: 1,
+      fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
     expect(vault.calls.map((c) => `${c.method} ${c.path} ${c.namespace}`)).toEqual([
       'POST auth/kubernetes/login ops',
@@ -114,16 +115,16 @@ describe('VaultCredentials', () => {
     });
     expect(await creds.ensure('automation')).toMatchObject({ clientSecret: SECRET, version: 1 });
     expect(creds.status()).toMatchObject({
-      reachable: true,
       identities: { automation: 'loaded', 'reports-team': 'missing' },
+      errors: {},
     });
 
     vault.setDown(true);
     await creds.refresh();
     expect(creds.current('automation')).toMatchObject({ clientSecret: SECRET });
     expect(creds.status()).toMatchObject({
-      reachable: false,
-      error: expect.stringMatching(/could not be reached/),
+      identities: { automation: 'stale' },
+      errors: { automation: expect.stringMatching(/could not be reached/) },
     });
     expect(JSON.stringify(logs)).not.toContain(SECRET);
 

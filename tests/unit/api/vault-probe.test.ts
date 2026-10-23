@@ -1,9 +1,10 @@
 import { vaultCredentials } from '@adminforge/api/src/probes/platform-checks';
 import type { VaultStatus } from '@adminforge/api/src/auth/vault';
 
-// The "Credentials from Vault" platform probe (ADR-018): ok when every identity's credential was read, warn when the
-// last read failed (the last good credentials stay) or none happened yet, crit when an identity has nothing at its path;
-// ok and quiet where Vault isn't used.
+// The "Credentials from Vault" platform probe (ADR-018): ok when every identity's credential was read, warn when a read
+// failed but the last good credential stays or nothing was read yet, crit when an identity has no usable credential;
+// ok and quiet where Vault isn't used. Messages name identities only — the Vault path and status are in the details,
+// which only Operators see.
 const check = (status: VaultStatus | null | undefined) =>
   vaultCredentials({ kind: 'vaultCredentials' }, {
     deps: status === undefined ? {} : { vault: () => status },
@@ -21,42 +22,49 @@ describe('vaultCredentials check', () => {
   it('is ok with every credential read', async () => {
     expect(
       await check({
-        reachable: true,
         lastRefreshAt: at,
         identities: { automation: 'loaded', 'reports-team': 'loaded' },
+        errors: {},
       }),
-    ).toMatchObject({
-      status: 'ok',
-      metric: 2,
-    });
+    ).toMatchObject({ status: 'ok', metric: 2 });
   });
 
-  it('is critical when an identity has no credential, naming it', async () => {
-    const r = await check({
-      reachable: true,
-      lastRefreshAt: at,
-      identities: { automation: 'loaded', 'reports-team': 'missing' },
-    });
-    expect(r).toMatchObject({ status: 'crit', code: 'credential_unavailable', metric: 1 });
-    expect(r.message).toContain('reports-team');
-  });
-
-  it('warns when Vault couldn’t be read, or hasn’t been yet', async () => {
-    expect(
-      await check({
-        reachable: false,
+  it('is critical when an identity has no usable credential, naming it', async () => {
+    for (const state of ['missing', 'unavailable'] as const) {
+      const r = await check({
         lastRefreshAt: at,
-        identities: { automation: 'loaded' },
-        error:
-          'Vault at AF_VAULT_ADDR could not be reached (GET /v1/secret/data/adminforge/dev/identities/automation).',
-      }),
-    ).toMatchObject({
+        identities: { automation: 'loaded', 'reports-team': state },
+        errors:
+          state === 'unavailable'
+            ? { 'reports-team': 'Vault refused to read secret/data/x (HTTP 403).' }
+            : {},
+      });
+      expect(r).toMatchObject({ status: 'crit', code: 'credential_unavailable', metric: 1 });
+      expect(r.message).toContain('reports-team');
+      expect(r.message).not.toMatch(/secret\/data|HTTP|AF_/);
+    }
+  });
+
+  it('warns when a read failed but the credential read earlier stays, with the path for Operators only', async () => {
+    const error =
+      'Vault at AF_VAULT_ADDR could not be reached (GET /v1/secret/data/adminforge/dev/identities/automation).';
+    const r = await check({
+      lastRefreshAt: at,
+      identities: { automation: 'stale' },
+      errors: { automation: error },
+    });
+    expect(r).toMatchObject({
       status: 'warn',
       code: 'vault_unreachable',
-      message: expect.stringContaining('last good credentials'),
+      message: expect.stringContaining('read earlier stay in use'),
+      details: { rows: [{ identity: 'automation', state: 'stale', problem: error }] },
     });
+    expect(r.message).not.toMatch(/secret\/data|AF_VAULT/);
+  });
+
+  it('warns before the first read', async () => {
     expect(
-      await check({ reachable: false, lastRefreshAt: null, identities: { automation: 'not_read' } }),
+      await check({ lastRefreshAt: null, identities: { automation: 'not_read' }, errors: {} }),
     ).toMatchObject({
       status: 'warn',
       code: 'vault_not_read',

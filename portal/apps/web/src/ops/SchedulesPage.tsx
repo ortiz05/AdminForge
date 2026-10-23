@@ -343,7 +343,7 @@ export function SchedulesPage() {
                 <Button
                   size="sm"
                   intent="ghost"
-                  className="-my-1"
+                  className="-my-1 -ml-1"
                   aria-expanded={allFailed}
                   onClick={() => setAllFailed((v) => !v)}
                 >

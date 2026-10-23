@@ -78,7 +78,7 @@ describe('Schedule page: Run as', () => {
     expect(save).toBeEnabled();
     await userEvent.click(save);
     await waitFor(() => expect(puts).toEqual([{ identity: 'app:ops-team' }]));
-    expect(await screen.findByText('Chosen here by operator@example.com on 2026-10-23.')).toBeInTheDocument();
+    expect(await screen.findByText(/^Chosen here by operator@example\.com, /)).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
   });
 

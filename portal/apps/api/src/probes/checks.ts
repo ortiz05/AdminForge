@@ -16,6 +16,7 @@ import {
 import { appOnlyScope, type AutomationTokenProvider } from '../auth/automation';
 import { resourceScopes } from '../auth/token-broker';
 import { missingLicences, requiresBadge, type LicenceService } from '../capabilities/licences';
+import type { VaultStatus } from '../auth/vault';
 import { AppError } from '../errors';
 import { DEFENDER_NOT_PROVISIONED, OutboundError } from '../execution/outbound';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
@@ -27,6 +28,7 @@ import { assertCertTarget, assertProbeTarget, assertResolver, targetNotAllowed }
 import { aggregate, detailRows, runKql } from './kql';
 import { fileRoundTrip, mailFlow, onlineMeeting } from './transactions';
 import { classify, describeThresholds, effectiveThresholds, worst, type Thresholds } from './thresholds';
+import { auditChain, vaultCredentials } from './platform-checks';
 
 /**
  * Synthetic probes (R6, R12): every `check.kind`, run once. HTTP, DNS and TLS checks use Node built-ins; everything
@@ -99,6 +101,8 @@ export interface ProbeDeps {
   tls?: TlsInspector;
   /** The portal's audit chain (`auditChain` checks); absent → the check reports not configured. */
   audit?: Pick<AuditWriter, 'verify' | 'verifyIncremental'>;
+  /** The credentials read from Vault (`vaultCredentials` checks); absent → Vault isn't used here. */
+  vault?: () => VaultStatus | null;
   /** Host → addresses for the HTTP probe SSRF guard (tests, DATA_MODE=fixtures); default: the system resolver. */
   lookup?: HostLookup;
   /**
@@ -804,48 +808,6 @@ interface GraphSignIn {
   status?: { errorCode?: number; failureReason?: string };
 }
 
-async function auditChain(
-  _c: Extract<ProbeCheck, { kind: 'auditChain' }>,
-  x: CheckContext,
-): Promise<CheckResult> {
-  if (!x.deps.audit)
-    return {
-      metric: null,
-      status: 'error',
-      code: 'not_configured',
-      message: 'No audit log in this process.',
-    };
-  // Hourly from the last verified checkpoint, the whole chain at start and daily (D-05); a writer without
-  // checkpoints (memory) walks it all every time.
-  const audit = x.deps.audit;
-  const r = audit.verifyIncremental
-    ? await audit.verifyIncremental()
-    : { ...(await audit.verify()), scope: 'full' as const };
-  return r.ok
-    ? {
-        metric: r.count,
-        status: 'ok',
-        message: `${
-          r.scope === 'incremental'
-            ? `${r.checked} new audit event${r.checked === 1 ? '' : 's'} verified since the last check (${r.count} in all); the whole chain is re-walked daily.`
-            : `${r.count} audit event${r.count === 1 ? '' : 's'} verified (the whole chain); every hash links to the one before it.`
-        }${r.lostKey ? ` The events from seq ${r.lostKey.seq} keyed with a key declared lost (id ${r.lostKey.keyId}) are checked for links only.` : ''}`,
-      }
-    : r.missingKey
-      ? {
-          metric: r.brokenAt,
-          status: 'crit',
-          code: 'audit_chain_key_missing',
-          message: `The audit chain can't be verified from event #${r.brokenAt} (seq ${r.seq}): it is keyed with a key that isn't configured (key id ${r.missingKey}). After a key rotation, put the earlier key in AUDIT_CHAIN_PREVIOUS_KEYS; if no such key was ever configured, the event was forged — investigate database access.`,
-        }
-      : {
-          metric: r.brokenAt,
-          status: 'crit',
-          code: 'audit_chain_broken',
-          message: `The audit chain is broken at event #${r.brokenAt} (seq ${r.seq}): an event was changed or removed. Run \`adminforge audit verify\` and investigate database access.`,
-        };
-}
-
 async function signInHealth(
   c: Extract<ProbeCheck, { kind: 'signInHealth' }>,
   x: CheckContext,
@@ -1078,6 +1040,7 @@ const CHECKS: {
   signInHealth,
   kql,
   auditChain,
+  vaultCredentials,
   mailFlow,
   fileRoundTrip,
   onlineMeeting,

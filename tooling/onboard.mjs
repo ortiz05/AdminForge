@@ -23,6 +23,15 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 
 /** @typedef {{ status: 'ok' | 'fixed' | 'warn' | 'fail', name: string, detail?: string, fix?: string }} Result */
 
+/** `fn()`, or null when it throws (a missing command, a git setting that isn't set). */
+const attempt = (fn) => {
+  try {
+    return fn();
+  } catch {
+    return null;
+  }
+};
+
 /** The major version `.nvmrc` pins ("26" or "v26.1.0" → 26), or null. */
 export function pinnedNodeMajor(nvmrc) {
   const m = /^\s*v?(\d+)/.exec(nvmrc ?? '');
@@ -163,12 +172,7 @@ export function checkClaudeSettings(io, root = REPO_ROOT) {
  * @returns {Result}
  */
 export function checkGitHooks(io, root = REPO_ROOT) {
-  let hooksPath = '';
-  try {
-    hooksPath = io.git('config', 'core.hooksPath').trim();
-  } catch {
-    hooksPath = '';
-  }
+  const hooksPath = attempt(() => io.git('config', 'core.hooksPath').trim()) ?? '';
   if (hooksPath !== '.githooks')
     return {
       status: 'fail',
@@ -290,14 +294,11 @@ async function main(argv) {
 
   const pkg = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
   const wantPnpm = pinnedPnpm(pkg);
-  let pnpmVersion = null;
-  try {
-    pnpmVersion = sh('corepack', ['pnpm', '--version'], {
+  const pnpmVersion = attempt(() =>
+    sh('corepack', ['pnpm', '--version'], {
       env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' },
-    }).trim();
-  } catch {
-    pnpmVersion = null;
-  }
+    }).trim(),
+  );
   add(
     pnpmVersion === wantPnpm
       ? { status: 'ok', name: 'pnpm (Corepack)', detail: pnpmVersion }
@@ -380,21 +381,21 @@ async function main(argv) {
     },
   ];
   for (const g of generated) {
-    if (existsSync(path.join(REPO_ROOT, g.file)))
-      add({ status: 'ok', name: g.name, detail: `${g.file} built` });
-    else if (
-      !check &&
-      step(`building ${g.name.toLowerCase()}`, g.build) &&
-      existsSync(path.join(REPO_ROOT, g.file))
-    )
-      add({ status: 'fixed', name: g.name, detail: `${g.file} built` });
-    else
-      add({
-        status: 'fail',
-        name: g.name,
-        detail: `${g.file} is missing`,
-        fix: `corepack pnpm ${g.build.join(' ')}`,
-      });
+    const file = path.join(REPO_ROOT, g.file);
+    let built = existsSync(file);
+    // Not there and allowed to change things: build it, then look again.
+    const fixed = !built && !check && step(`building ${g.name.toLowerCase()}`, g.build) && existsSync(file);
+    built ||= fixed;
+    add(
+      built
+        ? { status: fixed ? 'fixed' : 'ok', name: g.name, detail: `${g.file} built` }
+        : {
+            status: 'fail',
+            name: g.name,
+            detail: `${g.file} is missing`,
+            fix: `corepack pnpm ${g.build.join(' ')}`,
+          },
+    );
   }
 
   const chrome = (CHROME_PATHS[process.platform] ?? []).find((p) => p && existsSync(p));
@@ -408,13 +409,11 @@ async function main(argv) {
           fix: 'Install Google Chrome: the e2e tests use channel "chrome" and never download a browser',
         },
   );
-  let pwsh = false;
-  try {
-    sh('pwsh', ['-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()']);
-    pwsh = true;
-  } catch {
-    pwsh = false;
-  }
+  const pwsh =
+    attempt(() => {
+      sh('pwsh', ['-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()']);
+      return true;
+    }) === true;
   add(
     pwsh
       ? { status: 'ok', name: 'PowerShell 7 (optional)', detail: 'found' }

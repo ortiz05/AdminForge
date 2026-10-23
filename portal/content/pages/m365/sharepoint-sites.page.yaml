@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.sharepoint-sites
-version: 2.1.0
+version: 2.1.1
 title: SharePoint sites
 summary: SharePoint sites with their storage, activity and how many Anyone links they hold.
 owner: m365-team
@@ -96,7 +96,7 @@ datasources:
           "inactive": $count($f($all, [$idle])),
           "withAnyoneLinks": $count($f($all, [$anyone])),
           "top": [$take($sorted, 10).{ "site": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://' ? $reverse($split($replace(siteUrl, /\/$/, ''), '/'))[0] : siteId, "storageUsedInBytes": storageUsedInBytes }],
-          "concealed": $exists($all[0].siteUrl) and $substring($all[0].siteUrl, 0, 8) != 'https://'
+          "concealed": $type($all[0].siteUrl) = 'string' and $substring($all[0].siteUrl, 0, 8) != 'https://'
         }
       ) }
   # What the page shows of siteList: its figures and the first 10,000 rows, so the browser gets a small answer. The

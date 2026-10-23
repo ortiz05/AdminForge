@@ -11,6 +11,10 @@ All notable changes to AdminForge are recorded here. The format follows
 - **The Schedules page names the five most recent failures** in its "failed on the last run" alert and folds the rest
   behind "Show n more": an automation identity without Azure access fails every Azure report, and 18 names pushed the
   page down.
+- Usage reports and the SharePoint sites page no longer fail when the report's first site has no URL (`$exists(…)` is
+  true for null, so `$substring` threw "Argument 1 of function "and" does not match function signature"); the weekly
+  SharePoint site usage schedule failed on it. `m365.sharepoint-site-usage`, `m365.onedrive-usage`,
+  `m365.sharepoint-sites` 2.1.1.
 
 ### Group and user views (2026-10-22)
 

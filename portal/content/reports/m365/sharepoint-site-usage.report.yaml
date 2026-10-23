@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.sharepoint-site-usage
-version: 2.1.0
+version: 2.1.1
 title: SharePoint site storage and inactive sites
 summary: >-
   SharePoint sites with no activity for the chosen number of days (archive or delete candidates) and sites close to
@@ -123,7 +123,7 @@ datasources:
           "nearLimit": $count($near),
           "sites": $count($all),
           "largest": [$take($nearSorted, 10).{ "site": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://' ? $replace(siteUrl, /^https:\/\/[^\/]+/, '') : siteId, "storage": storageUsedInBytes }],
-          "concealed": $exists($all[0].siteUrl) and $substring($all[0].siteUrl, 0, 8) != 'https://'
+          "concealed": $type($all[0].siteUrl) = 'string' and $substring($all[0].siteUrl, 0, 8) != 'https://'
         }
       ) }
   # What the page shows of siteList: its figures and the first 10,000 rows, so the browser gets a small answer. The

@@ -6,6 +6,13 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Navigation (2026-10-23)
+
+- **Every navigation section starts collapsed on each load.** Opened sections were remembered per person, so the ones
+  someone had ever opened came back open on every visit; now a section opened stays open while you move between pages
+  and the next load starts collapsed again. Nothing is saved: `navOpenSections` is still accepted by
+  `PUT /api/me/prefs` (older tabs send it) but no longer read. A collapsed section still shows the page you're on.
+
 ### Credentials from Vault (2026-10-23)
 
 - **App-only credentials from HashiCorp Vault** (ADR-018; `docs/plans/2026-10-23-run-as-and-vault.md` › Part 2). With

@@ -40,7 +40,9 @@ for (const { name, width, startsCollapsed } of [
 }
 
 for (const theme of ['steel', 'daylight'] as const) {
-  test(`navigation sections start collapsed, open and stay open · ${theme}`, async ({ page }) => {
+  test(`navigation sections start collapsed on every load, and open for the visit · ${theme}`, async ({
+    page,
+  }) => {
     await setPrefs(page, { theme });
     // The test navigation's /identity/users has no route (the not-found page); the rail still marks it as current.
     await page.goto('/identity/users');
@@ -62,9 +64,12 @@ for (const theme of ['steel', 'daylight'] as const) {
     await nav.getByRole('button', { name: /^Identity \(/ }).click();
     await expect(nav.getByRole('link', { name: 'Groups' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Licences' })).toBeHidden();
-    // The opened section is remembered (the reload itself is covered by the component tests: setPrefs re-seeds storage).
-    expect(
-      await page.evaluate(() => JSON.parse(localStorage.getItem('adminforge.prefs') ?? '{}').navOpenSections),
-    ).toEqual(['identity']);
+    // Nothing is saved: the next load starts collapsed again.
+    expect(await page.evaluate(() => localStorage.getItem('adminforge.prefs') ?? '')).not.toContain(
+      'navOpenSections',
+    );
+    await page.reload();
+    await expect(nav.getByRole('link', { name: 'Users' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Groups' })).toBeHidden();
   });
 }

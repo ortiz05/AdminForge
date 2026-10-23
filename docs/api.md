@@ -409,8 +409,8 @@ Lets a report schedule run with its creator's own access (ADR-014, `identity: { 
 
 - **Who:** Session.
 - **Body:** a partial `UserPrefs`, merged into the stored one: `theme` (`steel`, `daylight`, `contrast`, `system`),
-  `density` (`comfortable`, `compact`), `navCollapsed`, `navOpenSections` (keys of the navigation sections the person opened, ≤ 30 — sections start
-  collapsed; the older `navSections` is still accepted but no longer read),
+  `density` (`comfortable`, `compact`), `navCollapsed`, `navOpenSections` and the older `navSections` (still accepted, ≤ 30 keys each, but no longer read: every
+  navigation section starts collapsed on each load and opened sections aren't saved),
   `pinned` (≤ 50 strings), `recents` (≤ 50 strings), `newsSeenAt` (ISO date-time with offset: News and changes
   "mark all as read"; more than 5 minutes in the future → 400), `kpiCollapsed` (page keys whose KPI strip is folded,
   at most 100). Unknown keys → 400 `invalid_request`.

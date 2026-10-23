@@ -14,8 +14,8 @@ export const UserPrefs = z.object({
   density: DensityPref.optional(),
   navCollapsed: z.boolean().optional(),
   /**
-   * Keys of the navigation sections the person opened (Identity, Azure, …). Sections start collapsed, so a section
-   * added later starts collapsed too; a collapsed section still shows the page you're on.
+   * Superseded (2026-10-23): the navigation sections the person opened, remembered across visits. Every section now
+   * starts collapsed on each load and nothing is saved; still accepted (older tabs send it) but no longer read.
    */
   navOpenSections: z.array(z.string().max(64)).max(30).optional(),
   /** Superseded by `navOpenSections` (2026-10-16): the sections closed when everything started open. No longer read. */

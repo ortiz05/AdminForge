@@ -24,9 +24,6 @@ function sanitize(input: unknown): UserPrefs {
     theme: THEMES.includes(p.theme as ThemePref) ? (p.theme as ThemePref) : undefined,
     density: DENSITIES.includes(p.density as DensityPref) ? (p.density as DensityPref) : undefined,
     navCollapsed: typeof p.navCollapsed === 'boolean' ? p.navCollapsed : undefined,
-    navOpenSections: Array.isArray(p.navOpenSections)
-      ? p.navOpenSections.filter((x): x is string => typeof x === 'string').slice(0, 30)
-      : undefined,
     pinned: Array.isArray(p.pinned)
       ? p.pinned.filter((x): x is string => typeof x === 'string').slice(0, 50)
       : undefined,

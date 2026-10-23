@@ -283,8 +283,9 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
 #### `GET /auth/login`
 
 - **Who:** Public. 300/min per address.
-- **Query:** `returnTo` — same-origin path to land on (absolute URLs, `//host`, backslashes, control characters and
-  `/auth/*` fall back to `/`; ≤ 2048 chars). `claims` — base64url JSON claims challenge from a CAE `reauth` (ignored if
+- **Query:** `returnTo` — same-origin path to land on (≤ 2048 chars). Without one, for `/` (the portal's bare address)
+  and for an unsafe one (absolute URLs, `//host`, backslashes, control characters, `/auth/*`) the sign-in lands on
+  Monitoring (`/monitoring`, `signInReturnTo`). `claims` — base64url JSON claims challenge from a CAE `reauth` (ignored if
   invalid or > 4096 chars). `account=choose` — show Entra's account picker (`prompt=select_account`); otherwise the
   current session's UPN (if any) is sent as `login_hint`.
 - **Response:** 302 to the Read app's Entra authorize URL; sets the binding cookie.

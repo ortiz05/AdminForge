@@ -13,7 +13,7 @@ import {
   providerError,
   type CallbackQuery,
 } from './flow';
-import { safeReturnTo } from './return-to';
+import { signInReturnTo } from './return-to';
 import { portalRoles } from './roles';
 import { clearSessionCookie, endSession, startSession, type NewSession } from './session-plugin';
 import type { SessionRecord } from './session-store';
@@ -146,7 +146,7 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
     // Per client address, whatever cookie comes with it (rate-limit.ts).
     { config: { rateLimit: signInRateLimit(ctx.config) } },
     async (request, reply) => {
-      const returnTo = safeReturnTo(request.query.returnTo);
+      const returnTo = signInReturnTo(request.query.returnTo);
       const claims = decodeClaimsParam(request.query.claims);
       const choose = request.query.account === 'choose';
       const { state, nonce, challenge } = await beginRoundTrip(ctx, {

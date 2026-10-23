@@ -3,7 +3,7 @@ import { FIXED_NOW } from '../support/web/fixtures/session';
 import { growViewportToPage, mockApi, setPrefs, settle } from './support/mock-api';
 import { automationApi } from '../support/web/mock-automation';
 
-/** Visual baselines for Synthetic monitoring's per-service and by-check views, in Steel (dark) and Daylight (light). */
+/** Visual baselines for Monitoring's per-service and by-check views, in Steel (dark) and Daylight (light). */
 
 const THEMES = ['steel', 'daylight'] as const;
 
@@ -27,13 +27,13 @@ test.beforeEach(async ({ page }) => {
 for (const theme of THEMES) {
   test(`monitoring · one service · ${theme}`, async ({ page }) => {
     await open(page, theme, '/monitoring?group=exchange');
-    await expect(page.getByRole('heading', { level: 1, name: 'Service checks' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Monitoring' })).toBeVisible();
     await shoot(page, `monitoring-service-${theme}.png`);
   });
 
   test(`monitoring · by check · ${theme}`, async ({ page }) => {
     await open(page, theme, '/monitoring?by=check');
-    await expect(page.getByRole('heading', { level: 2, name: /^Mail flow/ })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 3, name: /^Mail flow/ })).toBeVisible();
     await shoot(page, `monitoring-by-check-${theme}.png`);
   });
 }

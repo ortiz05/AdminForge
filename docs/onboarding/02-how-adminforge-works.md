@@ -78,7 +78,7 @@ and an administrator can pause all changes with the **emergency stop**.
 a report export (file, email, Teams), a content-health check, a news collection, or a playbook queued for the worker.
 A time missed while AdminForge was down for over an hour is recorded as a skipped run (`schedule_missed`), not run
 late. Report schedules can also be created in the portal by Operators; anything that writes needs a second person's
-approval before it is enabled. Probe results feed **Synthetic monitoring**, grouped by service; a check's detail says
+approval before it is enabled. Probe results feed **Monitoring** (Overview), grouped by service; a check's detail says
 what it found (the rows, for Operators), what to do and where to act.
 
 **…content changes.** An engineer edits YAML, `adminforge validate` and `adminforge test` check it, a pull request is

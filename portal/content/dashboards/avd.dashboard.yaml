@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: avd.overview
-version: 1.0.0
+version: 1.0.1
 title: Azure Virtual Desktop overview
 summary: >-
   Azure Virtual Desktop at a glance across every subscription — host pools, session hosts that can't take connections
@@ -117,7 +117,7 @@ layout:
     group: avd
     empty:
       title: No Azure Virtual Desktop checks have reported yet
-      body: The checks report here after their first scheduled run. Every check is on the Synthetic monitoring page.
+      body: The checks report here after their first scheduled run. Every check is on the Monitoring page (Overview).
   - widget: chart
     id: byStatus
     title: Session hosts by status

@@ -107,7 +107,7 @@ describe('navigation: check status per section', () => {
     await userEvent.click(await within(nav()).findByRole('link', { name: /^Identity service checks/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/monitoring'));
     expect(router.state.location.search).toMatchObject({ group: 'identity' });
-    expect(await screen.findByRole('heading', { level: 1, name: 'Service checks' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Monitoring' })).toBeInTheDocument();
     const link = within(nav()).getByRole('link', { name: /^Identity service checks/ });
     await waitFor(() => expect(link).toHaveAttribute('aria-current', 'page'));
     // Only one place is current: the plain Synthetic monitoring item isn't, while a section's checks are open.

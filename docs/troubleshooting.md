@@ -200,7 +200,7 @@ Run states that aren't errors:
 | "Running" across a restart                                         | The run continues where it stopped once AdminForge is back; its log says "AdminForge is restarting…". A step that was in flight is retried.                                                                                                                                        |
 | "Only … can see the inputs and results"                            | Someone else's run: it ran with that person's own access, so you see what ran, who, when and its status, not its inputs, results, logs or error details (only the error code). Those are for the person who started it, the run's approvers and Portal Admins. Ask that person.    |
 
-### Synthetic monitoring
+### Monitoring (health checks)
 
 Probe tiles show a status and the latest message; the codes below appear in the probe's results and on the
 schedule's run (`/monitoring`, or `/monitoring?group=<service>` for one service).

@@ -161,7 +161,7 @@ The tenant feeds need the automation app's ServiceMessage.Read.All and ServiceHe
 
 ## Synthetic transactions
 
-Synthetic monitoring (`/monitoring`, grouped by service; each navigation section's row shows its own checks' status
+Monitoring (Overview, `/monitoring`, grouped by service; each navigation section's row shows its own checks' status
 and links to them) runs two kinds of M365 checks. **Read-only checks** work as soon as the automation identity has its
 permissions: Exchange Autodiscover, the Outlook (MAPI) and Outlook on the web front doors, the SharePoint front door
 (`AF_SPO_TENANT_NAME`), the Teams web app, the Microsoft 365 web portal, Entra realm discovery for the primary
@@ -259,7 +259,7 @@ for Servers, from Defender for Cloud). Each server opens in the inspector with U
 _Disconnected Arc servers_ (`reports.arc-disconnected-daily`, 06:20 UTC) and _Arc agent and extension health_
 (weekly) run as schedules; five configuration checks (disconnected or expired servers, failed extensions, critical or
 security updates overdue for 30 days, servers not assessed for 3 days, agents six or more releases behind) appear
-under Synthetic monitoring › Azure (the Azure row's status in the navigation) with what each found, what to do and a
+under Monitoring › Azure (the Azure row's status in the navigation) with what each found, what to do and a
 link to the list.
 
 Everything is filtered, counted and paged in **Azure Resource Graph**: the lists load a page at a time and export up
@@ -317,7 +317,7 @@ thousands of hosts cost a few queries; lists load a page at a time and export up
 trail a status change by a few minutes — the session host page reads Azure Resource Manager directly. User sessions
 come from Resource Manager per host pool (up to 10,000; narrow to a host or a UPN beyond that).
 
-**Checks** (Synthetic monitoring, group "Azure Virtual Desktop", as the automation identity): session hosts that
+**Checks** (Monitoring, group "Azure Virtual Desktop", as the automation identity): session hosts that
 can't take connections and host pools with no capacity or nearly full every 15 minutes, session hosts that need
 assistance and connection failures every hour. Each result lists the hosts or pools it found, what to do and a link.
 The automation identity needs **Reader** on the subscriptions that hold the host pools (provisioning grants it on

@@ -1,16 +1,13 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import {
   ArrowClockwiseIcon,
-  button,
-  Chart,
+  Button,
   cn,
-  Drawer,
   EmptyState,
-  formatNumber,
+  FilterBar,
   formatRelative,
-  formatTimestamp,
   IconButton,
   Kpi,
   KpiStrip,
@@ -20,7 +17,6 @@ import {
   Skeleton,
   Sparkline,
   STATUS_ICON,
-  STATUS_SEVERITY,
   StatusPill,
   useNow,
 } from '@adminforge/ui';
@@ -28,94 +24,47 @@ import {
   PROBE_KIND_LABEL,
   PROBE_LABEL,
   PROBE_TONE,
-  probeResultsQuery,
   probesQuery,
+  schedulesQuery,
   type ProbeItem,
-  type ProbePoint,
   type ProbeStatus,
 } from './schedules';
-import { splitHref } from '../lib/links';
 import { useNav } from '../lib/session';
-import { Callout, Facts, QueryError, useDocumentTitle } from './ui';
+import { QueryError, useDocumentTitle } from './ui';
+import { formatMetric, MetricValue, passRate, severity, thresholdText, TONE_TEXT } from './probe-format';
+import { ProbeDetail } from './ProbeDetail';
+import { HealthTimeline } from './HealthTimeline';
+import { MonitoringSchedules } from './MonitoringSchedules';
+import {
+  facetCounts,
+  failingSchedules,
+  FUNCTIONS,
+  OTHER_SERVICE,
+  probeMatches,
+  scheduleMatches,
+  splitList,
+  statusOf,
+  type MonitoringFilters,
+} from './monitoring-model';
 
 export interface MonitoringSearch {
   probe?: string;
+  /** Only what warns or fails: checks degraded or failing, schedules whose last run did. */
   show?: 'all' | 'problems';
-  /** Only the probes of one service (a probe `group`: `exchange`, `teams`, …). */
+  /** Services, comma-separated (probe `group`s: navigation section keys, `platform`); `?group=exchange` is one service. */
   group?: string;
+  /** Functions (`FUNCTIONS` in monitoring-model), comma-separated. */
+  fn?: string;
+  /** Tags, comma-separated: an item carrying any of them. */
+  tag?: string;
+  /** Text in a title, key, summary, latest message or tag. */
+  q?: string;
   /** Group the tiles by check type instead of by service. */
   by?: 'check';
 }
 
 /** Probes without a `group`. */
 const OTHER_GROUP = { key: 'other', label: 'Other checks', icon: 'pulse' };
-
-const TONE_TEXT = {
-  ok: 'text-ok',
-  warn: 'text-warn',
-  crit: 'text-crit',
-  info: 'text-info',
-  neutral: 'text-fg-3',
-} as const;
-const DAY_MS = 86_400_000;
-
-/** KQL checks report a column name as their unit (`nonCompliantResources`); show it as words. */
-export function humanUnit(unit: string | null | undefined): string | null {
-  if (!unit) return null;
-  if (/^(%|ms|s|days|rows|failures|GB|MB)$/.test(unit)) return unit;
-  return unit
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .toLowerCase();
-}
-
-export function formatMetric(value: number | null | undefined, rawUnit: string | null): string {
-  if (value === null || value === undefined) return '—';
-  const n =
-    Math.abs(value) >= 100 ? formatNumber(Math.round(value)) : formatNumber(Math.round(value * 10) / 10);
-  const unit = humanUnit(rawUnit);
-  if (!unit) return n;
-  if (unit === '%') return `${n}%`;
-  // Counted units read in the singular for one: 1 day, 1 item, 1 row.
-  if (value === 1 && /^(days|items|rows|events|failures)$/.test(unit)) return `${n} ${unit.slice(0, -1)}`;
-  return `${n} ${unit}`;
-}
-
-export function thresholdText(p: ProbeItem): string | null {
-  const { warn, crit, unit, worse } = p.thresholds;
-  if (warn === null && crit === null) return null;
-  const op = worse === 'higher' ? '≥' : '≤';
-  return [
-    warn !== null ? `warn ${op} ${formatMetric(warn, unit)}` : null,
-    crit !== null ? `crit ${op} ${formatMetric(crit, unit)}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
-
-const statusOf = (p: ProbeItem): ProbeStatus => p.latest?.status ?? 'unknown';
-const severity = (p: ProbeItem) => STATUS_SEVERITY[PROBE_TONE[statusOf(p)]];
-
-function passRate(p: ProbeItem): string | null {
-  const known = p.series.filter((x) => x.status !== 'unknown');
-  if (known.length < 2) return null;
-  const ok = known.filter((x) => x.status === 'ok').length;
-  return `${ok} of ${known.length} checks healthy`;
-}
-
-/** Big number, small unit — long units (KQL column names) never dominate the tile. */
-function MetricValue({ value, unit }: { value: number | null | undefined; unit: string | null }) {
-  const number = formatMetric(value, null);
-  const rest = formatMetric(value, unit).slice(number.length).trim();
-  return (
-    <span className="min-w-0 af-kpi-value text-2xl text-fg tabular-nums">
-      {number}
-      {rest && value !== null && value !== undefined && (
-        <span className="ml-1.5 text-sm font-medium text-fg-3">{rest}</span>
-      )}
-    </span>
-  );
-}
 
 function ProbeTile({
   p,
@@ -185,406 +134,284 @@ function ProbeTile({
   );
 }
 
-/** `lastSignInDateTime` → "Last sign in date time", `OSVersion` → "OS version" (sentence case; acronyms stay). */
-function columnLabel(name: string): string {
-  const words = name.match(/[A-Z]{2,}(?=[A-Z][a-z]|\d|\b|$)|[A-Z]?[a-z]+|[A-Z]+|\d+/g) ?? [name];
-  const label = words.map((w) => (/^[A-Z][a-z]/.test(w) ? w.toLowerCase() : w)).join(' ');
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
-
-function cellText(v: unknown): string {
-  if (v === null || v === undefined || v === '') return '—';
-  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
-  if (typeof v === 'number') return formatNumber(v);
-  if (typeof v === 'string') return ISO_TIME.test(v) ? formatTimestamp(v) : v;
-  return JSON.stringify(v);
-}
-
-const MAX_FOUND_ROWS = 25;
-const MAX_FOUND_COLUMNS = 6;
-
 /**
- * "What it found": the rows behind a result — the certificates about to expire, the resources that break a rule, the
- * failure reasons — so engineers don't go looking. Rows were read with application permissions: Operators see them,
- * others see why they don't.
- */
-function FoundItems({ result }: { result: ProbePoint | undefined }) {
-  if (!result) return null;
-  if (result.detailsHidden)
-    return (
-      <section aria-labelledby="probe-found" className="flex flex-col gap-2">
-        <h3 id="probe-found" className="af-eyebrow">
-          What it found
-        </h3>
-        <p className="text-sm text-fg-3">
-          The items behind this result are shown to Operators: the check read them with the automation
-          identity’s application permissions.
-        </p>
-      </section>
-    );
-  const d = result.details;
-  if (!d || !d.rows.length) return null;
-  const columns = d.columns.slice(0, MAX_FOUND_COLUMNS);
-  const rows = d.rows.slice(0, MAX_FOUND_ROWS);
-  const more = Math.max(d.totalRows, d.rows.length) - rows.length;
-  return (
-    <section aria-labelledby="probe-found" className="flex flex-col gap-2">
-      <h3 id="probe-found" className="af-eyebrow">
-        What it found
-      </h3>
-      <div className="overflow-x-auto rounded-(--af-panel-radius) border border-line">
-        <table className="w-full text-left text-xs">
-          <caption className="sr-only">Items behind the latest result</caption>
-          <thead className="bg-sunken text-fg-3">
-            <tr>
-              {columns.map((c) => (
-                <th key={c} scope="col" className="px-3 py-2 font-medium whitespace-nowrap">
-                  {columnLabel(c)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-t border-line">
-                {columns.map((c) => {
-                  const text = cellText(r[c]);
-                  // Times are short and carry the meaning: never cut them.
-                  const time = typeof r[c] === 'string' && ISO_TIME.test(r[c]);
-                  return (
-                    <td
-                      key={c}
-                      className={cn(
-                        'px-3 py-1.5 text-fg-2',
-                        time ? 'whitespace-nowrap tabular-nums' : 'max-w-64 truncate',
-                      )}
-                      title={time ? undefined : text}
-                    >
-                      {text}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {(more > 0 || d.truncated) && (
-        <p className="text-xs text-fg-3">
-          {more > 0 ? `${formatNumber(more)} more not shown here` : 'More not shown here'}
-          {d.columns.length > columns.length ? `; ${d.columns.length - columns.length} more columns` : ''} —
-          the linked page lists every one.
-        </p>
-      )}
-    </section>
-  );
-}
-
-/** The probe's link: an AdminForge page that lists its items, or a Microsoft admin centre. */
-function ProbeLink({ link }: { link: NonNullable<ProbeItem['link']> }) {
-  const className = cn(button({ intent: 'secondary', size: 'sm' }), 'self-start');
-  if (/^https:\/\//.test(link.href))
-    return (
-      <a href={link.href} target="_blank" rel="noreferrer" className={className}>
-        {link.label}
-      </a>
-    );
-  const target = splitHref(link.href);
-  return (
-    <Link to={target.pathname as never} search={target.search as never} className={className}>
-      {link.label}
-    </Link>
-  );
-}
-
-/** "What to do" (the probe's remedy) and where to act — for a degraded or failing result only. */
-function NextSteps({ p }: { p: ProbeItem }) {
-  if (!p.remedy && !p.link) return null;
-  return (
-    <section aria-labelledby="probe-next" className="flex flex-col gap-2">
-      <h3 id="probe-next" className="af-eyebrow">
-        What to do
-      </h3>
-      {p.remedy && <p className="text-sm text-fg-2">{p.remedy}</p>}
-      {p.link && <ProbeLink link={p.link} />}
-    </section>
-  );
-}
-
-/** "What this checks", and — while nothing is wrong — the link to where its items are (no remedy to follow). */
-function WhatItChecks({ p, withLink }: { p: ProbeItem; withLink: boolean }) {
-  const link = withLink ? p.link : null;
-  if (!p.summary && !link) return null;
-  return (
-    <section aria-labelledby="probe-what" className="flex flex-col gap-2">
-      <h3 id="probe-what" className="af-eyebrow">
-        What this checks
-      </h3>
-      {p.summary && <p className="text-sm text-fg-2">{p.summary}</p>}
-      {link && <ProbeLink link={link} />}
-    </section>
-  );
-}
-
-/** Fewer results than this in the window: an empty state says so instead of a one-point chart. */
-const MIN_CHART_POINTS = 2;
-
-/**
- * Why there's no history chart: no results in the window; a pass-or-fail check (no thresholds); results without a
- * measurement (a failed run records none); or a single measured result so far.
- */
-function HistoryEmpty({
-  points,
-  measured,
-  ran,
-  passFail,
-}: {
-  points: number;
-  measured: number;
-  ran: boolean;
-  passFail: boolean;
-}) {
-  const [title, body] =
-    points === 0
-      ? [
-          'No results in the last 24 hours',
-          ran
-            ? 'The latest result is older than that. Check its schedule under Schedules: it may be switched off.'
-            : 'It runs on its schedule; results appear here after the first run.',
-        ]
-      : measured === 0 && passFail
-        ? ['Nothing to chart', 'This check passes or fails; it has no measurement to draw.']
-        : measured === 0
-          ? [
-              'No measurements in the last 24 hours',
-              'Every result failed before it could measure; Recent problems lists them.',
-            ]
-          : [
-              'Not enough results to chart yet',
-              'The chart starts once there are two measured results in the last 24 hours.',
-            ];
-  return (
-    <EmptyState compact title={title}>
-      {body}
-    </EmptyState>
-  );
-}
-
-function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; onClose: () => void }) {
-  const now = useNow(60_000);
-  // Rounded to 5 minutes so the query key (and the fetch) only changes every few minutes.
-  const since = new Date(Math.floor((now - DAY_MS) / 300_000) * 300_000).toISOString();
-  const q = useQuery(probeResultsQuery(p.key, since));
-  // Results come newest first; the chart and "Recent problems" read them oldest first.
-  const points = [...(q.data?.items.length ? q.data.items : p.series)]
-    .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts))
-    .slice(-288);
-  const newest = q.data?.items.length ? points[points.length - 1] : undefined;
-  const unit = p.latest?.unit ?? p.thresholds.unit;
-  const status = statusOf(p);
-  // The remedy is for a degraded or failing result; healthy and not-yet-run probes only keep their link.
-  const failing = status === 'warn' || status === 'crit';
-  const measured = points.filter((x) => x.metric !== null).length;
-  const failures = points
-    .filter((x) => x.status === 'crit' || x.status === 'warn')
-    .slice(-8)
-    .reverse();
-  return (
-    <Drawer
-      open
-      onOpenChange={(o) => !o && onClose()}
-      modal={false}
-      docked
-      className="w-160"
-      eyebrow={PROBE_KIND_LABEL[p.kind] ?? p.kind}
-      title={p.title}
-      description={<StatusPill status={PROBE_TONE[status]}>{PROBE_LABEL[status]}</StatusPill>}
-    >
-      <div className="flex flex-col gap-6">
-        {p.latest?.message && (
-          <Callout tone={PROBE_TONE[status]} title="Latest result">
-            {p.latest.message}
-          </Callout>
-        )}
-        <FoundItems result={newest} />
-        {failing && <NextSteps p={p} />}
-        <WhatItChecks p={p} withLink={!failing} />
-        <Facts
-          items={[
-            ['Latest', formatMetric(p.latest?.metric, unit)],
-            [
-              'Checked',
-              p.latest ? (
-                <time key="t" dateTime={p.latest.ts} title={formatTimestamp(p.latest.ts)}>
-                  {formatRelative(p.latest.ts, now)}
-                </time>
-              ) : null,
-            ],
-            ['Thresholds', thresholdText(p) ?? 'None — pass or fail only'],
-            ['Service', service ?? null],
-            [
-              'Probe',
-              <code key="k" className="font-mono text-xs">
-                {p.key}
-              </code>,
-            ],
-          ]}
-        />
-        <section aria-labelledby="probe-history" className="flex flex-col gap-2">
-          <h3 id="probe-history" className="af-eyebrow">
-            Last 24 hours
-          </h3>
-          {q.isError ? (
-            <QueryError
-              compact
-              title="Results didn’t load"
-              error={q.error}
-              onRetry={() => void q.refetch()}
-            />
-          ) : q.isPending && !p.series.length ? (
-            <Skeleton shape="block" className="h-56 w-full" />
-          ) : measured >= MIN_CHART_POINTS ? (
-            <Chart
-              title={`${p.title}, last 24 hours`}
-              kind="line"
-              height={220}
-              categoryLabel="Time (UTC)"
-              categories={points.map((x) => formatTimestamp(x.ts).slice(11, 16))}
-              series={[{ name: unit ? `Result (${unit})` : 'Result', data: points.map((x) => x.metric) }]}
-              valueFormat={(v) => formatMetric(v, unit)}
-            />
-          ) : (
-            <HistoryEmpty
-              points={points.length}
-              measured={measured}
-              ran={!!p.latest}
-              passFail={thresholdText(p) === null}
-            />
-          )}
-        </section>
-        <section aria-label="Recent problems" className="flex flex-col gap-2">
-          <h3 className="af-eyebrow">Recent problems</h3>
-          {failures.length === 0 ? (
-            <p className="text-sm text-fg-3">No degraded or failing results in this window.</p>
-          ) : (
-            <ul className="flex flex-col gap-1.5 text-sm">
-              {failures.map((f) => {
-                const Glyph = STATUS_ICON[PROBE_TONE[f.status]];
-                return (
-                  <li key={f.ts} className="flex items-start gap-2">
-                    <Glyph
-                      size={14}
-                      weight="fill"
-                      aria-hidden
-                      className={cn('mt-0.5 shrink-0', TONE_TEXT[PROBE_TONE[f.status]])}
-                    />
-                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
-                      <time dateTime={f.ts} className="font-mono text-xs text-fg-3">
-                        {formatTimestamp(f.ts).slice(5, 16)}
-                      </time>
-                      <span className="sr-only">{PROBE_LABEL[f.status]}: </span>
-                      <span className="text-fg-2">{f.message ?? formatMetric(f.metric, unit)}</span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
-    </Drawer>
-  );
-}
-
-/**
- * Synthetic monitoring (R6): probe tiles grouped by the service they watch (Exchange Online, Teams, sign-in, …; or by
- * check type), worst group first, with sparkline and thresholds; detail chart. `?group=` narrows it to one service —
- * the check status at the end of each service's section row in the navigation links there.
+ * Monitoring (Overview › Monitoring): the health of everything AdminForge watches. Health checks and synthetic
+ * transactions as tiles grouped by service (or check type), worst first; the last 24 hours hour by hour; and the
+ * schedules that run reports, automations and sweeps with their last run. One filter bar narrows all of it by service,
+ * function, tag, problems and text, kept in the URL. `?group=<key>` is one service's checks — the status mark at the
+ * end of each service's section row in the navigation links there.
  */
 export function MonitoringPage({ search }: { search: MonitoringSearch }) {
   const navigate = useNavigate();
   const now = useNow(30_000);
   const q = useQuery(probesQuery);
+  const sq = useQuery(schedulesQuery);
   const nav = useNav();
   const show = search.show ?? 'all';
-  // One service on its own is grouped by check (its own section heading would only repeat the title).
-  const byCheck = search.by === 'check' || !!search.group;
+  const filters = useMemo<MonitoringFilters>(
+    () => ({
+      services: splitList(search.group),
+      functions: splitList(search.fn),
+      tags: splitList(search.tag),
+      text: search.q ?? '',
+      problems: search.show === 'problems',
+    }),
+    [search.group, search.fn, search.tag, search.q, search.show],
+  );
+  const oneService = filters.services.length === 1 ? filters.services[0] : undefined;
+  // One service on its own is grouped by check (its own section heading would only repeat the eyebrow).
+  const byCheck = search.by === 'check' || !!oneService;
   const services = useMemo(() => {
     const m = new Map((q.data?.groups ?? []).map((g) => [g.key, g]));
     m.set(OTHER_GROUP.key, OTHER_GROUP);
     return m;
   }, [q.data]);
-  /** The service a probe watches, or undefined when it names none ("Other checks" is a heading, not a service). */
-  const serviceOf = (p: ProbeItem) => (p.group ? (services.get(p.group)?.label ?? p.group) : undefined);
-  // The service's name comes from the probes, else from the navigation (a section without probes yet).
-  const focus = search.group
-    ? (services.get(search.group)?.label ??
-      nav.data?.sections.find((sec) => sec.key === search.group)?.label ??
-      search.group)
-    : undefined;
-  useDocumentTitle(focus ? `Service checks · ${focus}` : 'Synthetic monitoring');
-  const probes = useMemo(
-    () => (q.data?.items ?? []).filter((p) => !search.group || (p.group ?? OTHER_GROUP.key) === search.group),
-    [q.data, search.group],
+  // The service's name comes from the checks, else from the navigation (a section without checks yet).
+  const serviceLabel = useCallback(
+    (key: string) =>
+      services.get(key)?.label ??
+      nav.data?.sections.find((sec) => sec.key === key)?.label ??
+      (key === 'platform' ? 'AdminForge' : key),
+    [services, nav.data],
+  );
+  /** The service a check watches, or undefined when it names none ("Other checks" is a heading, not a service). */
+  const serviceOf = (p: ProbeItem) => (p.group ? serviceLabel(p.group) : undefined);
+  const focus = oneService ? serviceLabel(oneService) : undefined;
+  useDocumentTitle(focus ? `Monitoring · ${focus}` : 'Monitoring');
+  const allProbes = useMemo(() => q.data?.items ?? [], [q.data]);
+  const allSchedules = useMemo(() => sq.data?.items ?? [], [sq.data]);
+  // The key figures and the last 24 hours cover everything the other filters let through; "Problems" only narrows
+  // the lists below.
+  const scope = useMemo(() => ({ ...filters, problems: false }), [filters]);
+  const probes = useMemo(() => allProbes.filter((p) => probeMatches(p, scope)), [allProbes, scope]);
+  const scheduled = useMemo(
+    () => allSchedules.filter((s) => scheduleMatches(s, scope, allProbes)),
+    [allSchedules, scope, allProbes],
+  );
+  const visible = useMemo(() => allProbes.filter((p) => probeMatches(p, filters)), [allProbes, filters]);
+  const visibleSchedules = useMemo(
+    () => allSchedules.filter((s) => scheduleMatches(s, filters, allProbes)),
+    [allSchedules, filters, allProbes],
   );
   const counts = { ok: 0, warn: 0, crit: 0, unknown: 0 } as Record<ProbeStatus, number>;
   for (const p of probes) counts[statusOf(p)]++;
-  const visible =
-    show === 'problems' ? probes.filter((p) => statusOf(p) === 'warn' || statusOf(p) === 'crit') : probes;
+  const failing = failingSchedules(scheduled).length;
+  const enabledCount = scheduled.filter((s) => s.enabled).length;
   const order = useMemo(() => [...services.keys()], [services]);
-  const groups = useMemo(() => {
-    const by = new Map<string, ProbeItem[]>();
-    const keyOf = (p: ProbeItem) => (byCheck ? p.kind : (p.group ?? OTHER_GROUP.key));
-    for (const p of visible) by.set(keyOf(p), [...(by.get(keyOf(p)) ?? []), p]);
-    const labelOf = (key: string) =>
-      byCheck ? (PROBE_KIND_LABEL[key] ?? key) : (services.get(key) ?? OTHER_GROUP).label;
-    const rank = (key: string) => (byCheck ? 0 : order.indexOf(key) < 0 ? order.length : order.indexOf(key));
-    return [...by.entries()]
-      .map(([key, items]) => ({
-        key,
-        label: labelOf(key),
-        items: items.sort((a, b) => severity(b) - severity(a) || a.title.localeCompare(b.title)),
-      }))
-      .sort(
-        (a, b) =>
-          Math.max(...b.items.map(severity)) - Math.max(...a.items.map(severity)) ||
-          rank(a.key) - rank(b.key) ||
-          a.label.localeCompare(b.label),
-      );
-  }, [visible, byCheck, services, order]);
-  const selected = search.probe ? probes.find((p) => p.key === search.probe) : undefined;
+  const groupsOf = useCallback(
+    (list: readonly ProbeItem[]) => {
+      const by = new Map<string, ProbeItem[]>();
+      const keyOf = (p: ProbeItem) => (byCheck ? p.kind : (p.group ?? OTHER_GROUP.key));
+      for (const p of list) by.set(keyOf(p), [...(by.get(keyOf(p)) ?? []), p]);
+      const labelOf = (key: string) =>
+        byCheck ? (PROBE_KIND_LABEL[key] ?? key) : (services.get(key) ?? OTHER_GROUP).label;
+      const rank = (key: string) =>
+        byCheck ? 0 : order.indexOf(key) < 0 ? order.length : order.indexOf(key);
+      return [...by.entries()]
+        .map(([key, items]) => ({
+          key,
+          label: labelOf(key),
+          items: items.sort((a, b) => severity(b) - severity(a) || a.title.localeCompare(b.title)),
+        }))
+        .sort(
+          (a, b) =>
+            Math.max(...b.items.map(severity)) - Math.max(...a.items.map(severity)) ||
+            rank(a.key) - rank(b.key) ||
+            a.label.localeCompare(b.label),
+        );
+    },
+    [byCheck, services, order],
+  );
+  const groups = useMemo(() => groupsOf(visible), [groupsOf, visible]);
+  const timelineRows = useMemo(
+    () => groupsOf(probes).map((g) => ({ key: g.key, label: g.label, probes: g.items })),
+    [groupsOf, probes],
+  );
+  const facetData = useMemo(() => facetCounts(allProbes, allSchedules), [allProbes, allSchedules]);
+  const facets = useMemo(
+    () => [
+      {
+        id: 'service',
+        label: 'Service',
+        options: [...facetData.services.entries()]
+          .sort(([a], [b]) => {
+            const ra = order.indexOf(a) < 0 ? order.length : order.indexOf(a);
+            const rb = order.indexOf(b) < 0 ? order.length : order.indexOf(b);
+            return ra - rb || a.localeCompare(b);
+          })
+          .map(([value, count]) => ({
+            value,
+            label: value === OTHER_SERVICE ? OTHER_GROUP.label : serviceLabel(value),
+            count,
+          })),
+      },
+      {
+        id: 'function',
+        label: 'Function',
+        options: FUNCTIONS.filter((f) => facetData.functions.has(f.key)).map((f) => ({
+          value: f.key,
+          label: f.label,
+          count: facetData.functions.get(f.key),
+        })),
+      },
+      {
+        id: 'tag',
+        label: 'Tag',
+        options: [...facetData.tags.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([value, count]) => ({ value, count })),
+      },
+    ],
+    [facetData, order, serviceLabel],
+  );
+  const PARAM = { service: 'group', function: 'fn', tag: 'tag' } as const;
+  const selected = search.probe ? allProbes.find((p) => p.key === search.probe) : undefined;
   const setSearch = (patch: Partial<MonitoringSearch>) =>
     void navigate({
       to: '/monitoring',
       search: (prev: MonitoringSearch) => ({ ...prev, ...patch }),
       replace: true,
     });
+  const filtered = !!(search.group || search.fn || search.tag || search.q);
+  const clearFilters = () =>
+    setSearch({
+      group: undefined,
+      fn: undefined,
+      tag: undefined,
+      q: undefined,
+      show: undefined,
+      probe: undefined,
+    });
+  const clearButton = (
+    <Button size="sm" intent="secondary" onClick={clearFilters}>
+      Clear filters
+    </Button>
+  );
+  const notLoaded = 'didn’t load — see below';
+  const allHealthy = probes.length > 0 && counts.ok === probes.length;
+  const schedulesEmpty =
+    filtered || filters.problems
+      ? filtered
+        ? {
+            title: 'No schedules match',
+            description: 'Clear a filter to see more.',
+            action: clearButton,
+          }
+        : { title: 'No schedule needs a look', description: 'Every schedule that’s on passed its last run.' }
+      : { title: 'No schedules yet', description: 'Schedule a report from its page in Reports.' };
 
   return (
     <>
       <PageHeader
-        eyebrow={focus ?? 'Automation'}
-        title={focus ? 'Service checks' : 'Synthetic monitoring'}
+        eyebrow={focus ?? 'Overview'}
+        title="Monitoring"
         description={
           focus
-            ? `Synthetic tests and health checks of ${focus}, run on a schedule as the automation identity.`
-            : 'Scheduled synthetic tests of Microsoft 365, Azure and AdminForge itself, run as the automation identity.'
+            ? `Health checks, synthetic transactions and schedules of ${focus}, run as the automation identity.`
+            : 'The health of everything AdminForge watches: health checks and synthetic transactions of Microsoft 365, Azure and AdminForge itself, and the schedules that run reports and automations.'
         }
         actions={
-          <>
-            {search.group ? (
-              <Link
-                to="/monitoring"
-                search={(prev: MonitoringSearch) => ({ ...prev, group: undefined, probe: undefined })}
-                className={button({ intent: 'ghost' })}
-              >
-                All services
-              </Link>
-            ) : (
+          <IconButton
+            label="Refresh"
+            icon={<ArrowClockwiseIcon size={16} />}
+            onClick={() => {
+              void q.refetch();
+              void sq.refetch();
+            }}
+          />
+        }
+      />
+      <div className="flex flex-col gap-8">
+        <FilterBar
+          facets={facets}
+          values={{ service: filters.services, function: filters.functions, tag: filters.tags }}
+          onValuesChange={(id, values) =>
+            setSearch({
+              [PARAM[id as keyof typeof PARAM]]: values.length ? values.join(',') : undefined,
+              probe: undefined,
+            })
+          }
+          search={search.q ?? ''}
+          onSearchChange={(v) => setSearch({ q: v.trim() ? v.slice(0, 100) : undefined })}
+          searchPlaceholder="Search checks and schedules…"
+          onClear={filtered ? clearFilters : undefined}
+        >
+          <SegmentedControl
+            aria-label="Show"
+            value={show}
+            onValueChange={(v) => setSearch({ show: v === 'problems' ? 'problems' : undefined })}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'problems', label: 'Problems' },
+            ]}
+          />
+        </FilterBar>
+        <KpiStrip label="Health" className="xl:grid-cols-5">
+          <Kpi
+            variant="cell"
+            label="Healthy checks"
+            value={q.isError ? null : counts.ok}
+            {...(q.isError
+              ? { hint: notLoaded }
+              : {
+                  status: {
+                    tone: allHealthy ? 'ok' : 'neutral',
+                    label: `of ${probes.length} ${probes.length === 1 ? 'check' : 'checks'}`,
+                  },
+                })}
+            loading={q.isPending}
+          />
+          <Kpi
+            variant="cell"
+            label="Degraded"
+            value={q.isError ? null : counts.warn}
+            {...(q.isError
+              ? { hint: notLoaded }
+              : { status: { tone: counts.warn ? 'warn' : 'neutral', label: 'over warning' } })}
+            loading={q.isPending}
+          />
+          <Kpi
+            variant="cell"
+            label="Failing"
+            value={q.isError ? null : counts.crit}
+            {...(q.isError
+              ? { hint: notLoaded }
+              : { status: { tone: counts.crit ? 'crit' : 'neutral', label: 'failed or critical' } })}
+            loading={q.isPending}
+          />
+          <Kpi
+            variant="cell"
+            label="No data"
+            value={q.isError ? null : counts.unknown}
+            hint={q.isError ? notLoaded : 'not run yet'}
+            loading={q.isPending}
+          />
+          <Kpi
+            variant="cell"
+            className="col-span-2 xl:col-span-1"
+            label="Failed last run"
+            value={sq.isError ? null : failing}
+            {...(sq.isError
+              ? { hint: notLoaded }
+              : enabledCount === 0
+                ? { hint: 'no schedules turned on' }
+                : {
+                    status: failing
+                      ? { tone: 'crit' as const, label: `of ${enabledCount} turned on` }
+                      : { tone: 'ok' as const, label: `all ${enabledCount} passing` },
+                  })}
+            loading={sq.isPending}
+          />
+        </KpiStrip>
+        {!q.isPending && !q.isError && probes.length > 0 && <HealthTimeline rows={timelineRows} now={now} />}
+        <section aria-labelledby="monitoring-checks" className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="monitoring-checks" className="text-md font-semibold text-fg">
+              Health checks <span className="font-normal text-fg-3">· {visible.length}</span>
+            </h2>
+            {!oneService && (
               <SegmentedControl
-                aria-label="Group probes by"
+                aria-label="Group checks by"
                 value={byCheck ? 'check' : 'service'}
                 onValueChange={(v) => setSearch({ by: v === 'check' ? 'check' : undefined })}
                 options={[
@@ -593,117 +420,105 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
                 ]}
               />
             )}
-            <SegmentedControl
-              aria-label="Show probes"
-              value={show}
-              onValueChange={(v) => setSearch({ show: v === 'problems' ? 'problems' : undefined })}
-              options={[
-                { value: 'all', label: 'All' },
-                { value: 'problems', label: 'Problems' },
-              ]}
-            />
-            <IconButton
-              label="Refresh"
-              icon={<ArrowClockwiseIcon size={16} />}
-              onClick={() => void q.refetch()}
-            />
-          </>
-        }
-      />
-      <div className="flex flex-col gap-8">
-        <KpiStrip label="Probe health" className="xl:grid-cols-4">
-          <Kpi
-            variant="cell"
-            label="Healthy"
-            value={q.isPending ? null : counts.ok}
-            status={{ tone: 'ok', label: `of ${probes.length} ${probes.length === 1 ? 'probe' : 'probes'}` }}
-            loading={q.isPending}
-          />
-          <Kpi
-            variant="cell"
-            label="Degraded"
-            value={q.isPending ? null : counts.warn}
-            status={{ tone: counts.warn ? 'warn' : 'neutral', label: 'over the warning threshold' }}
-            loading={q.isPending}
-          />
-          <Kpi
-            variant="cell"
-            label="Failing"
-            value={q.isPending ? null : counts.crit}
-            status={{ tone: counts.crit ? 'crit' : 'neutral', label: 'failed or over critical' }}
-            loading={q.isPending}
-          />
-          <Kpi
-            variant="cell"
-            label="No data"
-            value={q.isPending ? null : counts.unknown}
-            hint="not run yet or not scheduled"
-            loading={q.isPending}
-          />
-        </KpiStrip>
-        {q.isError ? (
-          <Panel>
-            <QueryError title="Probes didn’t load" error={q.error} onRetry={() => void q.refetch()} />
-          </Panel>
-        ) : q.isPending ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-busy="true">
-            {Array.from({ length: 8 }, (_, i) => (
-              <Skeleton key={i} shape="block" className="h-36" />
-            ))}
           </div>
-        ) : groups.length === 0 ? (
-          <Panel>
-            {probes.length === 0 ? (
-              <EmptyState title={focus ? `No checks for ${focus} yet` : 'No probes yet'}>
-                Add one with{' '}
-                <code className="font-mono text-xs">
-                  pnpm adminforge new probe {search.group ?? '<section>'}/&lt;name&gt;
-                </code>
-                , then schedule it.
-              </EmptyState>
-            ) : (
-              <EmptyState title="Every probe is healthy">
-                Nothing is degraded or failing right now.
-              </EmptyState>
-            )}
-          </Panel>
-        ) : (
-          // Groups flow into columns (worst group first), so one probe of a kind doesn't take a whole row.
-          <div className="columns-1 gap-6 md:columns-2 xl:columns-3 2xl:columns-4">
-            {groups.map((g) => {
-              const worst = g.items[0] ? statusOf(g.items[0]) : 'unknown';
-              const Glyph = STATUS_ICON[PROBE_TONE[worst]];
-              return (
-                <section
-                  key={g.key}
-                  aria-labelledby={`probes-${g.key}`}
-                  className="mb-6 flex break-inside-avoid flex-col gap-3"
-                >
-                  <h2
-                    id={`probes-${g.key}`}
-                    className="flex items-center gap-2 text-sm font-semibold text-fg"
+          {q.isError ? (
+            <Panel>
+              <QueryError title="Checks didn’t load" error={q.error} onRetry={() => void q.refetch()} />
+            </Panel>
+          ) : q.isPending ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-busy="true">
+              {Array.from({ length: 8 }, (_, i) => (
+                <Skeleton key={i} shape="block" className="h-36" />
+              ))}
+            </div>
+          ) : groups.length === 0 ? (
+            <Panel>
+              {allProbes.length === 0 ? (
+                <EmptyState title="No checks yet">
+                  Add one with{' '}
+                  <code className="font-mono text-xs">
+                    pnpm adminforge new probe {oneService ?? '<section>'}/&lt;name&gt;
+                  </code>
+                  , then schedule it.
+                </EmptyState>
+              ) : probes.length === 0 &&
+                focus &&
+                filters.functions.length + filters.tags.length === 0 &&
+                !filters.text ? (
+                <EmptyState title={`No checks for ${focus} yet`}>
+                  Add one with{' '}
+                  <code className="font-mono text-xs">
+                    pnpm adminforge new probe {oneService}/&lt;name&gt;
+                  </code>
+                  , then schedule it.
+                </EmptyState>
+              ) : probes.length === 0 ? (
+                <EmptyState title="No checks match" action={clearButton}>
+                  Clear a filter to see more.
+                </EmptyState>
+              ) : (
+                <EmptyState title="Nothing is degraded or failing">
+                  Every check that has run is healthy.
+                </EmptyState>
+              )}
+            </Panel>
+          ) : (
+            // Groups flow into columns (worst group first), so one check of a kind doesn't take a whole row.
+            <div className="columns-1 gap-6 md:columns-2 xl:columns-3 2xl:columns-4">
+              {groups.map((g) => {
+                const worst = g.items[0] ? statusOf(g.items[0]) : 'unknown';
+                const Glyph = STATUS_ICON[PROBE_TONE[worst]];
+                return (
+                  <section
+                    key={g.key}
+                    aria-labelledby={`probes-${g.key}`}
+                    className="mb-6 flex break-inside-avoid flex-col gap-3"
                   >
-                    <Glyph size={15} weight="fill" aria-hidden className={TONE_TEXT[PROBE_TONE[worst]]} />
-                    {g.label}{' '}
-                    <span className="font-normal text-fg-3">
-                      · {g.items.length}
-                      <span className="sr-only"> {g.items.length === 1 ? 'probe' : 'probes'}</span>
-                    </span>
-                  </h2>
-                  {g.items.map((p) => (
-                    <ProbeTile
-                      key={p.key}
-                      p={p}
-                      now={now}
-                      context={byCheck && !search.group ? serviceOf(p) : undefined}
-                      onOpen={() => setSearch({ probe: p.key })}
-                    />
-                  ))}
-                </section>
-              );
-            })}
-          </div>
-        )}
+                    <h3
+                      id={`probes-${g.key}`}
+                      className="flex items-center gap-2 text-sm font-semibold text-fg"
+                    >
+                      <Glyph size={15} weight="fill" aria-hidden className={TONE_TEXT[PROBE_TONE[worst]]} />
+                      {g.label}{' '}
+                      <span className="font-normal text-fg-3">
+                        · {g.items.length}
+                        <span className="sr-only"> {g.items.length === 1 ? 'check' : 'checks'}</span>
+                      </span>
+                    </h3>
+                    {g.items.map((p) => (
+                      <ProbeTile
+                        key={p.key}
+                        p={p}
+                        now={now}
+                        context={byCheck && !oneService ? serviceOf(p) : undefined}
+                        onOpen={() => setSearch({ probe: p.key })}
+                      />
+                    ))}
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </section>
+        <section aria-labelledby="monitoring-schedules" className="flex flex-col gap-4">
+          <h2 id="monitoring-schedules" className="text-md font-semibold text-fg">
+            Schedules and reports <span className="font-normal text-fg-3">· {visibleSchedules.length}</span>
+          </h2>
+          {sq.isError ? (
+            <Panel>
+              <QueryError title="Schedules didn’t load" error={sq.error} onRetry={() => void sq.refetch()} />
+            </Panel>
+          ) : (
+            <MonitoringSchedules
+              items={visibleSchedules}
+              probes={q.isError ? null : allProbes}
+              serviceLabel={serviceLabel}
+              now={now}
+              loading={sq.isPending}
+              empty={schedulesEmpty}
+            />
+          )}
+        </section>
       </div>
       {selected && (
         <ProbeDetail

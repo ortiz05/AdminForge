@@ -63,14 +63,15 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
   it('/monitoring: tiles grouped by service, worst group first, counts', async () => {
     renderApp({ path: '/monitoring' });
     const main = await screen.findByRole('main');
-    const groups = await within(main).findAllByRole('heading', { level: 2 });
+    // Health checks and Schedules and reports are the page's sections (h2); the services inside are h3.
+    const groups = await within(main).findAllByRole('heading', { level: 3 });
     expect(groups[0]).toHaveTextContent('Identity');
     expect(
       within(main).getByRole('button', { name: /App credentials expiring: Failing, 3 days/ }),
     ).toBeInTheDocument();
     expect(within(main).getByRole('button', { name: /Function app: HR sync: No data/ })).toBeInTheDocument();
     expect(
-      within(screen.getByRole('region', { name: 'Probe health' })).getByRole('group', { name: 'Degraded' }),
+      within(screen.getByRole('region', { name: 'Health' })).getByRole('group', { name: 'Degraded' }),
     ).toHaveTextContent('4');
     expect(await axeViolations()).toEqual([]);
   });

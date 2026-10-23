@@ -1015,6 +1015,8 @@ export function schedules() {
         enabled: true,
         identity: 'automation',
         job: { kind: 'report', ref: 'identity.app-credential-expiry' },
+        group: 'identity',
+        tags: ['weekly', 'credentials'],
         nextRunAt: at(3 * DAY + 17 * HOUR),
         lastRunAt: at(-2 * DAY - 7 * HOUR),
         lastStatus: 'succeeded',
@@ -1033,6 +1035,8 @@ export function schedules() {
         identity: 'app:monitoring',
         runsAs: { kind: 'app', name: 'monitoring', label: 'app identity monitoring' },
         job: { kind: 'probe', ref: 'probes.graph-reachability' },
+        group: null,
+        tags: ['probe-sweep'],
         nextRunAt: at(3 * MIN),
         lastRunAt: at(-2 * MIN),
         lastStatus: 'succeeded',
@@ -1050,6 +1054,8 @@ export function schedules() {
         enabled: true,
         identity: 'automation',
         job: { kind: 'contentHealth', ref: null },
+        group: 'platform',
+        tags: ['maintenance'],
         nextRunAt: at(15 * HOUR),
         lastRunAt: at(-9 * HOUR),
         lastStatus: 'failed',
@@ -1066,6 +1072,8 @@ export function schedules() {
         enabled: false,
         identity: 'automation',
         job: { kind: 'playbook', ref: 'identity.disable-stale-guests' },
+        group: 'identity',
+        tags: ['guests'],
         nextRunAt: null,
         lastRunAt: null,
         lastStatus: null,
@@ -1083,6 +1091,8 @@ export function schedules() {
         enabled: false,
         identity: 'automation',
         job: { kind: 'report', ref: 'm365.licence-usage' },
+        group: 'm365',
+        tags: ['monthly', 'licences'],
         nextRunAt: null,
         lastRunAt: at(-45 * DAY),
         lastStatus: 'succeeded',
@@ -1210,6 +1220,23 @@ const GROUP_OF: Record<string, string> = {
   'probes.entra-home-realm-discovery': 'identity',
 };
 
+/** Probe tags (what sweeps select them by; Monitoring's tag filter): their sweep, plus a few by purpose. */
+const TRANSACTION_KINDS = new Set(['mailFlow', 'fileRoundTrip', 'onlineMeeting']);
+function withProbeTags<T extends { key: string; kind: string }>(items: T[]): Array<T & { tags: string[] }> {
+  return items.map((p) => ({
+    ...p,
+    tags: [
+      'synthetic',
+      TRANSACTION_KINDS.has(p.kind)
+        ? 'transaction'
+        : p.kind === 'certExpiry' || p.kind === 'appCredentialExpiry'
+          ? 'expiry'
+          : 'health',
+      p.kind === 'certExpiry' || p.kind === 'licenseThreshold' ? 'sweep-6h' : 'sweep-15m',
+    ],
+  }));
+}
+
 /** GET /api/probes `groups`: the services in navigation order, then AdminForge itself. */
 export const PROBE_GROUPS = [
   { key: 'identity', label: 'Identity', icon: 'identification-card' },
@@ -1250,7 +1277,7 @@ export function probes() {
   const days = (warn: number, crit: number) => (v: number) =>
     v <= crit ? 'crit' : v <= warn ? 'warn' : 'ok';
   return {
-    items: [
+    items: withProbeTags([
       mk('probes.graph-reachability', 'Microsoft Graph reachability', 'graph', 410, 120, {
         warn: 1500,
         crit: 5000,
@@ -1404,7 +1431,7 @@ export function probes() {
         crit: 4000,
         unit: 'ms',
       }),
-    ],
+    ]),
     groups: PROBE_GROUPS,
   };
 }

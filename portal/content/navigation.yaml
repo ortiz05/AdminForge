@@ -1,7 +1,7 @@
 $schema: ../packages/schemas/generated/navigation.schema.json
 kind: navigation
 id: portal.navigation
-version: 1.5.0
+version: 1.6.0
 title: Navigation
 summary: >-
   Section order, labels and icons for the navigation rail. Pages join a section through nav.section. A section whose
@@ -15,6 +15,9 @@ sections:
     icon: house
     order: 10
     items:
+      # Monitoring: the health of everything — checks, synthetic transactions, schedules and reports (2026-10-23; was
+      # Synthetic monitoring under Automation).
+      - { key: monitoring, label: Monitoring, href: /monitoring, icon: pulse, order: 3 }
       - { key: news, label: News and changes, href: /news, icon: newspaper, order: 5 }
   - key: identity
     label: Identity
@@ -71,7 +74,6 @@ sections:
       - { key: runs, label: Runs, href: /runs, icon: list-checks, order: 10 }
       - { key: approvals, label: Approvals, href: /approvals, icon: seal-check, order: 15 }
       - { key: schedules, label: Schedules, href: /schedules, icon: calendar-check, order: 20 }
-      - { key: monitoring, label: Synthetic monitoring, href: /monitoring, icon: pulse, order: 30 }
       - { key: query, label: Query Studio, href: /query, icon: terminal, order: 40 }
   - key: reports
     label: Reports

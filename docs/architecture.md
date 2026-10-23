@@ -102,7 +102,7 @@ metric, a message and the detail rows behind it) go to `probe_results`, each run
 `ADMINFORGE_ARTIFACTS_DIR` (in the pod `/var/lib/adminforge/artifacts`, on the same volume as the database; in
 development `~/.local/share/adminforge/artifacts`) as `<schedule>/<timestamp>.<ext>`, which the API serves to
 `Portal.Operator` by default. `GET /api/probes` gives every Reader each probe's latest result with its definition's
-`summary`, `remedy` and `link`; a probe's detail on Synthetic monitoring reads `GET /api/probes/:key/results`, whose
+`summary`, `remedy` and `link`; a probe's detail on Monitoring reads `GET /api/probes/:key/results`, whose
 detail rows only Operators receive (others get `detailsHidden`). Write-capable schedules run only after a second person
 approved enabling them; the approval covers a fingerprint of the playbook and its children, so publishing a new version
 switches the schedule off until it is approved again.

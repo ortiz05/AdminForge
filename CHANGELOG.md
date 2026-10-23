@@ -6,6 +6,20 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Monitoring dashboard (2026-10-23)
+
+- **Monitoring, under Overview** (`/monitoring`; was Synthetic monitoring under Automation): the health of everything
+  AdminForge watches on one page — health checks and synthetic transactions grouped by service or check type, the last
+  24 hours (the share of checks passing, hour by hour, and each service's worst result per hour), and the schedules
+  that run reports, automations, sweeps and maintenance with their last run, next run and account. One filter bar
+  narrows all of it by **service**, **function** (availability, synthetic transactions, configuration checks, expiry,
+  sign-ins, licences, audit log and credentials, reports, automations, probe sweeps, maintenance), **tag**, problems
+  and text, kept in the URL (`group`, `fn`, `tag`, `q`, `show`); `?group=<key>` is still one service's checks, which
+  each navigation section's status mark opens. A probe sweep counts in the services of the probes it runs. Key
+  figures add the schedules whose last run failed.
+- `GET /api/probes` items carry `tags`; `GET /api/schedules` items carry `group` (the service) and `tags`.
+- The probe drawer and the probe formatters moved out of `MonitoringPage.tsx` (`ProbeDetail.tsx`, `probe-format.tsx`).
+
 ### Navigation (2026-10-23)
 
 - **Every navigation section starts collapsed on each load.** Opened sections were remembered per person, so the ones

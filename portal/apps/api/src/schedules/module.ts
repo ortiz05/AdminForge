@@ -131,6 +131,7 @@ export function createSchedulesModule(
         })
       : null;
   const probeDeps: ProbeDeps = {
+    ...(ctx.vault ? { vault: () => ctx.vault!.status() } : {}),
     outbound: ctx.outbound,
     automation: ctx.automation,
     connection: async (key) => (await ctx.definitions.resolve('connection', key)).def as Connection,

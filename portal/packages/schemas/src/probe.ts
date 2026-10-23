@@ -216,6 +216,9 @@ export const TRANSACTION_KINDS = ['mailFlow', 'fileRoundTrip', 'onlineMeeting'] 
 /** AdminForge's own audit log: re-walks the hash chain (crit when an event was changed or removed). */
 export const AuditChainCheck = z.strictObject({ kind: z.literal('auditChain') });
 
+/** The app-only credentials from HashiCorp Vault (ADR-018): read, and present for every identity. */
+export const VaultCredentialsCheck = z.strictObject({ kind: z.literal('vaultCredentials') });
+
 /** Where a `kql` check runs (R12). */
 export { KQL_SOURCES };
 export const KqlSource = z.enum(KQL_SOURCES);
@@ -279,6 +282,7 @@ export const ProbeCheck = z.discriminatedUnion('kind', [
   SignInHealthCheck,
   KqlCheck,
   AuditChainCheck,
+  VaultCredentialsCheck,
   MailFlowCheck,
   FileRoundTripCheck,
   OnlineMeetingCheck,
@@ -307,6 +311,8 @@ export const PROBE_METRICS: Record<
   kql: { metric: 'rows', unit: 'rows', worse: 'higher' },
   /** Events verified; the status comes from the verification, not thresholds. */
   auditChain: { metric: 'events', unit: 'events', worse: 'lower' },
+  /** Identities whose credential was read from Vault; the status comes from the read, not thresholds. */
+  vaultCredentials: { metric: 'identities', unit: 'identities', worse: 'lower' },
   /** Seconds from sending the test message to seeing it in the test mailbox. */
   mailFlow: { metric: 'delivery', unit: 's', worse: 'higher' },
   /** Upload, download and delete together. */

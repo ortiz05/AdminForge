@@ -34,6 +34,8 @@ export interface ChartProps {
   horizontal?: boolean;
   /** Header of the first column in the table view ("Day", "Service"). */
   categoryLabel?: string;
+  /** Fixes the value axis (a share is 0–100, so the line doesn't rescale with the data); default from the data. */
+  valueRange?: { min?: number; max?: number };
   defaultView?: 'chart' | 'table';
   className?: string;
 }
@@ -73,6 +75,7 @@ export function Chart({
   axisFormat = formatCompact,
   horizontal = false,
   categoryLabel = 'Category',
+  valueRange,
   defaultView = 'chart',
   className,
 }: ChartProps) {
@@ -90,10 +93,14 @@ export function Chart({
     plotWidth > 0 && valueAxisRoom(plotWidth, horizontal && kind === 'bar', categories) < MIN_VALUE_AXIS_PX;
   const s = chart();
 
+  const rangeMin = valueRange?.min;
+  const rangeMax = valueRange?.max;
   const option = useMemo(() => {
     const valueAxis = {
       type: 'value' as const,
       ...(wholeNumbers(series) ? { minInterval: 1 } : {}),
+      ...(rangeMin !== undefined ? { min: rangeMin } : {}),
+      ...(rangeMax !== undefined ? { max: rangeMax } : {}),
       // Too little room: no labels (the tooltip and the table view still give every value); otherwise ECharts drops
       // the ones that would overlap.
       axisLabel: { show: !cramped, hideOverlap: true, formatter: (v: number) => axisFormat(v) },
@@ -144,7 +151,20 @@ export function Chart({
             },
       ),
     };
-  }, [kind, categories, series, stacked, title, valueFormat, axisFormat, horizontal, reducedMotion, cramped]);
+  }, [
+    kind,
+    categories,
+    series,
+    stacked,
+    title,
+    valueFormat,
+    axisFormat,
+    horizontal,
+    reducedMotion,
+    cramped,
+    rangeMin,
+    rangeMax,
+  ]);
 
   // Mount the chart once the plot is visible; load the runtime on first use.
   useEffect(() => {

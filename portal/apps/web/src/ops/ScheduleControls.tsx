@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { errorDescription } from '../lib/errors';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -258,7 +258,7 @@ const DEFAULT_RUN_AS = 'default';
 export function runAsOrigin(s: ScheduleItem): string | null {
   const r = s.runsAs;
   if (r.source === 'override')
-    return `Chosen here${r.setBy ? ` by ${r.setBy}` : ''}${r.setAt ? ` on ${r.setAt.slice(0, 10)}` : ''}.`;
+    return `Chosen here${r.setBy ? ` by ${r.setBy}` : ''}${r.setAt ? `, ${formatInZone(r.setAt, s.timezone)}` : ''}.`;
   if (r.source === 'default') return 'The installation’s default for this kind of schedule.';
   if (r.source === 'definition') return 'Named by the schedule’s definition in content.';
   return null;
@@ -273,20 +273,33 @@ export function RunAsControl({ schedule }: { schedule: ScheduleItem }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const identities = useQuery(scheduleIdentitiesQuery);
+  const box = useRef<HTMLDivElement>(null);
   const r = schedule.runsAs;
   const current =
     r.source === 'override' ? (r.kind === 'app' && r.name ? `app:${r.name}` : 'automation') : DEFAULT_RUN_AS;
   const [value, setValue] = useState(current);
+  const apps = identities.data?.apps ?? [];
+  const defaultIs =
+    r.source === 'override' ? (r.defaultLabel ?? 'its definition or the installation default') : r.label;
+  const options = [
+    { value: DEFAULT_RUN_AS, label: `Default (${defaultIs})` },
+    { value: 'automation', label: 'Automation identity' },
+    ...apps.map((name) => ({ value: `app:${name}`, label: `App identity ${name}` })),
+  ];
+  const turnsOff = schedule.writeCapable && schedule.enabled;
   const mutation = useMutation({
     mutationFn: (v: string) => setScheduleRunAs(schedule.key, v === DEFAULT_RUN_AS ? null : v),
-    onSuccess: ({ disabled }) => {
+    onSuccess: ({ disabled }, v) => {
+      const chosen = options.find((o) => o.value === v)?.label ?? 'the new account';
       toast({
         tone: disabled ? 'info' : 'ok',
         title: 'Account changed',
         description: disabled
-          ? `${schedule.title} is off: turning it on again asks a second person to approve the new account.`
-          : `${schedule.title} uses it from its next run.`,
+          ? `${schedule.title} is off: turning it on again asks a second person to approve ${chosen}.`
+          : `${schedule.title} runs as ${chosen} from its next run.`,
       });
+      // Back to the field: the change is done, the button is disabled again.
+      box.current?.querySelector<HTMLElement>('[role="combobox"]')?.focus();
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['approvals'] });
     },
@@ -295,33 +308,31 @@ export function RunAsControl({ schedule }: { schedule: ScheduleItem }) {
       toast({ tone: 'crit', title: 'The account didn’t change', description: errorDescription(e) });
     },
   });
-  const apps = identities.data?.apps ?? [];
   // Without app identities the only account is the automation identity: nothing to choose.
   if (!apps.length) return null;
   return (
-    <div className="mt-3 flex flex-col gap-2">
+    <div ref={box} className="mt-3 flex flex-col gap-2">
       <Select
         label="Run as"
         value={value}
         onValueChange={setValue}
-        options={[
-          { value: DEFAULT_RUN_AS, label: 'Default' },
-          { value: 'automation', label: 'Automation identity' },
-          ...apps.map((name) => ({ value: `app:${name}`, label: `App identity ${name}` })),
-        ]}
+        options={options}
         hint={
-          schedule.writeCapable
-            ? 'Changing it turns the schedule off; turning it on again needs a second person’s approval for the new account.'
-            : 'The identity needs the permissions this schedule declares; AdminForge checks before it saves.'
+          turnsOff
+            ? 'Saving turns the schedule off; turning it on again needs a second person’s approval for the new account.'
+            : schedule.writeCapable
+              ? 'Turning it on needs a second person’s approval for the account it runs as.'
+              : 'The identity needs the permissions this schedule declares; AdminForge checks before it saves.'
         }
       />
       <div>
         <Button
           size="sm"
-          disabled={value === current || mutation.isPending}
+          pending={mutation.isPending}
+          disabled={value === current}
           onClick={() => mutation.mutate(value)}
         >
-          {mutation.isPending ? 'Saving…' : 'Save account'}
+          {turnsOff ? 'Save and turn off' : 'Save account'}
         </Button>
       </div>
     </div>

@@ -66,6 +66,8 @@ export interface RunsAs {
   /** Who chose it and when (`source: override`). */
   setBy: string | null;
   setAt: string | null;
+  /** With an override: the account "Default" means. */
+  defaultLabel: string | null;
 }
 
 const SOURCES = ['override', 'definition', 'default', 'automation'] as const;
@@ -77,6 +79,7 @@ export function readRunsAs(raw: unknown): RunsAs {
     source: SOURCES.find((s) => s === o.source) ?? null,
     setBy: pick(o, 'setBy') ?? null,
     setAt: pick(o, 'setAt') ?? null,
+    defaultLabel: pick(o, 'defaultLabel') ?? null,
   };
   if (kind === 'automation')
     return { kind, name: null, label: 'automation identity', signIn: null, canSignIn: false, ...origin };

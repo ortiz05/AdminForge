@@ -9,7 +9,16 @@
  * (which files declare a permission, for its warnings) and by tests that keep the catalog and content aligned.
  */
 import type { GraphClient } from '@adminforge/connectors';
-import type { LoadedDefinition, Scopes } from '@adminforge/schemas';
+import {
+  effectiveIdentity,
+  probeJobCovers,
+  type LoadedDefinition,
+  type Probe,
+  type RunAsDefaults,
+  type Schedule,
+  type ScheduleIdentity,
+  type Scopes,
+} from '@adminforge/schemas';
 import { AUTOMATION_BUILTIN_USES, RESOURCES, type ResourceKey } from '../provision/catalog';
 import {
   baselinePermissions,
@@ -87,20 +96,45 @@ export interface Declared {
   connections: string[];
 }
 
+const appOfIdentity = (identity: ScheduleIdentity): ScopeApp =>
+  identity !== 'automation' && 'app' in identity ? `identity:${identity.app}` : 'automation';
+
 /**
- * Which app a definition's `requires.scopes` belong to: a schedule naming an app identity → that identity (ADR-014);
- * other schedules, probes and feeds → the automation identity; write content → the Write app; the rest → the Read app.
+ * Which app a definition's `requires.scopes` belong to: a schedule → the account it runs as (the identity it names, else
+ * the installation default for its kind — AF_SCHEDULE_DEFAULT_IDENTITY… — else the automation identity; ADR-014);
+ * probes and feeds → the automation identity (declaredScopes credits a probe to the account of each schedule that
+ * runs it); write content → the Write app; the rest → the Read app.
  */
-export function appFor(def: LoadedDefinition['def']): ScopeApp {
-  if (def.kind === 'schedule' && def.identity !== 'automation' && def.identity && 'app' in def.identity)
-    return `identity:${def.identity.app}`;
-  if (def.kind === 'schedule' || def.kind === 'probe' || def.kind === 'feed') return 'automation';
+export function appFor(def: LoadedDefinition['def'], defaults?: RunAsDefaults): ScopeApp {
+  if (def.kind === 'schedule')
+    return appOfIdentity(effectiveIdentity(def, defaults ? { defaults } : {}).identity);
+  if (def.kind === 'probe' || def.kind === 'feed') return 'automation';
   if ((def.kind === 'playbook' || def.kind === 'runbook') && def.mode === 'write') return 'write';
   return 'read';
 }
 
-export function declaredScopes(defs: readonly LoadedDefinition[]): Declared {
+/** The default accounts for read-only schedules from the env file (AF_SCHEDULE_DEFAULT_IDENTITY, …_REPORTS, …_PROBES). */
+export function runAsDefaultsFrom(env: Readonly<Record<string, string | undefined>>): RunAsDefaults {
+  const v = (k: string) => env[k]?.trim() || undefined;
+  const all = v('AF_SCHEDULE_DEFAULT_IDENTITY');
+  const reports = v('AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS');
+  const probes = v('AF_SCHEDULE_DEFAULT_IDENTITY_PROBES');
+  return { ...(all ? { all } : {}), ...(reports ? { reports } : {}), ...(probes ? { probes } : {}) };
+}
+
+export function declaredScopes(defs: readonly LoadedDefinition[], defaults?: RunAsDefaults): Declared {
   const scopes = emptyScopeSet();
+  // A probe's permissions belong to the account of each active schedule that runs it (the automation identity when
+  // none does): a sweep running as an app identity calls Microsoft with that identity's token.
+  const sweeps = defs
+    .map((d) => d.def)
+    .filter((d): d is Schedule => d.kind === 'schedule' && d.status !== 'retired' && d.job.kind === 'probe');
+  const probeApps = (probe: Probe): ScopeApp[] => {
+    const apps = new Set<ScopeApp>();
+    for (const s of sweeps)
+      if (s.job.kind === 'probe' && probeJobCovers(s.job, probe)) apps.add(appFor(s, defaults));
+    return apps.size ? [...apps] : ['automation'];
+  };
   const files = new Map<string, string[]>();
   const connections = new Set<string>();
   const add = (app: ScopeApp, s: Scopes | undefined, file: string) => {
@@ -116,11 +150,13 @@ export function declaredScopes(defs: readonly LoadedDefinition[]): Declared {
   for (const d of defs) {
     // Retired definitions are out of use (they stay published only for run and audit history): no permissions.
     if (d.def.status === 'retired') continue;
-    add(appFor(d.def), d.def.requires?.scopes, d.file);
-    // Datasource-level requirements belong to the same app as their page.
-    if ('datasources' in d.def)
-      for (const ds of Object.values(d.def.datasources ?? {}))
-        add(appFor(d.def), ds.requires?.scopes, d.file);
+    const apps = d.def.kind === 'probe' ? probeApps(d.def) : [appFor(d.def, defaults)];
+    for (const app of apps) {
+      add(app, d.def.requires?.scopes, d.file);
+      // Datasource-level requirements belong to the same app as their page.
+      if ('datasources' in d.def)
+        for (const ds of Object.values(d.def.datasources ?? {})) add(app, ds.requires?.scopes, d.file);
+    }
   }
   return { scopes, files, connections: [...connections].sort() };
 }

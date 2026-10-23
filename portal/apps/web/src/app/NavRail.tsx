@@ -34,7 +34,6 @@ const nav = tv({
       'transition-colors duration-(--af-motion-fast) hover:bg-hover hover:text-fg',
     ],
     caret: 'shrink-0 text-fg-3 transition-transform duration-(--af-motion-fast)',
-    hiddenCount: 'text-xs font-normal text-fg-3 tabular-nums',
     /** The section's open pages, set off from the next section's row. */
     list: 'flex flex-col gap-0.5 pb-2 nav-collapsed:pb-0',
     /** Check status: Synthetic monitoring's status icon (healthy, degraded, failing), once a probe has a result. */
@@ -290,8 +289,9 @@ export interface NavRailProps {
   collapsed: boolean;
   onToggle: () => void;
   /**
-   * Keys of closed sections (by default all of them). A closed section still shows the page you're on and any page with
-   * a live count (unread news), so nothing that needs attention disappears.
+   * Keys of closed sections (by default all of them). A closed section still shows the page you're on, any page with a
+   * live count (unread news) and pinned pages (Monitoring, News and changes), so nothing that needs attention
+   * disappears. Its row shows no page count (screen readers hear how many pages it hides).
    */
   closedSections?: readonly string[];
   onToggleSection?: (key: string) => void;
@@ -345,7 +345,7 @@ export function NavRail({
         {sections?.map((section, i) => {
           const closed = !collapsed && closedSections.includes(section.key);
           const items = closed
-            ? section.items.filter((item) => active(item.href) || counts?.[item.key])
+            ? section.items.filter((item) => item.pinned || active(item.href) || counts?.[item.key])
             : section.items;
           const hidden = section.items.length - items.length;
           const check = markFor(section.key);
@@ -375,16 +375,6 @@ export function NavRail({
                       <span className="min-w-0 flex-1 truncate" title={section.label}>
                         {section.label}
                       </span>
-                      {/* Not beside a mark, where a number would read as a count of failures. */}
-                      {closed && hidden > 0 && !check && (
-                        <span
-                          className={s.hiddenCount()}
-                          title={`${hidden} ${hidden === 1 ? 'page' : 'pages'} hidden`}
-                          aria-hidden
-                        >
-                          {hidden}
-                        </span>
-                      )}
                       <CaretDownIcon
                         size={12}
                         weight="bold"

@@ -85,6 +85,7 @@ export function composeNav(input: {
           label: it.label,
           href: it.href,
           ...(it.icon ? { icon: it.icon } : {}),
+          ...(it.pinned ? { pinned: true } : {}),
           order: it.order,
         });
     // `listDefinitions: false` (e.g. Reports): only the coded items; the definitions live in their catalogue.

@@ -91,6 +91,8 @@ export const NavItem = z.object({
   href: z.string(),
   icon: z.string().optional(),
   badge: z.string().optional(),
+  /** Shown even while its section is collapsed. */
+  pinned: z.boolean().optional(),
 });
 export const NavSection = z.object({
   key: z.string(),

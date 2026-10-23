@@ -19,6 +19,8 @@ export const NavigationItem = z.strictObject({
   icon: IconName.optional(),
   order: z.number().int().optional(),
   roles: z.array(PortalRole).optional(),
+  /** Shown even while its section is collapsed (Monitoring, News and changes: always one click away). */
+  pinned: z.boolean().optional(),
 });
 export type NavigationItem = z.infer<typeof NavigationItem>;
 

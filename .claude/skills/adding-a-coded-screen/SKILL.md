@@ -43,7 +43,8 @@ through it.
    unlicensed states. Hide or disable what the person's roles can't do, and say which role. Links built from data go
    through `AppLink` / `useNavigateHref` (`src/lib/links.tsx`), which apply `safeUrl`. Copy: sentence case, buttons
    say what happens, no env keys, endpoints or header names.
-6. **Navigation:** an item in `portal/content/navigation.yaml` with `href: /<path>` (bump its `version`; `roles:` on
+6. **Navigation:** an item in `portal/content/navigation.yaml` with `href: /<path>` (`pinned: true` keeps it in the rail
+   while its section is collapsed — for a screen people go to all the time; bump its `version`; `roles:` on
    the section for admin-only screens). The API enforces access anyway.
 7. **Size and security:** heavy screens and libraries load lazily with their route (initial load ≤ 250 KB gzip,
    checked in CI). No `eval`, `new Function` or inline script, and `lib/no-eval.ts` stays the first import in

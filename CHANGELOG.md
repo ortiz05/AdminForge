@@ -6,6 +6,15 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Navigation: pinned items, no section counts (2026-10-23)
+
+- **Monitoring and News and changes are always in the rail**: a navigation item can be `pinned: true`
+  (`navigation.yaml`, passed on by `GET /api/nav`), which keeps it in view while its section is collapsed — like the
+  page you're on. Both are pinned under Overview.
+- **Section rows show no page counts.** A collapsed section's row no longer shows how many pages it hides (the numbers
+  read as counts of something to do); screen readers still hear it ("Identity (6 pages hidden)"), and the service
+  status marks stay.
+
 ### Monitoring dashboard (2026-10-23)
 
 - **Monitoring, under Overview** (`/monitoring`; was Synthetic monitoring under Automation): the health of everything

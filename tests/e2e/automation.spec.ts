@@ -272,11 +272,12 @@ test('schedules: cadence in words, pause, enable a write-capable job (approval),
   await noAxeViolations(page);
 });
 
-test('synthetic monitoring: grouped probe tiles, worst first, detail chart', async ({ page }) => {
+test('monitoring: grouped check tiles, worst first, detail chart', async ({ page }) => {
   const auto = automationApi();
   await mockApi(page, { handlers: [auto.handler] });
   await page.goto('/monitoring');
-  const headings = page.getByRole('main').getByRole('heading', { level: 2 });
+  // Services are h3 under the page's "Health checks" section (h2).
+  const headings = page.getByRole('main').getByRole('heading', { level: 3 });
   // Grouped by service: Identity holds the failing app-credential check.
   await expect(headings.first()).toHaveText(/Identity/);
   await expect(page.getByRole('button', { name: /Microsoft Graph reachability: Healthy/ })).toBeVisible();

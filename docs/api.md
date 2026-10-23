@@ -449,12 +449,13 @@ Source: `src/routes/nav.ts`, `overview.ts`, `content.ts`, `definitions.ts`.
 #### `GET /api/nav`
 
 - **Who:** Session.
-- **Response** (`NavResponse`): `{sections: [{key, label, icon, items: [{key, label, href, icon?, badge?}]}]}`.
+- **Response** (`NavResponse`): `{sections: [{key, label, icon, items: [{key, label, href, icon?, badge?, pinned?}]}]}`.
   Sections and labels come from `navigation.yaml`; items from every page, dashboard, report, playbook and runbook with
   a `nav:` block (not `draft`, `retired` or `hidden`), filtered by `requires.portalRoles` and section/item `roles`.
   A section with `listDefinitions: false` lists only its own `items` (Reports shows one "All reports" entry for the
   catalogue at `/reports`; the reports stay reachable by URL and search). Items whose `requires.licences` the tenant
-  lacks stay, with `badge: "Requires …"`. Empty sections are dropped.
+  lacks stay, with `badge: "Requires …"`. `pinned: true` (a coded item's `pinned` in `navigation.yaml`: Monitoring,
+  News and changes) keeps an item in the rail while its section is collapsed. Empty sections are dropped.
   `href`: `/p/<key>`, `/playbooks/<key>`, `/runbooks/<key>`.
 
 #### `GET /api/overview`

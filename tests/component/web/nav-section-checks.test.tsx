@@ -84,16 +84,16 @@ describe('navigation: check status per section', () => {
     expect(await axeViolations(container)).toEqual([]);
   });
 
-  it('section rows are full size with their hidden-page count (not beside a mark); the toggle stays a separate control', async () => {
+  it('section rows are full size without a page count; the toggle stays a separate control', async () => {
     renderApp({ handlers: [probesAnswer({ body: PROBES })] });
     await screen.findByRole('navigation', { name: 'Primary' });
     const toggle = await within(nav()).findByRole('button', { name: 'Identity (6 pages hidden)' });
     expect(toggle).toHaveClass('text-md', 'text-fg-2');
     expect(toggle).not.toHaveClass('af-eyebrow');
-    // The count would read as a count of failures beside the mark: the name says it instead.
+    // No numbers on section rows (they read as counts of something to do): the name says how many pages it hides.
     expect(toggle).toHaveTextContent(/^Identity$/);
     expect(within(nav()).getByRole('button', { name: 'Automation (3 pages hidden)' })).toHaveTextContent(
-      'Automation3',
+      /^Automation$/,
     );
     // The check link isn't inside the toggle (no nested controls) nor inside the heading that names the list.
     const link = await within(nav()).findByRole('link', { name: /^Identity service checks/ });

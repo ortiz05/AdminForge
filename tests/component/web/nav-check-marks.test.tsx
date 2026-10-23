@@ -71,20 +71,20 @@ describe('navigation: section check marks', () => {
     expect(await axeViolations()).toEqual([]);
   });
 
-  it('hides a closed section’s page count while its mark shows, and keeps it where there is none', async () => {
+  it('shows no page count on a closed section, with or without a mark (the name says it)', async () => {
     renderApp({ handlers: [answer([probe('probes.a', 'identity', 'ok')])] });
     await within(await screen.findByRole('navigation', { name: 'Primary' })).findByRole('link', {
       name: 'Identity service checks: 1 healthy',
     });
     const identity = within(nav()).getByRole('button', { name: 'Identity (6 pages hidden)' });
     expect(identity).toHaveTextContent(/^Identity$/);
-    // No probes: the count stays.
+    // No probes, no mark: still no number (the owner, 2026-10-23: section rows show no counts).
     expect(within(nav()).getByRole('button', { name: 'Microsoft 365 (4 pages hidden)' })).toHaveTextContent(
-      'Microsoft 3654',
+      /^Microsoft 365$/,
     );
   });
 
-  it('shows no mark until a probe has a result: a fresh install has none, and the page counts stay', async () => {
+  it('shows no mark until a probe has a result: a fresh install has none', async () => {
     // On Synthetic monitoring (one cache for the page and the rail): once its tiles show, the rail has the answer too.
     renderApp({
       path: '/monitoring',
@@ -98,7 +98,7 @@ describe('navigation: section check marks', () => {
     });
     await within(await screen.findByRole('main')).findByRole('button', { name: /^probes\.a/ });
     const identity = within(nav()).getByRole('button', { name: 'Identity (6 pages hidden)' });
-    await waitFor(() => expect(identity).toHaveTextContent('Identity6'));
+    await waitFor(() => expect(identity).toHaveTextContent(/^Identity$/));
     expect(within(nav()).queryAllByRole('link', { name: /service checks/ })).toHaveLength(0);
     expect(nav().querySelector('a[href^="/monitoring?group="]')).toBeNull();
     expect(await axeViolations()).toEqual([]);

@@ -64,8 +64,9 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   // Own choice wins; without one the rail follows the window width (applyPrefs keeps data-nav in step).
   const collapsed = prefs.navCollapsed ?? narrow;
   useEffect(() => applyPrefs(getPrefs()), [narrow]);
-  // Sections start collapsed; the person's opened ones are remembered (a section added later starts collapsed too).
-  const openSections = useMemo(() => prefs.navOpenSections ?? [], [prefs.navOpenSections]);
+  // Every section starts collapsed each time the portal loads; one the person opens stays open while they move between
+  // pages, not across reloads or sign-ins (owner, 2026-10-23: nothing saved, so nothing comes back open).
+  const [openSections, setOpenSections] = useState<readonly string[]>([]);
   const closedSections = useMemo(
     () => (nav.data?.sections ?? []).map((s) => s.key).filter((k) => !openSections.includes(k)),
     [nav.data, openSections],
@@ -266,13 +267,9 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
           onToggle={() => updatePrefs({ navCollapsed: !collapsed })}
           closedSections={closedSections}
           counts={navCounts}
-          onToggleSection={(key) => {
-            updatePrefs({
-              navOpenSections: openSections.includes(key)
-                ? openSections.filter((k) => k !== key)
-                : [...openSections, key],
-            });
-          }}
+          onToggleSection={(key) =>
+            setOpenSections((open) => (open.includes(key) ? open.filter((k) => k !== key) : [...open, key]))
+          }
         />
         <main
           id="main"

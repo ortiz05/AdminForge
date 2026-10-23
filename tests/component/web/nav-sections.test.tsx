@@ -35,7 +35,7 @@ describe('navigation sections start collapsed, open and close', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => vi.unstubAllGlobals());
 
-  it('every section starts collapsed; a heading opens it, and the choice is saved', async () => {
+  it('every section starts collapsed; a heading opens it for this visit, and nothing is saved', async () => {
     const user = userEvent.setup();
     const { puts } = renderApp();
     await screen.findByRole('navigation', { name: 'Primary' });
@@ -52,24 +52,40 @@ describe('navigation sections start collapsed, open and close', () => {
     expect(open).toHaveAttribute('aria-expanded', 'true');
     expect(within(nav()).getByRole('link', { name: 'Groups' })).toBeInTheDocument();
     expect(within(nav()).queryByRole('link', { name: 'Licences' })).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem('adminforge.prefs')!)).toMatchObject({
-      navOpenSections: ['identity'],
-    });
-    await waitFor(() => expect(puts.at(-1)).toMatchObject({ navOpenSections: ['identity'] }));
 
     await user.click(open);
     expect(within(nav()).getByRole('button', { name: 'Identity (6 pages hidden)' })).toHaveAttribute(
       'aria-expanded',
       'false',
     );
-    expect(within(nav()).queryByRole('link', { name: 'Groups' })).not.toBeInTheDocument();
-    await waitFor(() => expect(puts.at(-1)).toMatchObject({ navOpenSections: [] }));
+    await waitFor(() =>
+      expect(within(nav()).queryByRole('link', { name: 'Licences' })).not.toBeInTheDocument(),
+    );
+    expect(puts.filter((p) => 'navOpenSections' in (p as object))).toEqual([]);
+    expect(localStorage.getItem('adminforge.prefs') ?? '').not.toContain('navOpenSections');
   });
 
-  it('remembers opened sections, and ignores the old closed-sections preference', async () => {
-    renderApp('/', { navOpenSections: ['identity'], navSections: ['identity'] });
+  it('an opened section stays open while the person moves between pages', async () => {
+    const user = userEvent.setup();
+    renderApp();
     await screen.findByRole('navigation', { name: 'Primary' });
-    expect(await within(nav()).findByRole('link', { name: 'Groups' })).toBeInTheDocument();
+    await user.click(await within(nav()).findByRole('button', { name: 'Identity (6 pages hidden)' }));
+    await user.click(within(nav()).getByRole('link', { name: 'Groups' }));
+    await waitFor(() =>
+      expect(within(nav()).getByRole('link', { name: 'Groups' })).toHaveAttribute('aria-current', 'page'),
+    );
+    expect(within(nav()).getByRole('button', { name: 'Identity' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(nav()).getByRole('link', { name: 'Users' })).toBeInTheDocument();
+  });
+
+  it('starts collapsed even with sections saved open before (2026-10-23: no longer read)', async () => {
+    renderApp('/', { navOpenSections: ['identity', 'm365'], navSections: ['identity'] });
+    await screen.findByRole('navigation', { name: 'Primary' });
+    expect(await within(nav()).findByRole('button', { name: 'Identity (6 pages hidden)' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(within(nav()).queryByRole('link', { name: 'Groups' })).not.toBeInTheDocument();
     expect(within(nav()).queryByRole('link', { name: 'Licences' })).not.toBeInTheDocument();
   });
 

@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.vmware-cloud-foundation-blog
+version: 1.0.0
+title: VMware Cloud Foundation blog
+summary: >-
+  Posts from VMware's (Broadcom's) own Cloud Foundation blog — vSphere, ESXi, vCenter, vSAN and VCF releases, features
+  and operations. VMware's security advisories (VMSA) have no feed AdminForge can read; see docs/news.md.
+owner: portal-admins
+tags: [news, infrastructure, public, blog, vmware]
+publisher: VMware by Broadcom
+homepage: https://blogs.vmware.com/cloud-foundation/
+collector:
+  kind: rss
+  url: https://blogs.vmware.com/cloud-foundation/feed/
+  lookbackDays: 90
+keep: all
+defaultAreas: [infrastructure]
+classify:
+  - match: { title: [end of general support, end of support, deprecation, deprecated, retirement] }
+    kind: retirement
+  - match: { text: [ESXi] }
+    tags: [vmware, esxi]
+  - match: { text: [vSphere, vCenter, vSAN, VMware Cloud Foundation, VCF] }
+    tags: [vmware]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 360
+retentionDays: 180

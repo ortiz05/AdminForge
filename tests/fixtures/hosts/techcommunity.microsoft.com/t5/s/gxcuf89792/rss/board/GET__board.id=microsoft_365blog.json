@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=UTF-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>Microsoft 365 Blog articles</title><link>https://techcommunity.microsoft.com/t5/microsoft-365-blog/bg-p/microsoft_365blog</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: retirement of a legacy Microsoft 365 feature</title><link>https://techcommunity.microsoft.com/t5/microsoft-365-blog/example-retirement/ba-p/9002</link><guid>https://techcommunity.microsoft.com/t5/microsoft-365-blog/example-retirement/ba-p/9002</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>Synthetic post about SharePoint and OneDrive.</description></item></channel></rss>"
+  }
+}

@@ -1,0 +1,31 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.digicert-status
+version: 1.0.0
+title: DigiCert status
+summary: >-
+  Incidents and maintenance windows on DigiCert's status page — certificate issuance, validation, OCSP and CRL services
+  that the certificates AdminForge and the tenant rely on depend on.
+owner: portal-admins
+tags: [news, security, public, status, certificates]
+publisher: DigiCert
+homepage: https://status.digicert.com
+collector:
+  kind: rss
+  url: https://status.digicert.com/history.rss
+  lookbackDays: 30
+keep: all
+defaultAreas: [security]
+classify:
+  # Statuspage puts the newest update first ("Resolved - …", "Completed - …"): an incident or a maintenance whose latest
+  # word is that is over, so it doesn't stay in Breaking (breaking.ts counts unresolved incidents for 14 days).
+  - match: { text: [Resolved -, Completed -, Postmortem -] }
+    status: resolved
+  - match: { title: [Maintenance Window, maintenance, scheduled] }
+    kind: maintenance
+    tags: [digicert, certificates]
+  - match: { title: [DigiCert, QuoVadis, OCSP, CRL, issuance, validation, CertCentral] }
+    kind: incident
+    tags: [digicert, certificates]
+pollMinutes: 60
+retentionDays: 90

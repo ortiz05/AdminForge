@@ -136,7 +136,7 @@ function forAutomation(feed: Feed, e: AppError): AppError {
 /** Longest citation link kept; anything longer cites the feed's homepage. */
 export const MAX_LINK_CHARS = 2048;
 
-/** The normalised form of an allowed citation link (https, Microsoft domain, no control characters), or null. */
+/** The normalised form of an allowed citation link (https, an allowed domain or vendor host, no control characters), or null. */
 function citation(raw: string | null | undefined): string | null {
   // No whitespace or control characters anywhere (C0, DEL, C1): a link with them is not cited as is.
   const unsafe = (ch: string) => {

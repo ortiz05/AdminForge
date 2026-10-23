@@ -1,0 +1,45 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.openrouter-blog
+version: 1.0.0
+title: OpenRouter blog
+summary: >-
+  Platform announcements from OpenRouter's own blog — new models and providers, routing, security, spend and data
+  controls, pricing and deprecations. Its many tutorials, comparisons, reviews and case studies are dropped.
+owner: portal-admins
+tags: [news, ai, public, blog]
+publisher: OpenRouter
+homepage: https://openrouter.ai/blog
+collector:
+  kind: rss
+  url: https://openrouter.ai/blog/feed.xml
+  lookbackDays: 90
+keep: matched
+classify:
+  - match:
+      title:
+        [How to, How an, Best, vs, versus, compared, Review, Tutorial, Guide, What Is, Case Study, Benchmarks, Does, Explained]
+    exclude: true
+  - match:
+      title:
+        - now on OpenRouter
+        - Introducing
+        - Security Center
+        - Private Endpoints
+        - Routing
+        - Spend Controls
+        - Zero Data Retention
+        - Batch API
+        - API keys
+        - Joining
+        - pricing
+        - deprecation
+        - deprecated
+        - retirement
+        - launch
+        - launches
+    areas: [ai]
+    kind: feature
+    tags: [openrouter]
+pollMinutes: 360
+retentionDays: 180

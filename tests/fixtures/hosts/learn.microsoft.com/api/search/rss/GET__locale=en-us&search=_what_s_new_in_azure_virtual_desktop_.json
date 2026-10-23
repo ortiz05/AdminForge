@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=utf-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>Microsoft Learn search</title><link>https://learn.microsoft.com</link><description>Synthetic fixture feed (Example Org)</description><item><title>What's new in Azure Virtual Desktop? - Azure Virtual Desktop</title><link>https://learn.microsoft.com/en-us/azure/virtual-desktop/whats-new</link><guid>https://learn.microsoft.com/en-us/azure/virtual-desktop/whats-new</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>This page was updated (synthetic).</description></item><item><title>Azure Virtual Desktop insights</title><link>https://learn.microsoft.com/en-us/azure/virtual-desktop/insights</link><guid>https://learn.microsoft.com/en-us/azure/virtual-desktop/insights</guid><pubDate>Mon, 19 Oct 2026 09:00:00 GMT</pubDate><description>Another page the link prefix drops.</description></item></channel></rss>"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>Claude Status - Incident History</title><link>https://status.claude.com</link><description>Synthetic fixture feed (Example Org)</description><item><title>Elevated errors on the Example API</title><link>https://status.claude.com/incidents/example1</link><guid>https://status.claude.com/incidents/example1</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>Resolved - This incident has been resolved (synthetic, Example Org).</description></item><item><title>Scheduled maintenance for Example Console</title><link>https://status.claude.com/incidents/example2</link><guid>https://status.claude.com/incidents/example2</guid><pubDate>Mon, 19 Oct 2026 09:00:00 GMT</pubDate><description>Scheduled - Synthetic maintenance window.</description></item></channel></rss>"
+  }
+}

@@ -1,0 +1,26 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.n8n-blog
+version: 1.0.0
+title: n8n blog
+summary: >-
+  Product news, release highlights and how-tos from the n8n team's own blog (workflow automation and AI agents).
+owner: portal-admins
+tags: [news, ai, public, blog]
+publisher: n8n
+homepage: https://blog.n8n.io
+collector:
+  kind: rss
+  url: https://blog.n8n.io/rss/
+  lookbackDays: 90
+keep: all
+defaultAreas: [ai]
+classify:
+  - match: { title: [vulnerability, CVE, security advisory, security update] }
+    kind: security
+    tags: [n8n]
+  - match: { text: [n8n] }
+    tags: [n8n]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 360
+retentionDays: 180

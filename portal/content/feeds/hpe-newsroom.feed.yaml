@@ -1,0 +1,40 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.hpe-newsroom
+version: 1.0.0
+title: HPE newsroom (servers, storage and private cloud)
+summary: >-
+  HPE's own newsroom feed, kept only for what infrastructure engineers act on — ProLiant servers, iLO, Synergy,
+  OneView, Alletra storage, GreenLake, HPE Private Cloud and VM Essentials, and security. Corporate, customer and
+  event news is dropped. HPE's security bulletins have no public feed (docs/news.md).
+owner: portal-admins
+tags: [news, infrastructure, public, hpe]
+publisher: Hewlett Packard Enterprise
+homepage: https://www.hpe.com/us/en/newsroom.html
+collector:
+  kind: rss
+  url: https://www.hpe.com/us/en/newsroom/rss.xml
+  lookbackDays: 90
+  allowEmpty: true
+keep: matched
+classify:
+  - match: { title: [vulnerability, CVE, security bulletin, security advisory] }
+    areas: [infrastructure, security]
+    kind: security
+    tags: [hpe]
+  - match:
+      text:
+        - ProLiant
+        - iLO
+        - Synergy
+        - OneView
+        - Alletra
+        - GreenLake
+        - HPE Private Cloud
+        - VM Essentials
+        - Morpheus
+        - SimpliVity
+    areas: [infrastructure]
+    tags: [hpe]
+pollMinutes: 360
+retentionDays: 180

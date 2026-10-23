@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.n8n-releases
+version: 1.0.0
+title: n8n releases
+summary: >-
+  New n8n versions from the release feed of n8n's own GitHub repository. The moving "stable" and "beta" tags and the
+  duplicate "v1:" entries are dropped, so each version appears once.
+owner: portal-admins
+tags: [news, ai, public, releases]
+publisher: n8n
+homepage: https://github.com/n8n-io/n8n/releases
+collector:
+  kind: rss
+  url: https://github.com/n8n-io/n8n/releases.atom
+  lookbackDays: 60
+  # Only this repository's release pages are cited (a transferred repository then fails as feed_empty).
+  linkPrefixes: [https://github.com/n8n-io/n8n/releases/tag/]
+keep: matched
+classify:
+  - match: { title: [stable, beta, v1, next] }
+    exclude: true
+  - match: { title: [n8n] }
+    areas: [ai]
+    kind: release
+    tags: [n8n]
+pollMinutes: 360
+retentionDays: 180

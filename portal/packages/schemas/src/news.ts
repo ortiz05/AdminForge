@@ -2,17 +2,32 @@ import { z } from 'zod';
 import { DefinitionId, envelopeShape } from './common';
 
 /**
- * News and changes (feeds): first-party Microsoft sources that announce changes to the services AdminForge manages.
+ * News and changes (feeds): first-party sources that announce changes to what the engineers run — Microsoft's own,
+ * and since 2026-10-23 (owner, ADR-013 addendum) each vendor's own official feed for the infrastructure, certificates
+ * and AI tooling around it (VMware by Broadcom, HPE, DigiCert, Anthropic, OpenRouter, n8n). Never an aggregator.
  *
  * A feed is content (`portal/content/feeds/<name>.feed.yaml`). The scheduler's `news` job (hourly) collects every active
  * feed — tenant feeds as the automation identity (Microsoft Graph, Azure Resource Graph), public feeds over https from an
- * allow-listed Microsoft host — classifies each item into AdminForge areas, keeps a short plain-text excerpt and a
+ * allow-listed first-party host — classifies each item into AdminForge areas, keeps a short plain-text excerpt and a
  * citation link, and the News and changes page (/news) shows them. Nothing is republished in full: every item links
  * back to its source.
  */
 
-/** AdminForge areas: the navigation sections, plus `platform` (Microsoft Graph and the PowerShell modules AdminForge uses). */
-export const NEWS_AREAS = ['identity', 'm365', 'endpoint', 'security', 'azure', 'platform'] as const;
+/**
+ * AdminForge areas: the navigation sections, plus `platform` (Microsoft Graph and the PowerShell modules AdminForge
+ * uses), `infrastructure` (VMware vSphere and ESXi, HPE servers and storage) and `ai` (Anthropic, OpenRouter, n8n: the AI
+ * and automation tooling engineers build on).
+ */
+export const NEWS_AREAS = [
+  'identity',
+  'm365',
+  'endpoint',
+  'security',
+  'azure',
+  'infrastructure',
+  'ai',
+  'platform',
+] as const;
 export const NewsArea = z.enum(NEWS_AREAS);
 export type NewsArea = z.infer<typeof NewsArea>;
 
@@ -52,7 +67,24 @@ export const NEWS_FEED_HOSTS = [
   'www.powershellgallery.com',
   'learn.microsoft.com',
   'developer.microsoft.com',
+  // Each vendor's own feeds (ADR-013 addendum, 2026-10-23): status pages, blogs, release feeds.
+  'blogs.vmware.com',
+  'www.hpe.com',
+  'status.digicert.com',
+  'status.claude.com',
+  'openrouter.ai',
+  'blog.n8n.io',
+  // Anyone can publish on GitHub: only the paths in NEWS_FEED_PATHS (a vendor's own repository's releases).
+  'github.com',
 ] as const;
+
+/**
+ * Hosts where anyone can publish: a feed (and every redirect) must be one of these exact paths, so which repository is
+ * read is a reviewed code change too, not content alone (ADR-013 addendum).
+ */
+export const NEWS_FEED_PATHS: Readonly<Record<string, RegExp>> = {
+  'github.com': /^\/(?:anthropics\/claude-code|n8n-io\/n8n)\/releases\.atom$/,
+};
 
 /**
  * Citation links an item may carry: https on one of these domains (or a sub-domain). Anything else is dropped and the
@@ -67,7 +99,22 @@ export const NEWS_LINK_DOMAINS = [
   'powershellgallery.com',
 ] as const;
 
-/** True when `raw` is an https URL on an allowed citation domain (no credentials, default port). */
+/**
+ * Vendors' citation hosts, exactly (ADR-013 addendum): their other sub-domains carry community posts and gists. A vendor
+ * feed's links must also be on the feed's own host or its homepage's (collectors), and GitHub feeds narrow them to the
+ * repository's release pages (`linkPrefixes`).
+ */
+export const NEWS_LINK_HOSTS = [
+  'blogs.vmware.com',
+  'www.hpe.com',
+  'status.digicert.com',
+  'status.claude.com',
+  'openrouter.ai',
+  'blog.n8n.io',
+  'github.com',
+] as const;
+
+/** True when `raw` is an https URL on an allowed citation domain or vendor host (no credentials, default port). */
 export function isCitationUrl(raw: string): boolean {
   let url: URL;
   try {
@@ -77,7 +124,10 @@ export function isCitationUrl(raw: string): boolean {
   }
   if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
   const host = url.hostname.toLowerCase().replace(/\.$/, '');
-  return NEWS_LINK_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
+  return (
+    (NEWS_LINK_HOSTS as readonly string[]).includes(host) ||
+    NEWS_LINK_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`))
+  );
 }
 
 /** True when `raw` is an https URL on an allow-listed feed host (no credentials, default port). */
@@ -89,14 +139,17 @@ export function isFeedUrl(raw: string): boolean {
     return false;
   }
   if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
-  return (NEWS_FEED_HOSTS as readonly string[]).includes(url.hostname.toLowerCase());
+  const host = url.hostname.toLowerCase();
+  if (!(NEWS_FEED_HOSTS as readonly string[]).includes(host)) return false;
+  const only = NEWS_FEED_PATHS[host];
+  return !only || (only.test(url.pathname) && !url.search);
 }
 
 const FeedUrl = z.string().refine(isFeedUrl, {
   message: `Expected an https URL on an allowed feed host (${NEWS_FEED_HOSTS.join(', ')})`,
 });
 const CitationUrl = z.string().refine(isCitationUrl, {
-  message: `Expected an https URL on a Microsoft domain (${NEWS_LINK_DOMAINS.join(', ')})`,
+  message: `Expected an https URL on an allowed citation domain (${[...NEWS_LINK_DOMAINS, ...NEWS_LINK_HOSTS].join(', ')})`,
 });
 
 /** Service tag shown as a chip (exchange, teams, intune, graph-api, …). */
@@ -292,7 +345,7 @@ export const NewsItemDto = z.object({
   title: z.string(),
   /** Plain text (never HTML). */
   summary: z.string(),
-  /** Citation link (https, Microsoft domain). */
+  /** Citation link (https, an allowed domain or vendor host: NEWS_LINK_DOMAINS, NEWS_LINK_HOSTS). */
   url: z.string(),
   kind: NewsKind,
   severity: NewsSeverity,

@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>VMware Cloud Foundation (VCF) Blog</title><link>https://blogs.vmware.com/cloud-foundation/</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: what changed in ESXi 9.9</title><link>https://blogs.vmware.com/cloud-foundation/2026/10/20/example-esxi/</link><guid>https://blogs.vmware.com/cloud-foundation/2026/10/20/example-esxi/</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>Synthetic post about ESXi and vSphere for Example Org.</description></item><item><title>Example: end of general support for an old vCenter release</title><link>https://blogs.vmware.com/cloud-foundation/2026/10/19/example-eogs/</link><guid>https://blogs.vmware.com/cloud-foundation/2026/10/19/example-eogs/</guid><pubDate>Mon, 19 Oct 2026 09:00:00 GMT</pubDate><description>Synthetic retirement notice.</description></item></channel></rss>"
+  }
+}

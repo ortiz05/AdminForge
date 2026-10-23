@@ -205,7 +205,7 @@ export function NewsPage({ search }: { search: NewsSearch }) {
       <PageHeader
         eyebrow="Overview"
         title="News and changes"
-        description="Changes announced for the services AdminForge manages — your tenant’s Message Center and service health, Azure, Microsoft 365, Microsoft Graph and the PowerShell modules — each linked to its source."
+        description="Changes announced for what you run — your tenant’s Message Center and service health, Azure, Microsoft 365, Microsoft Graph and the PowerShell modules, and the infrastructure and AI tooling around them (VMware, HPE, DigiCert, Anthropic, OpenRouter, n8n) — each from its publisher, linked to its source."
         meta={
           lastUpdated ? (
             <span className="text-xs text-fg-3">

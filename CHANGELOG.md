@@ -6,6 +6,26 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### News: vendors' own feeds (2026-10-23)
+
+- **13 new sources in News and changes**, each publisher's own feed (ADR-013 addendum: first-party means the vendor's
+  own status page, blog or release feed — never an aggregator):
+  - Infrastructure: VMware Cloud Foundation blog and VMware security blog (vSphere, ESXi), HPE newsroom (servers,
+    iLO, storage, private cloud, security only);
+  - AI and automation: Claude status, Claude Code releases, OpenRouter blog (platform announcements only), n8n
+    releases and blog;
+  - Security: DigiCert status, Microsoft Security Blog;
+  - Azure and Microsoft 365: Azure Virtual Desktop blog and Learn what's-new page, Microsoft 365 Blog.
+- Two news areas, **Infrastructure** and **AI and automation**; `NEWS_FEED_HOSTS` and `NEWS_LINK_DOMAINS` list the
+  vendors' hosts (a security-reviewed code change). Every feed was collected once live; each has a synthetic fixture
+  and golden classification tests (`tests/content/feeds-classify-vendors.test.ts`). Sources without a readable feed —
+  VMware security advisories, HPE security bulletins, OpenRouter status, CISA — are listed in `docs/news.md`.
+- From the security review: on `github.com` (where anyone publishes) only the two vendors' releases feeds may be
+  fetched (`NEWS_FEED_PATHS`, also checked on redirects) and they cite only their repository's release pages; vendor
+  citation links are their exact feed hosts (`NEWS_LINK_HOSTS`, no community sub-domains); a status page's resolved
+  incidents leave Breaking at once (`status: resolved` from Statuspage's last update); a "security" headline on a
+  marketing post is no longer a security item.
+
 ### Onboarding in one step (2026-10-23)
 
 - **Say "onboard" in Claude Code** (the `onboard` skill) or run `node tooling/onboard.mjs` (`pnpm onboard`): it sets a

@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=UTF-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>Azure Virtual Desktop Blog articles</title><link>https://techcommunity.microsoft.com/t5/azure-virtual-desktop-blog/bg-p/AzureVirtualDesktopBlog</link><description>Synthetic fixture feed (Example Org)</description><item><title>Now generally available: example Azure Virtual Desktop feature</title><link>https://techcommunity.microsoft.com/t5/azure-virtual-desktop-blog/example-ga/ba-p/9001</link><guid>https://techcommunity.microsoft.com/t5/azure-virtual-desktop-blog/example-ga/ba-p/9001</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>Synthetic post (Example Org).</description></item></channel></rss>"
+  }
+}

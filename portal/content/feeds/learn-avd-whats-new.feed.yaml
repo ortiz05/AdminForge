@@ -1,0 +1,26 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.learn-avd-whats-new
+version: 1.0.0
+title: Azure Virtual Desktop what's new (Learn)
+summary: >-
+  Tells you when Microsoft updates the What's new in Azure Virtual Desktop page on Microsoft Learn, with a link to read it.
+owner: portal-admins
+tags: [news, azure, public, docs, avd]
+publisher: Microsoft Learn
+homepage: https://learn.microsoft.com/en-us/azure/virtual-desktop/whats-new
+collector:
+  kind: rss
+  # Microsoft Learn search RSS (the subscription route Learn documents), narrowed to the what's-new page itself.
+  url: https://learn.microsoft.com/api/search/rss?search=%22What%27s+new+in+Azure+Virtual+Desktop%22&locale=en-us
+  lookbackDays: 365
+  linkPrefixes:
+    - https://learn.microsoft.com/en-us/azure/virtual-desktop/whats-new
+keep: all
+defaultAreas: [azure]
+classify:
+  - match: { title: [Azure Virtual Desktop] }
+    tags: [avd]
+pollMinutes: 1440
+quietAfterDays: 60
+retentionDays: 365

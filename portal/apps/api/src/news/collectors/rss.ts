@@ -7,7 +7,7 @@ import { parseFeed, parseFeedDate, type FeedEntry } from '../xml';
 import { day, facts, type Collector } from './shared';
 
 /**
- * A public RSS 2.0 / Atom feed on an allow-listed Microsoft host (fetch-feed.ts rules). Only the headline, a short
+ * A public RSS 2.0 / Atom feed on an allow-listed first-party host (fetch-feed.ts rules). Only the headline, a short
  * plain-text excerpt (cut later to the feed's excerptChars) and the link are kept; an item without a link cites the
  * feed's homepage. `linkPrefixes` keeps only items whose link starts with one of them; an empty feed is an error
  * unless `allowEmpty`. Every item within lookbackDays is returned, newest first: the service keeps the newest `maxItems`

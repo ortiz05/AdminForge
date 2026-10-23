@@ -2,12 +2,15 @@
 
 **News and changes** (`/news`, in the Overview section of the navigation) collects the changes Microsoft announces for
 the services AdminForge manages — Microsoft Entra, Exchange Online, Teams, SharePoint and OneDrive, Intune, Defender,
-the Azure services AdminForge reports on, Microsoft Graph and the PowerShell modules the runner pins — and shows them in a
-breaking-news style:
+the Azure services AdminForge reports on (Azure Virtual Desktop among them), Microsoft Graph and the PowerShell modules
+the runner pins — and, from each vendor's own feeds, the infrastructure and AI tooling around them: VMware vSphere and
+ESXi, HPE servers and storage, DigiCert's certificate services, Anthropic's Claude and Claude Code, OpenRouter and n8n.
+It shows them in a breaking-news style:
 
 - a **Breaking** strip for what needs attention now (open incidents, urgent advisories, deadlines in the next two
   weeks);
-- a day-by-day **feed** you can filter by area (Identity, Microsoft 365, Endpoint, Security, Azure, Platform), kind,
+- a day-by-day **feed** you can filter by area (Identity, Microsoft 365, Endpoint, Security, Azure, Infrastructure, AI
+  and automation, Platform), kind,
   source, tag, text and time range;
 - an **unread** count on the navigation item and a "N breaking" pill in the top bar.
 
@@ -17,30 +20,43 @@ headline, a short plain-text excerpt (300 characters at most) and a few facts �
 ## Sources
 
 Feeds are content: one `portal/content/feeds/<name>.feed.yaml` per source (schema: `portal/packages/schemas/src/news.ts`).
-Only first-party sources are used — your tenant's own announcements, and Microsoft's public feeds.
+Only first-party sources are used — your tenant's own announcements, Microsoft's public feeds, and since 2026-10-23
+each vendor's own official feed for the infrastructure, certificates and AI tooling around them (ADR-013 addendum):
+never an aggregator, a news site or a scraped page.
 
-| Feed                                                                                                                                                     | Publisher                                            | Scope  | How it's collected                                                                                                       | Every | What's kept                                                                                                                     |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `feeds.m365-message-center`                                                                                                                              | Microsoft                                            | Tenant | Graph `GET /admin/serviceAnnouncement/messages` ([docs][mc-api]), automation identity                                    | 1 h   | Posts about managed services (Entra, Exchange, Teams, SharePoint, OneDrive, Intune, Defender, Microsoft 365 suite/admin center) |
-| `feeds.m365-service-health`                                                                                                                              | Microsoft                                            | Tenant | Graph `GET /admin/serviceAnnouncement/issues` ([docs][sh-api])                                                           | 1 h   | Every incident and advisory (managed services get their area; others are Microsoft 365)                                         |
-| `feeds.azure-service-health`                                                                                                                             | Microsoft                                            | Tenant | Azure Resource Graph `servicehealthresources` ([tables][arg-tables], [samples][arg-samples])                             | 1 h   | Every service issue, planned maintenance, health/security advisory and retirement for the readable subscriptions                |
-| `feeds.azure-updates`                                                                                                                                    | Microsoft                                            | Public | Azure Updates RSS, linked from [Azure updates][azure-updates]                                                            | 1 h   | Launches, previews and retirements of managed Azure services                                                                    |
-| `feeds.m365-roadmap`                                                                                                                                     | Microsoft                                            | Public | Microsoft 365 Roadmap RSS, linked from the [roadmap][roadmap]                                                            | 6 h   | In development / rolling out / launched features of managed services (cancelled ones dropped)                                   |
-| `feeds.msrc-security`                                                                                                                                    | Microsoft Security Response Center                   | Public | Security Update Guide RSS ([update guide][msrc])                                                                         | 1 h   | CVEs in managed cloud services, PowerShell and Graph; on-premises look-alikes dropped                                           |
-| `feeds.graph-changelog`                                                                                                                                  | Microsoft                                            | Public | Microsoft Graph [changelog][graph-changelog] RSS                                                                         | 24 h  | Every API change (flagged quiet when nothing new for 45 days)                                                                   |
-| `feeds.entra-blog`, `intune-blog`, `exchange-blog`, `teams-blog`, `sharepoint-blog`, `azure-governance-blog`, `defender-xdr-blog`                        | Microsoft Tech Community                             | Public | The board's RSS feed on techcommunity.microsoft.com                                                                      | 3–6 h | Every post (on-premises Exchange/SharePoint Server release posts dropped); excerpt only                                         |
-| `feeds.learn-entra-whats-new`, `learn-intune-whats-new`, `learn-defender-xdr-whats-new`, `learn-graph-whats-new`, `learn-teams-powershell-release-notes` | Microsoft Learn                                      | Public | Learn search RSS, the subscription route [Learn documents][learn-rss], narrowed to the what's-new pages (`linkPrefixes`) | 24 h  | "This page was updated" with a link — Learn has no per-change feed                                                              |
-| `feeds.powershell-modules`                                                                                                                               | Microsoft                                            | Public | PowerShell Gallery OData API ([supported repositories][psgallery])                                                       | 6 h   | New stable ExchangeOnlineManagement, MicrosoftTeams, Microsoft.Graph.Authentication, Az.Accounts versions                       |
-| `feeds.pnp-powershell`                                                                                                                                   | PnP community (Microsoft 365 Patterns and Practices) | Public | PowerShell Gallery OData API                                                                                             | 6 h   | New stable PnP.PowerShell versions — a community project, not Microsoft-supported                                               |
+| Feed                                                                                                                                                     | Publisher                                            | Scope  | How it's collected                                                                                                       | Every      | What's kept                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `feeds.m365-message-center`                                                                                                                              | Microsoft                                            | Tenant | Graph `GET /admin/serviceAnnouncement/messages` ([docs][mc-api]), automation identity                                    | 1 h        | Posts about managed services (Entra, Exchange, Teams, SharePoint, OneDrive, Intune, Defender, Microsoft 365 suite/admin center) |
+| `feeds.m365-service-health`                                                                                                                              | Microsoft                                            | Tenant | Graph `GET /admin/serviceAnnouncement/issues` ([docs][sh-api])                                                           | 1 h        | Every incident and advisory (managed services get their area; others are Microsoft 365)                                         |
+| `feeds.azure-service-health`                                                                                                                             | Microsoft                                            | Tenant | Azure Resource Graph `servicehealthresources` ([tables][arg-tables], [samples][arg-samples])                             | 1 h        | Every service issue, planned maintenance, health/security advisory and retirement for the readable subscriptions                |
+| `feeds.azure-updates`                                                                                                                                    | Microsoft                                            | Public | Azure Updates RSS, linked from [Azure updates][azure-updates]                                                            | 1 h        | Launches, previews and retirements of managed Azure services                                                                    |
+| `feeds.m365-roadmap`                                                                                                                                     | Microsoft                                            | Public | Microsoft 365 Roadmap RSS, linked from the [roadmap][roadmap]                                                            | 6 h        | In development / rolling out / launched features of managed services (cancelled ones dropped)                                   |
+| `feeds.msrc-security`                                                                                                                                    | Microsoft Security Response Center                   | Public | Security Update Guide RSS ([update guide][msrc])                                                                         | 1 h        | CVEs in managed cloud services, PowerShell and Graph; on-premises look-alikes dropped                                           |
+| `feeds.graph-changelog`                                                                                                                                  | Microsoft                                            | Public | Microsoft Graph [changelog][graph-changelog] RSS                                                                         | 24 h       | Every API change (flagged quiet when nothing new for 45 days)                                                                   |
+| `feeds.entra-blog`, `intune-blog`, `exchange-blog`, `teams-blog`, `sharepoint-blog`, `azure-governance-blog`, `defender-xdr-blog`                        | Microsoft Tech Community                             | Public | The board's RSS feed on techcommunity.microsoft.com                                                                      | 3–6 h      | Every post (on-premises Exchange/SharePoint Server release posts dropped); excerpt only                                         |
+| `feeds.learn-entra-whats-new`, `learn-intune-whats-new`, `learn-defender-xdr-whats-new`, `learn-graph-whats-new`, `learn-teams-powershell-release-notes` | Microsoft Learn                                      | Public | Learn search RSS, the subscription route [Learn documents][learn-rss], narrowed to the what's-new pages (`linkPrefixes`) | 24 h       | "This page was updated" with a link — Learn has no per-change feed                                                              |
+| `feeds.powershell-modules`                                                                                                                               | Microsoft                                            | Public | PowerShell Gallery OData API ([supported repositories][psgallery])                                                       | 6 h        | New stable ExchangeOnlineManagement, MicrosoftTeams, Microsoft.Graph.Authentication, Az.Accounts versions                       |
+| `feeds.avd-blog`, `feeds.learn-avd-whats-new`, `feeds.m365-blog`                                                                                         | Microsoft Tech Community / Microsoft Learn           | Public | The board's RSS feed; Learn search RSS narrowed to the AVD what's-new page                                               | 3 h / 24 h | Every post (azure: AVD, tag `avd`; m365), what's-new page updates                                                               |
+| `feeds.microsoft-security-blog`                                                                                                                          | Microsoft                                            | Public | Microsoft Security Blog RSS                                                                                              | 3 h        | Every post (security; Entra posts also in identity; campaigns and zero-days as security)                                        |
+| `feeds.vmware-cloud-foundation-blog`, `feeds.vmware-security-blog`                                                                                       | VMware by Broadcom                                   | Public | The blogs' RSS on blogs.vmware.com                                                                                       | 6 h        | Every post (infrastructure; ESXi, vSphere, vCenter tagged; end of support as retirement); excerpt only                          |
+| `feeds.hpe-newsroom`                                                                                                                                     | Hewlett Packard Enterprise                           | Public | HPE newsroom RSS                                                                                                         | 6 h        | Only ProLiant, iLO, Synergy, OneView, Alletra, GreenLake, Private Cloud / VM Essentials and security posts (infrastructure)     |
+| `feeds.digicert-status`                                                                                                                                  | DigiCert                                             | Public | Status page incident history RSS                                                                                         | 1 h        | Incidents and maintenance windows (security, tag `certificates`)                                                                |
+| `feeds.anthropic-status`, `feeds.claude-code-releases`                                                                                                   | Anthropic                                            | Public | Claude status page history RSS; Claude Code releases (Atom) on its GitHub repository                                     | 1 h / 6 h  | Incidents and maintenance (ai); each Claude Code version as a release (ai, platform)                                            |
+| `feeds.openrouter-blog`                                                                                                                                  | OpenRouter                                           | Public | OpenRouter blog RSS                                                                                                      | 6 h        | Platform announcements only (models and providers, routing, security, spend, pricing); tutorials and comparisons dropped (ai)   |
+| `feeds.n8n-releases`, `feeds.n8n-blog`                                                                                                                   | n8n                                                  | Public | Releases (Atom) on n8n's GitHub repository; the n8n blog RSS                                                             | 6 h        | Each version once (the moving `stable`/`beta` tags dropped) as a release; every blog post (ai)                                  |
+| `feeds.pnp-powershell`                                                                                                                                   | PnP community (Microsoft 365 Patterns and Practices) | Public | PowerShell Gallery OData API                                                                                             | 6 h        | New stable PnP.PowerShell versions — a community project, not Microsoft-supported                                               |
 
 Deliberately not used: the old `azure.microsoft.com/…/updates/feed/` (gone), the MSRC blog feed (gone), third-party news
-sites and aggregators. A module release is a prompt to read its notes and bump `portal/apps/runner/modules.lock.json`
+sites and aggregators. Not available (checked 2026-10-23, `docs/backlog.md`): VMware's security advisories (VMSA) —
+Broadcom's support portal answers automated clients with a bot check; HPE's security bulletins — no public feed; the
+OpenRouter status page — no feed; CISA's advisories — refused to automated clients; the HPE Developer blog — a 12.9 MB
+feed, over the 8 MB cap. A module release is a prompt to read its notes and bump `portal/apps/runner/modules.lock.json`
 deliberately — nothing updates on its own.
 
 ## How items are classified
 
-Each feed's `classify` rules (see `FeedRule` in `news.ts`) place items in **areas** (the navigation sections plus
-`platform`) and **tags** (`exchange`, `teams`, `intune`, `graph-api`, `key-vault`, …), and can set the **kind**, a
+Each feed's `classify` rules (see `FeedRule` in `news.ts`) place items in **areas** (the navigation sections, plus
+`platform`, `infrastructure` and `ai`) and **tags** (`exchange`, `teams`, `intune`, `graph-api`, `key-vault`, …), and can set the **kind**, a
 **severity** and a **status**:
 
 - `match` lists values per field — `services` (the tenant sources' service names, PowerShell package ids) and
@@ -53,7 +69,10 @@ Each feed's `classify` rules (see `FeedRule` in `news.ts`) place items in **area
 - `keep: matched` keeps only items a rule placed in an area — the relevance filter for broad public feeds, which is
   how only changes to services AdminForge manages get in. `keep: all` keeps everything, with `defaultAreas`.
 
-`tests/content/feeds-classify.test.ts` holds golden examples for every production feed.
+`tests/content/feeds-classify.test.ts` holds golden examples for the Microsoft and tenant feeds,
+`tests/content/feeds-classify-vendors.test.ts` for the vendor feeds. A status page's items (Claude, DigiCert) are
+incidents and maintenance: a rule reads Statuspage's latest update ("Resolved -", "Completed -") into `status:
+resolved`, so a finished incident leaves Breaking at once instead of counting as open for 14 days.
 
 **Kinds:** incident · advisory · maintenance · security · change · retirement · feature · preview · release · info.
 
@@ -102,7 +121,9 @@ successful collection first, and no feed starts that couldn't finish inside the 
   ([security advisories][azure-sec]) — AdminForge stays on Reader and says so on the item.
 - **Public feeds** are fetched only over https from the hosts in `NEWS_FEED_HOSTS` (www.microsoft.com,
   api.msrc.microsoft.com, techcommunity.microsoft.com, www.powershellgallery.com, learn.microsoft.com,
-  developer.microsoft.com), only when the name resolves to public addresses — checked again when the connection is made,
+  developer.microsoft.com; and each vendor's own: blogs.vmware.com, www.hpe.com, status.digicert.com,
+  status.claude.com, openrouter.ai, blog.n8n.io, and github.com — where only the paths in `NEWS_FEED_PATHS` are read:
+  the releases feeds of `anthropics/claude-code` and `n8n-io/n8n`, so another repository is a reviewed code change), only when the name resolves to public addresses — checked again when the connection is made,
   and the socket goes only to an address that passed (no DNS rebinding), with a 5-second DNS limit — following at most
   three redirects and only to those hosts, with a time limit and a size cap, conditional requests (ETag / If-Modified-Since) where the source
   supports them, and `User-Agent: AdminForge-News/1.0` (never the portal's address). Adding a host is a reviewed code
@@ -110,7 +131,8 @@ successful collection first, and no feed starts that couldn't finish inside the 
 - XML with a DOCTYPE or entity declarations is refused; text is reduced to plain text by a linear scanner over at most
   64 KiB per field (no HTML is ever rendered; control, bidi and invisible characters are removed); dates more than a day
   in the future are treated as the collection time.
-- Citation links are kept only when they are https on a Microsoft domain (`NEWS_LINK_DOMAINS`), at most 2,048
+- Citation links are kept only when they are https on an allowed domain (`NEWS_LINK_DOMAINS`: Microsoft's, and each
+  listed vendor's), at most 2,048
   characters, without control or invisible characters — and, for public feeds, on the feed's own host or its homepage's
   host. Otherwise the feed's homepage is cited. A Microsoft host is not the same as Microsoft-authored text: Tech
   Community boards and the PowerShell Gallery carry posts and packages by others, which is why links must stay on the
@@ -132,6 +154,10 @@ than needed). AdminForge stays inside them by design:
 - it polls politely (hourly at most, every few hours for large feeds, conditional requests where supported, an
   identifying User-Agent) and deletes items after `retentionDays`;
 - tenant data stays inside the organisation and is read with read-only permissions.
+
+The vendor feeds (VMware by Broadcom, HPE, DigiCert, Anthropic, OpenRouter, n8n, GitHub release feeds) are published for
+subscription under each site's own terms of use; AdminForge treats them the same way — headline, short excerpt, date,
+source and link back, labelled with the publisher, internal and informational, polled politely.
 
 If AdminForge is ever offered to other organisations or commercially, have your legal team review these terms first.
 

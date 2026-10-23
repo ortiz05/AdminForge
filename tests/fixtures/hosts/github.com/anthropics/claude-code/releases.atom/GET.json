@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/atom+xml"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><id>https://github.com/anthropics/claude-code/releases</id><title>Release notes from claude-code</title><link rel=\"alternate\" href=\"https://github.com/anthropics/claude-code/releases\"/><updated>2026-10-20T09:00:00.000Z</updated><entry><id>https://github.com/anthropics/claude-code/releases/tag/v9.9.2</id><title>v9.9.2</title><link rel=\"alternate\" href=\"https://github.com/anthropics/claude-code/releases/tag/v9.9.2\"/><updated>2026-10-20T09:00:00.000Z</updated><content type=\"text\">Synthetic release notes (Example Org).</content></entry><entry><id>https://github.com/anthropics/claude-code/releases/tag/v9.9.1</id><title>v9.9.1</title><link rel=\"alternate\" href=\"https://github.com/anthropics/claude-code/releases/tag/v9.9.1\"/><updated>2026-10-19T09:00:00.000Z</updated><content type=\"text\">Synthetic release notes (Example Org).</content></entry></feed>"
+  }
+}

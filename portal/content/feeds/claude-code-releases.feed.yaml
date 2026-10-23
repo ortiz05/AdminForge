@@ -1,0 +1,27 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.claude-code-releases
+version: 1.0.0
+title: Claude Code releases
+summary: >-
+  New versions of Claude Code from its release feed on GitHub (Anthropic's own repository) — the tool AdminForge is
+  extended with. A release is a prompt to read its notes; nothing updates on its own.
+owner: portal-admins
+tags: [news, ai, public, releases]
+publisher: Anthropic
+homepage: https://github.com/anthropics/claude-code/releases
+collector:
+  kind: rss
+  url: https://github.com/anthropics/claude-code/releases.atom
+  # Released almost daily: three weeks is enough to see what changed recently.
+  lookbackDays: 21
+  # Only this repository's release pages are cited (a transferred repository then fails as feed_empty).
+  linkPrefixes: [https://github.com/anthropics/claude-code/releases/tag/]
+keep: all
+defaultAreas: [ai, platform]
+classify:
+  - match: { title: [v1, v2, v3] }
+    kind: release
+    tags: [claude-code]
+pollMinutes: 360
+retentionDays: 180

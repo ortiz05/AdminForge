@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/xml"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>OpenRouter Blog</title><link>https://openrouter.ai/blog</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example Model is now on OpenRouter</title><link>https://openrouter.ai/blog/example-model</link><guid>https://openrouter.ai/blog/example-model</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>A synthetic announcement (Example Org).</description></item><item><title>Example Model vs Other Model: Compared</title><link>https://openrouter.ai/blog/example-comparison</link><guid>https://openrouter.ai/blog/example-comparison</guid><pubDate>Mon, 19 Oct 2026 09:00:00 GMT</pubDate><description>A synthetic comparison piece.</description></item></channel></rss>"
+  }
+}

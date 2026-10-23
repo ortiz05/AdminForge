@@ -1,0 +1,30 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.m365-blog
+version: 1.0.0
+title: Microsoft 365 Blog
+summary: >-
+  Announcements across Microsoft 365 from the Microsoft 365 Blog on Microsoft Tech Community — the umbrella the service
+  blogs (Exchange, Teams, SharePoint) sit under.
+owner: portal-admins
+tags: [news, m365, public, blog]
+publisher: Microsoft Tech Community
+homepage: https://techcommunity.microsoft.com/t5/microsoft-365-blog/bg-p/microsoft_365blog
+collector:
+  kind: rss
+  url: https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=microsoft_365blog
+  lookbackDays: 90
+keep: all
+defaultAreas: [m365]
+classify:
+  - match: { title: [retirement, retiring, retire, deprecation, deprecated, end of support] }
+    kind: retirement
+  - match: { text: [Exchange Online, Outlook] }
+    tags: [exchange]
+  - match: { text: [Microsoft Teams, Teams] }
+    tags: [teams]
+  - match: { text: [SharePoint, OneDrive] }
+    tags: [sharepoint]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 180
+retentionDays: 180

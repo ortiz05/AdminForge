@@ -31,6 +31,7 @@ well, it is the fastest way to a consistent change; you still own every line it 
 | `adding-an-expression-helper` | a new `$function` for content expressions                                            |
 | `adding-a-cli-command`        | a new `adminforge` command or option                                                 |
 | `adding-an-adr`               | a decision others must not undo by accident                                          |
+| `onboard`                     | your machine set up and checked: tools, hooks, skills, agents, Chrome                |
 | `add-news-feed`               | a source in News and changes                                                         |
 | `changing-the-design-system`  | colours, fonts, spacing, radius, density, a component's style, a theme               |
 | `validating-against-a-tenant` | checking a change live: sign-in, data, a real write on `AF-Test-*`, 401/403/licences |

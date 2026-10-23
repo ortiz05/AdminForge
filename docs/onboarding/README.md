@@ -8,6 +8,9 @@ AdminForge is an admin portal for Microsoft Entra ID, Microsoft 365, Intune, Def
 their own identity and work through **delegated** permissions; most features are **declarative content** (YAML)
 rendered and executed by a generic engine. It manages real tenants, so the way we build it is part of its security.
 
+**Day one:** in Claude Code at the repository root, say **onboard** (or run `node tooling/onboard.mjs`) — it sets
+your checkout up and checks the tools, git hooks, Claude Code hooks, skills and agents ([guide 1](01-setup.md)).
+
 ## Reading path
 
 | #   | Guide                                                                           | What you'll know afterwards                                                          | Time   |

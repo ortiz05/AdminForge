@@ -41,6 +41,7 @@ Claude picks the matching skill automatically (or name it: "use the adding-a-pla
 | A new `adminforge` command or option                                                                                        | `adding-a-cli-command`        | `portal/tools/cli`, its `README.md`                                      |
 | A decision others must not undo by accident                                                                                 | `adding-an-adr`               | `docs/adr`, `docs/decisions.md`                                          |
 | The look and feel                                                                                                           | `changing-the-design-system`  | `portal/packages/design-tokens`, `portal/packages/ui/src/recipes`        |
+| Setting up and checking a new engineer's machine (say "onboard")                                                            | `onboard`                     | `tooling/onboard.mjs`, `docs/onboarding/01-setup.md`                     |
 | Checking it against a real tenant                                                                                           | `validating-against-a-tenant` | `tests/live`, `~/.config/adminforge/*.env`                               |
 
 Every skill has the same shape — Overview, When not to use, Steps, Done when, Common mistakes, See also — so you can

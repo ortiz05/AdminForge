@@ -3,6 +3,16 @@
 By the end of this page AdminForge runs on your machine on synthetic data, the tests pass, and git runs the same
 checks on your commits as CI does. You don't need a Microsoft tenant for any of it.
 
+## The quick way: onboard
+
+In Claude Code at the repository root, say **onboard** (the `onboard` skill), or run `node tooling/onboard.mjs`
+yourself — it needs only Node, so it works on a fresh clone. It installs what's missing (`pnpm install`, the git hooks,
+the generated schemas and design tokens) and checks the rest: the pinned Node and pnpm, git running `.githooks` and the
+commit-message rules, Chrome for Playwright, PowerShell 7 (optional), Claude Code's after-edit hook, every skill and
+reviewer agent, `CLAUDE.md` and your env file's permissions — then runs the guard tests. Each problem comes with its
+fix; run it until it says **Ready**. `--check` changes nothing; `--quick` skips the guard tests. The rest of this page
+is what it does, step by step.
+
 ## Install the tools
 
 | Tool                  | Version                         | Why                                                                                  |

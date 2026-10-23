@@ -4,6 +4,7 @@ import { ConfidentialClientApplication, LogLevel, type Configuration } from '@az
 import { identityEnvPrefix } from '@adminforge/schemas';
 import type { AppIdentityConfig, Config } from '../config';
 import { AppError } from '../errors';
+import type { VaultCredential, VaultCredentials } from './vault';
 
 /**
  * App-only tokens for the automation identity (ADR-011) and the named app identities schedules may run as (ADR-014):
@@ -49,7 +50,12 @@ export interface AutomationOptions {
   createClient?: (config: Configuration) => ClientCredentialClient;
   readFile?: (path: string) => string;
   log?: { warn(obj: object, msg: string): void };
+  /** Credentials from Vault (ADR-018): each identity's secret or certificate instead of the env file's. */
+  vault?: VaultCredentials;
 }
+
+/** AADSTS codes of a credential Entra no longer accepts (wrong, expired or removed secret or certificate). */
+const REJECTED_CREDENTIAL = /AADSTS(7000215|7000222|700027|700024|7000112)\b/;
 
 const PEM_BLOCK = /-----BEGIN ([A-Z0-9 ]+)-----[\s\S]+?-----END \1-----/g;
 
@@ -146,18 +152,34 @@ export function createAppTokenProvider(
 ): AutomationTokenProvider | null {
   const { clientId, tenantId, certPath, clientSecret } = input;
   const name = input.identity?.name;
-  if (!certPath && !clientSecret) return null;
+  const vault = opts.vault;
+  // With Vault, the credential is read at <AF_VAULT_PATH>/identities/<name> (automation for the automation identity).
+  const vaultName = name ?? 'automation';
+  if (!certPath && !clientSecret && !vault) return null;
   // What errors call it and which keys they point at (names only, never values).
   const who = name ? `The app identity ${name}` : 'The automation identity';
   const keys = name ? identityEnvPrefix(name) : 'AF_AUTOMATION_';
-  const credential: AutomationTokenProvider['credential'] = certPath ? 'certificate' : 'secret';
+  const where = vault
+    ? `its credential in Vault (identities/${vaultName})`
+    : `${keys}CLIENT_ID and its certificate/secret`;
   const readFile = opts.readFile ?? ((p: string) => readFileSync(p, 'utf8'));
   let client: ClientCredentialClient | undefined;
+  // The Vault secret version the client was built from: a new version (rotation) builds a new client.
+  let builtVersion: number | undefined;
 
-  const getClient = (): ClientCredentialClient => {
-    if (client) return client;
+  const getClient = (cred?: VaultCredential): ClientCredentialClient => {
+    if (client && (!cred || cred.version === builtVersion)) return client;
     let auth: Configuration['auth'];
-    if (certPath) {
+    if (cred) {
+      auth = {
+        clientId,
+        authority: `https://login.microsoftonline.com/${tenantId}`,
+        ...(cred.certificatePem
+          ? { clientCertificate: certificateCredential(cred.certificatePem, `Vault identities/${vaultName}`) }
+          : { clientSecret: cred.clientSecret! }),
+      };
+      builtVersion = cred.version;
+    } else if (certPath) {
       let pem: string;
       try {
         pem = readFile(certPath);
@@ -195,20 +217,63 @@ export function createAppTokenProvider(
     return client;
   };
 
+  /** The Vault credential to use now: loaded, and naming this app if it names one. */
+  const vaultCredential = async (): Promise<VaultCredential> => {
+    const cred = await vault!.ensure(vaultName);
+    if (!cred)
+      throw new AppError(
+        503,
+        'credential_unavailable',
+        `${who} has no credential in Vault (identities/${vaultName}).`,
+        {
+          hint: 'Put its client_secret or certificate_pem at that path under AF_VAULT_PATH; AdminForge reads it at the next refresh.',
+        },
+      );
+    if (cred.clientId && cred.clientId.toLowerCase() !== clientId.toLowerCase())
+      throw new AppError(
+        503,
+        'credential_mismatch',
+        `The client_id in Vault (identities/${vaultName}) isn't ${keys}CLIENT_ID.`,
+        {
+          hint: 'Put the credential of the app registration named in the env file at that path.',
+        },
+      );
+    return cred;
+  };
+
   return {
     clientId,
-    credential,
+    get credential(): AutomationTokenProvider['credential'] {
+      if (vault) return vault.current(vaultName)?.certificatePem ? 'certificate' : 'secret';
+      return certPath ? 'certificate' : 'secret';
+    },
     ...(name ? { identity: name } : {}),
     async token(scope, { forceRefresh, claims } = {}) {
       if (!scope.endsWith('/.default'))
         throw new Error(`App-only tokens need a /.default scope (got ${scope}).`);
       let result: { accessToken: string } | null;
+      const request = {
+        scopes: [scope],
+        ...(forceRefresh || claims ? { skipCache: true } : {}),
+        ...(claims ? { claims } : {}),
+      };
       try {
-        result = await getClient().acquireTokenByClientCredential({
-          scopes: [scope],
-          ...(forceRefresh || claims ? { skipCache: true } : {}),
-          ...(claims ? { claims } : {}),
-        });
+        const cred = vault ? await vaultCredential() : undefined;
+        try {
+          result = await getClient(cred).acquireTokenByClientCredential(request);
+        } catch (err) {
+          // Entra no longer accepts it (rotated in Vault since the last read?): read Vault now and try once more.
+          const text = String(
+            (err as { errorMessage?: string })?.errorMessage ?? (err as Error)?.message ?? '',
+          );
+          if (!vault || !cred || !REJECTED_CREDENTIAL.test(text)) throw err;
+          const fresh = await vault.refreshNow(vaultName);
+          if (!fresh || fresh.version === cred.version) throw err;
+          result = await getClient(await vaultCredential()).acquireTokenByClientCredential({
+            ...request,
+            skipCache: true,
+          });
+        }
       } catch (err) {
         if (err instanceof AppError) throw err;
         // MSAL errors carry AADSTS codes; keep only the first line (no trace ids, never the credential).
@@ -225,7 +290,7 @@ export function createAppTokenProvider(
           'automation_token_failed',
           `${who} could not get a token for ${scope}: ${first}`,
           {
-            hint: `Check ${keys}CLIENT_ID and its certificate/secret (adminforge provision status).`,
+            hint: `Check ${where} (adminforge provision status).`,
           },
         );
       }

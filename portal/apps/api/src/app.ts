@@ -153,6 +153,7 @@ export async function buildApp(
   });
   app.decorate('ctx', ctx);
   app.addHook('onClose', async () => {
+    ctx.vault?.stop();
     await ctx.database?.close();
   });
   // The database file must be private and on local storage: production refuses to start, development warns.

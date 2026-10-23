@@ -14,6 +14,7 @@ import {
   type AppIdentityRegistry,
   type AutomationTokenProvider,
 } from '../auth/automation';
+import { VaultClient, VaultCredentials, vaultSettings } from '../auth/vault';
 import type { TokenBroker } from '../auth/token-broker';
 import type { AuthClient } from '../auth/types';
 import { LicenceService } from '../capabilities/licences';
@@ -40,6 +41,8 @@ export interface ContentServices {
   automation: AutomationTokenProvider | null;
   /** The automation identity and the named app identities schedules may run as (ADR-014). */
   identities: AppIdentityRegistry;
+  /** Their credentials from Vault (ADR-018); null when AF_VAULT_ADDR isn't set (the env file holds them). */
+  vault: VaultCredentials | null;
   licences: LicenceService;
   datasources: DatasourceRunner;
   events: EventBus;
@@ -70,19 +73,37 @@ export function createContentServices(
   const cachedEnv = deps.contentEnv ? {} : contentEnv(config);
   const env = deps.contentEnv ?? (() => cachedEnv);
   const definitions = deps.definitions ?? createDefinitionRegistry(config, base.database, log);
+  // Credentials from Vault (ADR-018): read now and every AF_VAULT_REFRESH_SECONDS; never with mock sign-in.
+  const vaultCfg = config.AUTH_MODE === 'mock' ? null : vaultSettings(config);
+  const vault =
+    deps.vault !== undefined
+      ? deps.vault
+      : vaultCfg
+        ? new VaultCredentials(
+            new VaultClient(vaultCfg),
+            ['automation', ...(config.SCHEDULE_IDENTITIES ?? []).map((i) => i.name)],
+            {
+              refreshSeconds: vaultCfg.refreshSeconds,
+              path: `${vaultCfg.kvMount}/${vaultCfg.path}`,
+              ...(log ? { log } : {}),
+            },
+          )
+        : null;
+  if (vault && deps.vault === undefined) vault.start();
   // Mock sign-in never holds the automation identity: its schedules and probes would run on real tenant data.
   const automation =
     deps.automation !== undefined
       ? deps.automation
       : config.AUTH_MODE === 'mock'
         ? null
-        : createAutomationTokenProvider(config, { log });
+        : createAutomationTokenProvider(config, { log, ...(vault ? { vault } : {}) });
   // Named app identities (AF_SCHEDULE_IDENTITIES): never with mock sign-in either.
   const identities =
     deps.identities ??
     createAppIdentityRegistry(config.AUTH_MODE === 'mock' ? { ...config, SCHEDULE_IDENTITIES: [] } : config, {
       log,
       automation,
+      ...(vault ? { vault } : {}),
     });
   // Secret-bearing reads (App Service app settings): values are stripped by the executor; the read is audited.
   const onSensitiveRead = async (r: SensitiveRead) => {
@@ -144,6 +165,7 @@ export function createContentServices(
     outbound,
     automation,
     identities,
+    vault,
     licences,
     datasources,
     events,

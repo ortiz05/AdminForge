@@ -186,6 +186,39 @@ const Schema = z
     AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS: z.string().optional(),
     AF_AUTOMATION_CLIENT_ID: z.guid().optional(),
     AF_AUTOMATION_CLIENT_SECRET: z.string().optional(),
+    // ── Credentials from HashiCorp Vault (off unless AF_VAULT_ADDR is set; vaultProblems) ──
+    /** Vault's address (https; http only to a loopback address outside production). */
+    AF_VAULT_ADDR: z.url().optional(),
+    AF_VAULT_AUTH: z.enum(['kubernetes', 'approle', 'token']).default('kubernetes'),
+    /** The auth method's mount (default `kubernetes` / `approle`). */
+    AF_VAULT_AUTH_MOUNT: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/)
+      .optional(),
+    /** Kubernetes auth: the Vault role bound to AdminForge's service account. */
+    AF_VAULT_ROLE: z.string().optional(),
+    /** Kubernetes auth: the service-account token file (default the pod's projected token). */
+    AF_VAULT_K8S_TOKEN_FILE: z.string().default('/var/run/secrets/kubernetes.io/serviceaccount/token'),
+    /** AppRole auth: the role id, and the file holding the secret id. */
+    AF_VAULT_ROLE_ID: z.string().optional(),
+    AF_VAULT_SECRET_ID_FILE: z.string().optional(),
+    /** Token auth: the file holding a Vault token (renewable; dev and break-glass). */
+    AF_VAULT_TOKEN_FILE: z.string().optional(),
+    /** Vault Enterprise namespace. */
+    AF_VAULT_NAMESPACE: z.string().optional(),
+    /** PEM bundle of the CA that signed Vault's certificate (default the system's). */
+    AF_VAULT_CA_FILE: z.string().optional(),
+    /** The KV version 2 engine's mount (default `secret`) and the path under it (default `adminforge/<AF_ENV_LABEL>`). */
+    AF_VAULT_KV_MOUNT: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/)
+      .default('secret'),
+    AF_VAULT_PATH: z
+      .string()
+      .regex(/^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/)
+      .optional(),
+    /** How often the credentials are read again (seconds; 30–86400). */
+    AF_VAULT_REFRESH_SECONDS: z.coerce.number().int().min(30).max(86_400).default(300),
     /** PEM with certificate + private key; preferred over the secret. */
     AF_AUTOMATION_CERT_PATH: z.string().optional(),
     /** fs = portal/content from disk (hot reload); db = published versions in the database. Default: db in production, else fs. */
@@ -358,7 +391,13 @@ const Schema = z
         message: 'AF_WRITE_CLIENT_ID and AF_WRITE_CLIENT_SECRET must be set together',
       });
     }
-    if (env.AF_AUTOMATION_CLIENT_ID && !env.AF_AUTOMATION_CLIENT_SECRET && !env.AF_AUTOMATION_CERT_PATH) {
+    // With Vault on, the credential is read from Vault (identities/automation) instead.
+    if (
+      env.AF_AUTOMATION_CLIENT_ID &&
+      !env.AF_VAULT_ADDR &&
+      !env.AF_AUTOMATION_CLIENT_SECRET &&
+      !env.AF_AUTOMATION_CERT_PATH
+    ) {
       ctx.addIssue({
         code: 'custom',
         path: ['AF_AUTOMATION_CLIENT_ID'],
@@ -493,10 +532,12 @@ export function scheduleIdentities(
     | 'AF_READ_CLIENT_ID'
     | 'AF_WRITE_CLIENT_ID'
     | 'AF_PROTECTED_APP_IDS'
+    | 'AF_VAULT_ADDR'
   >,
 ): { identities: AppIdentityConfig[]; problems: string[] } {
   const problems: string[] = [];
   const identities: AppIdentityConfig[] = [];
+  const vault = !!parsed.AF_VAULT_ADDR;
   const names = (parsed.AF_SCHEDULE_IDENTITIES ?? '')
     .split(',')
     .map((n) => n.trim())
@@ -548,6 +589,12 @@ export function scheduleIdentities(
         problems.push(
           `${prefix}${certPath ? 'CERT_PATH' : 'CLIENT_SECRET'}: must not be set with AUTH_MODE=mock (mock sign-in never holds tenant credentials)`,
         );
+    } else if (vault) {
+      // One source: with Vault on, the credential lives at <AF_VAULT_PATH>/identities/<name>.
+      if (certPath || clientSecret)
+        problems.push(
+          `${prefix}${certPath ? 'CERT_PATH' : 'CLIENT_SECRET'}: must be empty with AF_VAULT_ADDR (the credential comes from Vault)`,
+        );
     } else if (!certPath && !clientSecret) {
       problems.push(`${prefix}CLIENT_ID: needs ${prefix}CERT_PATH or ${prefix}CLIENT_SECRET`);
       continue;
@@ -560,6 +607,38 @@ export function scheduleIdentities(
     });
   }
   return { identities, problems };
+}
+
+/**
+ * Credentials from Vault (AF_VAULT_*): a reachable, authenticated source, and the only one — the env file then holds
+ * no client secret or certificate path. Problems name keys only.
+ */
+export function vaultProblems(parsed: z.infer<typeof Schema>): string[] {
+  if (!parsed.AF_VAULT_ADDR) return [];
+  const problems: string[] = [];
+  const url = new URL(parsed.AF_VAULT_ADDR);
+  const loopback = ['127.0.0.1', '::1', '[::1]', 'localhost'].includes(url.hostname);
+  if (
+    url.protocol !== 'https:' &&
+    !(url.protocol === 'http:' && loopback && parsed.NODE_ENV !== 'production')
+  )
+    problems.push('AF_VAULT_ADDR: must be https (http only to a loopback address outside production)');
+  if (parsed.AUTH_MODE === 'mock')
+    problems.push(
+      'AF_VAULT_ADDR: must not be set with AUTH_MODE=mock (mock sign-in never holds tenant credentials)',
+    );
+  if (parsed.AF_VAULT_AUTH === 'kubernetes' && !parsed.AF_VAULT_ROLE)
+    problems.push(
+      'AF_VAULT_ROLE: required with AF_VAULT_AUTH=kubernetes (the Vault role for this service account)',
+    );
+  if (parsed.AF_VAULT_AUTH === 'approle' && (!parsed.AF_VAULT_ROLE_ID || !parsed.AF_VAULT_SECRET_ID_FILE))
+    problems.push('AF_VAULT_ROLE_ID and AF_VAULT_SECRET_ID_FILE: required with AF_VAULT_AUTH=approle');
+  if (parsed.AF_VAULT_AUTH === 'token' && !parsed.AF_VAULT_TOKEN_FILE)
+    problems.push('AF_VAULT_TOKEN_FILE: required with AF_VAULT_AUTH=token');
+  for (const key of ['AF_AUTOMATION_CLIENT_SECRET', 'AF_AUTOMATION_CERT_PATH'] as const)
+    if (parsed[key])
+      problems.push(`${key}: must be empty with AF_VAULT_ADDR (the credential comes from Vault)`);
+  return problems;
 }
 
 /** Empty values in the env file mean "not set". */
@@ -583,6 +662,7 @@ export function loadConfig(env: Record<string, string | undefined> = loadEnv()):
   const { identities, problems } = scheduleIdentities(values, parsed.data);
   const { defaults, problems: defaultProblems } = scheduleDefaults(parsed.data, identities);
   problems.push(...defaultProblems);
+  problems.push(...vaultProblems(parsed.data));
   if (parsed.data.NODE_ENV === 'production') problems.push(...strayCredentials(values));
   if (problems.length)
     throw new Error(`Invalid AdminForge configuration:\n${problems.map((p) => `  ${p}`).join('\n')}`);

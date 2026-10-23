@@ -8,6 +8,8 @@ import {
   type ContentError,
   type DefinitionEntry,
   type Scopes,
+  type Schedule,
+  type ScheduleIdentity,
 } from '@adminforge/schemas';
 import type { DefinitionSource } from '../definitions/types';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
@@ -137,6 +139,8 @@ export async function contentHealth(
   definitions: Pick<DefinitionSource, 'list' | 'problems'>,
   opts: {
     scopes?: boolean;
+    /** The account a schedule runs as now (overrides, defaults); default the identity its definition names. */
+    identityOf?: (def: Schedule) => ScheduleIdentity;
     outbound?: OutboundExecutor;
     automationClientId?: string | null;
     /** Application ids of the named app identities (ADR-014), by name. */
@@ -180,7 +184,8 @@ export async function contentHealth(
         unlicensed.push(e.def.id);
         continue;
       }
-      const who = e.def.kind === 'schedule' ? identityKey(e.def.identity) : 'automation';
+      const who =
+        e.def.kind === 'schedule' ? identityKey(opts.identityOf?.(e.def) ?? e.def.identity) : 'automation';
       if (who === 'user') continue;
       const name = who.startsWith('app:') ? who.slice(4) : 'automation';
       const declared = byIdentity.get(name) ?? new Map<string, string[]>();

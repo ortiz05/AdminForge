@@ -24,6 +24,10 @@ export interface ScheduleRow {
   nextRunAt: Date | null;
   lastRunAt: Date | null;
   lastStatus: string | null;
+  /** The account an Operator chose for this content schedule (`automation` | `app:<name>`); null = not chosen. */
+  runAs: string | null;
+  runAsSetBy: string | null;
+  runAsSetAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +63,9 @@ export type SchedulePatch = Partial<
     | 'lastRunAt'
     | 'lastStatus'
     | 'createdBy'
+    | 'runAs'
+    | 'runAsSetBy'
+    | 'runAsSetAt'
   >
 >;
 
@@ -148,6 +155,8 @@ export interface ScheduleApprovalPolicy {
   sha256: string;
   /** Playbook jobs: fingerprint of the playbook and its children at request time (a changed playbook voids it). */
   targetFingerprint?: string;
+  /** The account the schedule runs as at request time (identityKey); an approval for another account no longer applies. */
+  identity?: string;
   requestedByUpn: string;
   initiatorOid: string;
   /** Approving changes no tenant data, so the approver need not arm write access. */

@@ -3,9 +3,11 @@ import {
   identityLabel,
   isWriteCapable,
   TRANSACTION_KINDS,
-  type PortalRole,
   type Probe,
   type Schedule,
+  identityFromKey,
+  type RunAsDefaults,
+  type ScheduleIdentity,
 } from '@adminforge/schemas';
 
 export { creatorFilesAccess, SCHEDULED_DATA_ROLES } from './run-access';
@@ -20,7 +22,7 @@ import { AppError } from '../errors';
 import type { ComponentHealth } from '../health/heartbeat';
 import { AUTOMATION_PAUSED } from '../execution/emergency';
 import { describeCron, nextRun } from './cron';
-import { deliveryView, type DeliveryView, type NotifyView } from './delivery-keys';
+import { deliveryView } from './delivery-keys';
 import { maskRedacted, mayOpen } from '../reports/catalog';
 import type { ScheduleEvents } from './events';
 import type { ScheduleGrantRow, ScheduleGrantStore } from './grants';
@@ -37,12 +39,12 @@ import {
 import { contentSchedules, contentSignature, syncSchedules } from './sync';
 import type {
   ApprovalStatus,
-  RunCursor,
   ScheduleApprovalPolicy,
   ScheduleApprovalRow,
   ScheduleRow,
   ScheduleRunRow,
 } from './types';
+import { appNameOf, runAsOf } from './run-as';
 
 /**
  * Schedules as the API sees them (R6): list, enable/disable (two-person approval for write-capable schedules),
@@ -50,176 +52,29 @@ import type {
  * this service only writes rows, audits, and wakes the scheduler (`schedule.run_requested`).
  */
 
-export interface Caller {
-  session: SessionRecord;
-  correlationId: string;
-  ip: string | null;
-}
+import {
+  APPROVAL_TTL_MS,
+  FILE_ONLY_MESSAGE,
+  PORTAL_RUN_NOW_INTERVAL_MS,
+  actorOf,
+  canManage,
+  decodeRunCursor,
+  encodeRunCursor,
+  isDeleted,
+  runsAsView,
+  type Caller,
+  type ReportAccess,
+  type ScheduleApprovalView,
+  type ScheduleItem,
+  type ScheduleRunItem,
+} from './views';
 
-export interface ScheduleItem {
-  key: string;
-  title: string;
-  summary: string | null;
-  cron: string;
-  cronText: string | null;
-  timezone: string;
-  enabled: boolean;
-  /** `automation`, `app:<name>` or `user` (identityKey). */
-  identity: string;
-  /** Who it runs as (ADR-014), for people. */
-  runsAs: RunsAsView;
-  job: {
-    kind: Schedule['job']['kind'];
-    ref?: string;
-    refs?: string[];
-    select?: { tags: string[] };
-    /** Report jobs: the params the report runs with. */
-    params?: Record<string, unknown>;
-  };
-  nextRunAt: string | null;
-  lastRunAt: string | null;
-  lastStatus: string | null;
-  writeCapable: boolean;
-  approvedBy?: string[];
-  source: 'content' | 'portal';
-  /** The creator's UPN (portal schedules); null for content. */
-  createdBy: string | null;
-  /** Portal schedule, the caller holds Portal.Operator and created it (by oid) or holds Portal.Admin. */
-  canManage: boolean;
-  /** Report jobs: where the file goes (configuration key names, never values). */
-  delivery?: DeliveryView[];
-  /** `notify.onFailure` targets (key names). */
-  notify?: NotifyView[];
-  /** Set while an enable request waits for its second approver. */
-  pendingApprovalId: string | null;
-}
+export * from './views';
 
-/** Who a schedule runs as, as the schedule list and page show it. */
-export interface RunsAsView {
-  kind: 'automation' | 'app' | 'user';
-  /** The app identity's name, or the creator's UPN. */
-  name: string | null;
-  /** "automation identity", "app identity reports-team", "avery@example.com (their own access)". */
-  label: string;
-  /**
-   * Creator schedules: whether the creator's grant works (`signed_in`), was refused by Microsoft (`needs_sign_in`), or
-   * was never given (`not_signed_in`).
-   */
-  signIn?: 'signed_in' | 'needs_sign_in' | 'not_signed_in';
-  /** Creator schedules: the caller is the creator and may sign in for it. */
-  canSignIn?: boolean;
-}
-
-export interface ScheduleRunItem {
-  id: string;
-  trigger: string;
-  status: string;
-  startedAt: string;
-  endedAt: string | null;
-  runId?: string;
-  artifact?: { name: string; href: string; size: number | null };
-  error?: { code: string; message: string; hint?: string };
-  /** Why a run didn't happen (skipped runs), or sent nothing (Run now while the schedule was disabled). */
-  reason?: string;
-}
-
-/** Run now on a disabled schedule (F-10): what the answer says. */
-export const FILE_ONLY_MESSAGE =
-  'The schedule is disabled, so this run only writes the file: it sends no email, Teams message or notification.';
-
-/** Schedule approvals in the inbox shape the web UI reads (same as run TaskViews, subjectType 'schedule'). */
-export interface ScheduleApprovalView {
-  id: string;
-  subjectType: 'schedule';
-  subjectId: string;
-  stepId: null;
-  kind: 'approval';
-  title: string;
-  status: ApprovalStatus;
-  requestedBy: string;
-  requestedByOid: string;
-  createdAt: string;
-  expiresAt: string | null;
-  decidedAt: string | null;
-  scheduleKey: string;
-  policy: Omit<ScheduleApprovalPolicy, 'initiatorOid'>;
-  decisions: ScheduleApprovalRow['decisions'];
-  canDecide: boolean;
-}
-
-export const APPROVAL_TTL_MS = 7 * 86_400_000;
-/** Run now on a portal schedule: not again within this long of the last manual run. */
-export const PORTAL_RUN_NOW_INTERVAL_MS = 15 * 60_000;
-
-/** What `item` needs of a report: who may open it and which params it redacts. */
-export interface ReportAccess {
-  requires?: { portalRoles?: PortalRole[] };
-  params?: Record<string, { redact?: boolean }>;
-}
 const APPROVERS = ['Playbook.Approver'];
 const INACTIVE = new Set(['draft', 'retired']);
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
-
-/** A portal schedule that was deleted (soft delete: kept for its history, hidden everywhere else). */
-export const isDeleted = (row: Pick<ScheduleRow, 'source' | 'definition'>) =>
-  row.source === 'portal' && row.definition.status === 'retired';
-
-/**
- * Who may edit or delete a schedule created in the portal: a Portal.Operator who created it (by oid) or who is also a
- * Portal.Admin. Content schedules change through git only. (Any Operator may still turn one off.)
- */
-export function canManage(row: Pick<ScheduleRow, 'source' | 'createdBy'>, session?: SessionRecord): boolean {
-  if (!session || row.source !== 'portal' || !hasRole(session, 'Portal.Operator')) return false;
-  return (!!row.createdBy && row.createdBy === session.userOid) || hasRole(session, 'Portal.Admin');
-}
-
-/** Who a schedule runs as, for its list row and page (the grant decides a creator schedule's sign-in state). */
-export function runsAsView(
-  row: Pick<ScheduleRow, 'definition' | 'createdBy' | 'source'>,
-  session?: SessionRecord,
-  grant?: ScheduleGrantRow | null,
-): RunsAsView {
-  const identity = row.definition.identity;
-  if (!identity || identity === 'automation')
-    return { kind: 'automation', name: null, label: identityLabel(identity) };
-  if ('app' in identity) return { kind: 'app', name: identity.app, label: identityLabel(identity) };
-  const owner = row.source === 'portal' ? row.definition.owner : null;
-  return {
-    kind: 'user',
-    name: owner,
-    label: identityLabel(identity, owner),
-    signIn: !grant ? 'not_signed_in' : grant.status === 'active' ? 'signed_in' : 'needs_sign_in',
-    canSignIn: !!session && !!row.createdBy && row.createdBy === session.userOid,
-  };
-}
-
-/** Audit actor fields for a schedules API caller. */
-export function actorOf(c: Caller): Omit<AuditInput, 'action' | 'result'> {
-  return {
-    actorOid: c.session.userOid,
-    actorUpn: c.session.upn,
-    sessionHash: c.session.idHash,
-    mode: 'read',
-    correlationId: c.correlationId,
-    ip: c.ip,
-  };
-}
-
-export function encodeRunCursor(r: Pick<ScheduleRunRow, 'startedAt' | 'id'>): string {
-  return Buffer.from(JSON.stringify({ s: r.startedAt.toISOString(), i: r.id }), 'utf8').toString('base64url');
-}
-
-export function decodeRunCursor(cursor: string): RunCursor {
-  try {
-    const v = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { s?: string; i?: string };
-    const startedAt = new Date(v.s ?? '');
-    if (Number.isNaN(startedAt.getTime()) || !v.i || !/^[0-9a-f-]{36}$/i.test(v.i)) throw new Error('bad');
-    return { startedAt, id: v.i };
-  } catch {
-    throw new AppError(400, 'invalid_request', 'The cursor is not valid.');
-  }
-}
 
 export class ScheduleService {
   private signature = '';
@@ -242,6 +97,18 @@ export class ScheduleService {
       grants?: Pick<ScheduleGrantStore, 'get'>;
       /** The scheduler's heartbeat (D-09) when it runs in this process with a database; the list reports it. */
       schedulerHealth?: () => Promise<ComponentHealth>;
+      /** The installation's default accounts for read-only schedules (AF_SCHEDULE_DEFAULT_IDENTITY…). */
+      defaults?: RunAsDefaults;
+      /** The named app identities configured here (AF_SCHEDULE_IDENTITIES). */
+      apps?: () => readonly string[];
+      /**
+       * The application permissions (`graph:User.Read.All`) an identity lacks of `scopes`, read live; null when it
+       * can't be checked here (mock sign-in, no automation identity) — then the change is allowed.
+       */
+      permissionsMissing?: (
+        identity: ScheduleIdentity,
+        scopes: Readonly<Partial<Record<string, readonly string[] | undefined>>>,
+      ) => Promise<string[] | null>;
     },
   ) {}
 
@@ -332,8 +199,8 @@ export class ScheduleService {
       cronText: describeCron(def.cron, def.timezone),
       timezone: def.timezone,
       enabled: row.enabled,
-      identity: identityKey(def.identity),
-      runsAs: runsAsView(row, session, grant),
+      identity: identityKey(runAsOf(row, this.deps.defaults).identity),
+      runsAs: runsAsView(row, session, grant, this.deps.defaults),
       job: {
         kind: job.kind,
         ...('ref' in job && job.ref ? { ref: job.ref } : {}),
@@ -402,6 +269,76 @@ export class ScheduleService {
   }
 
   /** PATCH { enabled }: 200 when done; 202 { approvalId } when a write-capable schedule needs a second person. */
+  /**
+   * PUT /api/schedules/:key/run-as: the account a content schedule runs as, over what its definition names (null =
+   * back to the definition or the installation default). Portal.Operator; audited. The identity must hold the
+   * application permissions the schedule declares; a write-capable schedule is turned off, and turning it on again
+   * goes through two-person approval for the new account.
+   */
+  async setRunAs(c: Caller, key: string, wanted: string | null): Promise<{ disabled: boolean }> {
+    requireRole(c.session, 'Portal.Operator', 'Choosing the account a schedule runs as');
+    const { row } = await this.row(key);
+    const def = row.definition;
+    if (row.source !== 'content')
+      throw new AppError(
+        409,
+        'run_as_in_editor',
+        'This schedule was made in the portal: change its account in its editor.',
+        {
+          hint: 'Open the schedule and choose Edit.',
+        },
+      );
+    if (def.job.kind === 'news' || def.job.kind === 'contentHealth')
+      throw new AppError(409, 'run_as_fixed', `${def.title} always runs as the automation identity.`);
+    const identity = wanted === null ? null : identityFromKey(wanted);
+    if (
+      wanted !== null &&
+      (!identity || (identity !== 'automation' && !(this.deps.apps?.() ?? []).includes(appNameOf(identity)!)))
+    )
+      throw new AppError(400, 'unknown_identity', 'There is no such identity on this AdminForge.', {
+        hint: 'Choose the automation identity or an app identity listed in AF_SCHEDULE_IDENTITIES.',
+      });
+    const before = runAsOf(row, this.deps.defaults).identity;
+    const after = runAsOf({ ...row, runAs: wanted }, this.deps.defaults).identity;
+    // The application permissions it declares, per service (function connections aren't app roles).
+    const scopes = Object.fromEntries(
+      Object.entries(def.requires?.scopes ?? {}).filter(
+        (e): e is [string, string[]] => Array.isArray(e[1]) && e[1].length > 0,
+      ),
+    );
+    if (identityKey(after) !== identityKey(before) && Object.keys(scopes).length) {
+      const missing = await this.deps.permissionsMissing?.(after, scopes);
+      if (missing?.length)
+        throw new AppError(
+          409,
+          'identity_lacks_permissions',
+          `The ${identityLabel(after)} lacks permissions this schedule needs: ${missing.join(', ')}.`,
+          {
+            hint: 'Name the identity on the schedule in content, or make it the default for this kind of job, then run adminforge provision entra.',
+          },
+        );
+    }
+    const now = this.deps.now();
+    // Write-capable: approval covers the account; a new one needs approving again.
+    const disabled = isWriteCapable(def) && row.enabled;
+    await this.deps.store.updateSchedule(row.id, {
+      runAs: wanted,
+      runAsSetBy: wanted === null ? null : c.session.upn,
+      runAsSetAt: wanted === null ? null : now,
+      ...(disabled ? { enabled: false, nextRunAt: null, approvedBy: null } : {}),
+    });
+    await this.deps.audit.append({
+      ...this.actor(c),
+      action: 'schedule.run_as_changed',
+      targetType: 'schedule',
+      targetId: key,
+      result: 'success',
+      details: { from: identityKey(before), to: identityKey(after), override: wanted, disabled },
+    });
+    this.changed(key);
+    return { disabled };
+  }
+
   async setEnabled(
     c: Caller,
     key: string,
@@ -439,11 +376,13 @@ export class ScheduleService {
     if (row.enabled) return { statusCode: 200, body: { key, enabled: true } };
     if (isWriteCapable(def)) {
       const targetFingerprint = await this.targetFingerprint(def);
+      const runningAs = runAsOf(row, this.deps.defaults).identity;
       const existing = (await this.pendingApprovals()).find(
         (a) =>
           a.subjectId === key &&
           a.policy.sha256 === row.sha256 &&
-          a.policy.targetFingerprint === targetFingerprint,
+          a.policy.targetFingerprint === targetFingerprint &&
+          (a.policy.identity ?? 'automation') === identityKey(runningAs),
       );
       if (existing) return { statusCode: 202, body: { approvalId: existing.id } };
       const policy: ScheduleApprovalPolicy = {
@@ -452,11 +391,12 @@ export class ScheduleService {
         approvers: APPROVERS,
         minApprovals: 1,
         title: `Enable schedule: ${def.title}`,
-        message: `${c.session.upn} asks to enable "${def.title}", which runs a ${def.job.kind} job that changes data (${def.cron} ${def.timezone}) as ${def.identity === 'automation' ? 'the automation identity' : identityLabel(def.identity, def.owner)}. A second person must approve.`,
+        message: `${c.session.upn} asks to enable "${def.title}", which runs a ${def.job.kind} job that changes data (${def.cron} ${def.timezone}) as ${runningAs === 'automation' ? 'the automation identity' : identityLabel(runningAs, def.owner)}. A second person must approve.`,
         definitionKey: key,
         definitionVersion: def.version,
         sha256: row.sha256,
         ...(targetFingerprint ? { targetFingerprint } : {}),
+        identity: identityKey(runningAs),
         requestedByUpn: c.session.upn,
         initiatorOid: c.session.userOid,
         writesAfter: false,
@@ -818,6 +758,21 @@ export class ScheduleService {
         'definition_changed',
         'The playbook this schedule runs changed after this was requested, so this approval no longer applies.',
         { hint: 'Ask the requester to enable it again, so you approve the current version.' },
+      );
+    }
+    // The account it runs as is part of what was approved: a run-as change since voids the request.
+    if (
+      input.decision === 'approve' &&
+      row &&
+      a.policy.identity !== undefined &&
+      a.policy.identity !== identityKey(runAsOf(row, this.deps.defaults).identity)
+    ) {
+      await this.deps.store.updateApproval(a.id, { status: 'expired', decidedAt: now }, 'pending');
+      throw new AppError(
+        409,
+        'definition_changed',
+        'The account this schedule runs as changed after this was requested, so this approval no longer applies.',
+        { hint: 'Ask the requester to enable it again, so you approve the account it runs as now.' },
       );
     }
     const status: ApprovalStatus =

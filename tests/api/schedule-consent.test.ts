@@ -91,6 +91,7 @@ describe('schedule consent (ADR-014)', () => {
       label: 'avery@example.com (their own access)',
       signIn: 'not_signed_in',
       canSignIn: true,
+      source: 'definition',
     });
 
     const start = await startConsent(t, s, row.key);

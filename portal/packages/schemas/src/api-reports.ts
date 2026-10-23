@@ -57,6 +57,13 @@ export const ScheduleSummary = z.object({
       label: z.string(),
       signIn: z.enum(['signed_in', 'needs_sign_in', 'not_signed_in']).optional(),
       canSignIn: z.boolean().optional(),
+      /**
+       * Where the account comes from: set on this schedule in the portal (`override`, with who and when), named by its
+       * definition, the installation default for its kind, or none of them (the automation identity).
+       */
+      source: z.enum(['override', 'definition', 'default', 'automation']).optional(),
+      setBy: z.string().optional(),
+      setAt: z.string().optional(),
     })
     .optional(),
 });

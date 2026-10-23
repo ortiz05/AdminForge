@@ -180,8 +180,8 @@ session holding that role). Every non-GET `/api` call additionally needs the CSR
 
 ## Endpoint index
 
-**70 routes**: 2 health, 10 auth (`/auth/mock/state` exists only with `AUTH_MODE=mock`; `/auth/callback`,
-`/auth/arm/callback` and `/auth/schedule-consent` only with `AUTH_MODE=entra`), and 58 under `/api`. The SPA's public
+**71 routes**: 2 health, 10 auth (`/auth/mock/state` exists only with `AUTH_MODE=mock`; `/auth/callback`,
+`/auth/arm/callback` and `/auth/schedule-consent` only with `AUTH_MODE=entra`), and 59 under `/api`. The SPA's public
 pages `/signed-out` and `/sign-in-problem` are client routes served by the SPA fallback. `tests/api/api-doc-index.test.ts`
 builds the app in both modes and fails when this index misses or invents a route, or the counts drift.
 
@@ -229,6 +229,7 @@ builds the app in both modes and fails when this index misses or invents a route
 | `POST`   | `/api/schedules/preview`          | Portal.Reader          | [Schedules](#post-apischedulespreview)              |
 | `POST`   | `/api/schedules/scaffold`         | Portal.Reader          | [Schedules](#post-apischedulesscaffold)             |
 | `PATCH`  | `/api/schedules/:key`             | Portal.Operator        | [Schedules](#patch-apischeduleskey)                 |
+| `PUT`    | `/api/schedules/:key/run-as`      | Portal.Operator        | [Schedules](#put-apischeduleskeyrun-as)             |
 | `POST`   | `/api/schedules/:key/run`         | Portal.Operator        | [Schedules](#post-apischeduleskeyrun)               |
 | `GET`    | `/api/schedules/:key/runs`        | Portal.Reader          | [Schedules](#get-apischeduleskeyruns)               |
 | `GET`    | `/api/probes`                     | Portal.Reader          | [Probes](#get-apiprobes)                            |
@@ -929,6 +930,20 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
   person approves it in the inbox (an identical pending request is reused). Disabling also cancels pending requests
   and clears the approval. Audited `schedule.enabled` / `schedule.disabled` / `schedule.enable_requested`.
 - **Errors:** `schedule_not_found` 404, `schedule_inactive` 409 (status `draft`/`retired`), `forbidden` 403.
+
+#### `PUT /api/schedules/:key/run-as`
+
+- **Who:** `Portal.Operator`; content schedules (a portal schedule changes its account in the editor).
+- **Body:** `{identity: 'automation' | 'app:<name>' | null}` — the account it runs as over what its definition names;
+  `null` goes back to the definition or the installation default (`AF_SCHEDULE_DEFAULT_IDENTITY…`).
+- **Response:** 200, the schedule item; `runsAs.source` says where the account comes from (`override` with `setBy` and
+  `setAt`, `definition`, `default`, `automation`). A **write-capable** schedule that was on is turned off
+  (`disabled: true`): turning it on again asks a second person to approve the new account, and a pending approval for
+  the old one no longer applies. Audited `schedule.run_as_changed` (`from`, `to`).
+- **Errors:** `schedule_not_found` 404, `unknown_identity` 400 (not `automation` or a name in AF_SCHEDULE_IDENTITIES),
+  `run_as_in_editor` 409 (portal schedule), `run_as_fixed` 409 (news and content health always run as the automation
+  identity), `identity_lacks_permissions` 409 (the identity lacks application permissions the schedule declares; the
+  message names them), `forbidden` 403.
 
 #### `POST /api/schedules/:key/run`
 

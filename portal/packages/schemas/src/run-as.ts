@@ -22,6 +22,13 @@ const ALWAYS_AUTOMATION = new Set<string>(['news', 'contentHealth']);
 
 const asIdentity = (name: string): ScheduleIdentity => (name === 'automation' ? 'automation' : { app: name });
 
+/** The identity an `identityKey` string names (`automation`, `app:<name>`); null for anything else (`user` included). */
+export function identityFromKey(key: string | null | undefined): ScheduleIdentity | null {
+  if (key === 'automation') return 'automation';
+  const m = /^app:([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(key ?? '');
+  return m ? { app: m[1]! } : null;
+}
+
 /**
  * Which account a schedule runs as (docs/plans/2026-10-23-run-as-and-vault.md): its portal `override`, else the
  * identity its definition names, else the installation default for its kind — for read-only jobs only, so a deploy

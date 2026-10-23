@@ -22,7 +22,8 @@ All notable changes to AdminForge are recorded here. The format follows
   that never signed in are in the Inactive users report, which the note links.
 - **Exports follow the view:** `export.data` may be a `${ … }` template over params naming the path to export,
   rendered alike by the server and the browser, and the export takes its columns from the table bound to that path or
-  reading a static view of it (`exportTable`, schemas). The Users MFA view now exports the registrations it shows; the
+  reading a static view of it (`exportTable`, schemas). A template only chooses among the paths it quotes — a param
+  never builds one (`validate` refuses a template that names none). The Users MFA view now exports the registrations it shows; the
   member and inactivity views export every match (their tables list the first 10,000).
 - **`$withItemCount(rows, path, as, drop?)`**: how many items each row holds at a path, natively — the member count
   (`$count` per row cost ~15 µs a row) — dropping the counted list in the same pass when asked. The one-value helpers

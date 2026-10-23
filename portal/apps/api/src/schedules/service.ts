@@ -61,6 +61,7 @@ import {
   encodeRunCursor,
   isDeleted,
   runsAsView,
+  scheduleGroup,
   type Caller,
   type ReportAccess,
   type ScheduleApprovalView,
@@ -210,6 +211,8 @@ export class ScheduleService {
           ? { params: maskRedacted(job.params, report?.params) }
           : {}),
       },
+      group: scheduleGroup(def, report),
+      tags: def.tags ?? [],
       nextRunAt: iso(this.nextFor(row, now)),
       lastRunAt: iso(row.lastRunAt),
       lastStatus: row.lastStatus,

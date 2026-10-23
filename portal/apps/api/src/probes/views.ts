@@ -18,6 +18,8 @@ export interface ProbeItem {
   /** What to do when it warns or fails, and where to act (the probe's `remedy` and `link`). */
   remedy: string | null;
   link: { label: string; href: string } | null;
+  /** The probe's tags (what sweeps select it by, and Monitoring's tag filter). */
+  tags: string[];
   latest: {
     status: ProbeStatus;
     metric: number | null;
@@ -103,6 +105,7 @@ export class ProbeViews {
           summary: probe.summary ?? null,
           remedy: probe.remedy ?? null,
           link: probe.link ?? null,
+          tags: probe.tags ?? [],
           latest: l
             ? { status: l.status, metric: l.metric, unit: t.unit, ts: l.ts.toISOString(), message: l.message }
             : null,

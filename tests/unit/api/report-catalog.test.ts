@@ -180,6 +180,8 @@ describe('schedulesByReport', () => {
     cronText: 'Every Monday at 06:00',
     timezone: 'UTC',
     enabled: true,
+    group: null,
+    tags: [],
     identity: 'automation',
     runsAs: { kind: 'automation', name: null, label: 'automation identity' },
     job,

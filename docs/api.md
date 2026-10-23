@@ -779,8 +779,11 @@ Schedule), which live only in the database under the reserved `portal.` key name
   `{state: "ok" | "stale" | "missing", at}` — the scheduler's heartbeat from its ticks (`stale` after two minutes
   without progress) — present when the scheduler runs in this process. Each item is a `ScheduleItem`:
   `{key, title, summary, cron, cronText, timezone, enabled, identity, runsAs, job, nextRunAt, lastRunAt,`
-  `lastStatus, writeCapable, approvedBy?, source, createdBy, canManage, delivery?, notify?, pendingApprovalId}` with
-  `job` = `{kind, ref?, refs?, select?, params?}`.
+  `lastStatus, writeCapable, approvedBy?, source, createdBy, canManage, delivery?, notify?, pendingApprovalId, group,`
+  `tags}` with `job` = `{kind, ref?, refs?, select?, params?}`.
+  - `group`: the service it belongs to, for Monitoring's filters — a report's `area` (else its key's first segment), a
+    playbook's key prefix, a script's folder, `platform` for content health and news — or `null` for a probe sweep
+    (Monitoring puts a sweep in its probes' services); `tags`: the definition's tags.
   - `identity`: `"automation"`, `"app:<name>"` or `"user"`; `runsAs` = `{kind: "automation" | "app" | "user", name,`
     `label, signIn?, canSignIn?}` — `name` is the app identity or the creator's UPN; for `user`, `signIn` =
     `signed_in` | `needs_sign_in` (Microsoft asked for a new sign-in: runs are skipped, the owner was notified) |
@@ -977,15 +980,16 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
 #### `GET /api/probes`
 
 - **Who:** `Portal.Reader`.
-- **Response:** `{items, groups}`. Items: `{key, title, kind, group, summary, remedy, link, latest, series,
-thresholds}` — `group` is the service the probe watches (a navigation section key or `platform`) or `null`;
+- **Response:** `{items, groups}`. Items: `{key, title, kind, group, summary, remedy, link, tags, latest, series,
+thresholds}` — `group` is the service the probe watches (a navigation section key or `platform`) or `null`; `tags`
+  are the probe's tags (what sweeps select it by; Monitoring's tag filter);
   `summary` (what it checks), `remedy` (what to do when it warns or fails) and `link` (`{label, href}`: an in-app path
   or an https admin centre URL) come from the probe's definition, or `null`; `latest` is
   `{status, metric, unit, ts, message}` or `null`; `series` is `[{ts, metric, status}]` for the last 24 h;
   `thresholds` is `{warn, crit, unit, worse}`. Groups: `[{key, label, icon}]` for the groups the probes use, in
-  navigation order (labels from navigation.yaml; `platform` is "AdminForge"), for Synthetic monitoring's "by service"
+  navigation order (labels from navigation.yaml; `platform` is "AdminForge"), for Monitoring's "by service"
   view (`/monitoring?group=<key>` shows one). The navigation rail reads it too (Portal.Reader only, the same cache as
-  Synthetic monitoring) to show each section's check status.
+  Monitoring) to show each section's check status.
 
 #### `GET /api/probes/:key/results`
 

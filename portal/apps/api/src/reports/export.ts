@@ -4,6 +4,7 @@ import {
   STATUS_TONE_LABEL,
   columnMapEntry,
   columnMapLabel,
+  exportDataPaths,
   exportTable,
   getPath,
   isStatusTone,
@@ -119,7 +120,14 @@ export async function planExport(
     );
   const all = tables(page);
   const dataRef = spec.data ? await exportDataRef(spec.data, params) : (all[0]?.data as string | undefined);
-  if (!dataRef) throw new AppError(400, 'export_not_supported', `${page.key} has no table to export.`);
+  // A template may only choose among the paths it names (a param never builds one); its error names no path.
+  const templated = !!spec.data?.includes('${');
+  if (!dataRef || (templated && !exportDataPaths(spec.data!).includes(dataRef)))
+    throw new AppError(
+      400,
+      'export_not_supported',
+      templated ? `${page.key} names no export for these parameters.` : `${page.key} has no table to export.`,
+    );
   // The table's own path reader (`value[0].items` included), so the file holds what the table shows.
   const { root: datasource, rest } = splitDataRef(dataRef);
   const path = [...splitPath(rest)];
@@ -130,7 +138,8 @@ export async function planExport(
       'export_not_supported',
       `${page.key} exports unknown datasource "${datasource}".`,
     );
-  const table = exportTable(all, page.def.datasources, spec.data, dataRef) ?? all[0];
+  const table =
+    exportTable(all, page.def.datasources, spec.data, dataRef) ?? (templated ? undefined : all[0]);
   if (!table)
     throw new AppError(400, 'export_not_supported', `${page.key} has no table columns for ${dataRef}.`);
   let columns = table.columns;

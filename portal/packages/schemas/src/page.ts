@@ -1,3 +1,4 @@
+import { exportDataPaths } from './path';
 import { z } from 'zod';
 import { Identifier, NavPlacement, Template, envelopeShape } from './common';
 import { Datasources } from './datasource';
@@ -177,9 +178,7 @@ const pageShape = {
  * (`'registrations.value'`) — so a misspelt view fails `validate`, not the export.
  */
 function exportDataSources(data: string | undefined): string[] {
-  if (!data) return [];
-  if (!data.includes('${')) return [data.split(/[.[]/)[0]!];
-  return [...data.matchAll(/(['"])([A-Za-z_][A-Za-z0-9_]*)[.[][^'"]*\1/g)].map((m) => m[2]!);
+  return data ? exportDataPaths(data).map((p) => p.split(/[.[]/)[0]!) : [];
 }
 
 /** The query builder's raw value never reaches templates: not declared as a param, never referenced as one. */
@@ -291,6 +290,12 @@ function checkPage(
   need(def.filters?.search, ['filters', 'search']);
   def.filters?.facets?.forEach((f, i) => need(f, ['filters', 'facets', i]));
   checkAdvanced(def, ctx);
+  if (def.export?.data?.includes('${') && !exportDataPaths(def.export.data).length)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['export', 'data'],
+      message: "Name each path the export may read as quoted text in the template, e.g. 'users.value'.",
+    });
   for (const exportDs of exportDataSources(def.export?.data))
     if (!(exportDs in (def.datasources ?? {})))
       ctx.addIssue({

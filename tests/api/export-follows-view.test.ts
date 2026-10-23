@@ -38,7 +38,11 @@ export:
   columns: all
 `;
 
-const csvLines = (body: string) => body.replace(/^﻿/, '').trim().split('\r\n');
+const csvLines = (body: string) =>
+  body
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .split('\r\n');
 
 let env: ContentEnv;
 beforeAll(() => {
@@ -74,6 +78,34 @@ describe('an export follows the table the view shows', () => {
     const parsed = parseDefinition(bad, 'export-views.report.yaml');
     expect(parsed.ok).toBe(false);
     if (!parsed.ok) expect(JSON.stringify(parsed.errors)).toContain('Unknown datasource \\"missing\\"');
+  });
+
+  it('refuses a template that builds the path from a param instead of naming it', () => {
+    const built = REPORT.replace(
+      `"\${ params.view = 'small' ? 'small.rows' : 'groups.value' }"`,
+      `"\${ params.view & '.rows' }"`,
+    );
+    const parsed = parseDefinition(built, 'export-views.report.yaml');
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) expect(JSON.stringify(parsed.errors)).toContain('Name each path the export may read');
+  });
+
+  it('exports only a path the template names: a param that names another one is refused, without echoing it', async () => {
+    env.write(
+      'reports/identity/export-views.report.yaml',
+      REPORT.replace("'small.rows' : 'groups.value'", "'small.rows' : params.path").replace(
+        '  view: { type: enum, values: [all, small], default: all }\n',
+        '  view: { type: enum, values: [all, small], default: all }\n  path: { type: string, default: "" }\n',
+      ),
+    );
+    try {
+      const res = await exportWith({ path: 'groups.value' });
+      expect(res.statusCode).toBe(400);
+      expect(res.body).not.toContain('groups.value');
+      expect(JSON.parse(res.body).code ?? JSON.parse(res.body).error).toBeTruthy();
+    } finally {
+      env.write('reports/identity/export-views.report.yaml', REPORT);
+    }
   });
 
   it('accepts a plain path and a template naming declared datasources', () => {

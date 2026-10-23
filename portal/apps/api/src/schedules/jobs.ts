@@ -323,7 +323,10 @@ export function createJobRunner(deps: JobDeps): JobRunner {
     for (const format of formats) {
       const planFormat: ExportFormat =
         format === 'json' ? (spec.formats.includes('csv') ? 'csv' : spec.formats[0]!) : format;
-      const plan = await planExport(page, params, planFormat, { maxRows: deps.exportMaxRows });
+      // The params the browser's export route plans with: never the raw advanced filter (export.data may be a template).
+      const plan = await planExport(page, deps.datasources.publicParams(page, params), planFormat, {
+        maxRows: deps.exportMaxRows,
+      });
       const tracked = trackIncomplete(
         exportPages(
           deps.datasources,

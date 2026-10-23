@@ -35,14 +35,21 @@ describe('the table an export reads', () => {
   });
 
   it('is the table bound to a static view of the exported list (a capped table that exports every row)', () => {
+    const tpl =
+      "${ params.v = 'x' ? 'memberMatches.rows' : params.v = 'y' ? 'inactiveMatches.rows' : 'groups.value' }";
     // The view reads the list in its transform …
-    expect(exportTableId(blocks, datasources, '${ x }', 'memberMatches.rows')).toBe('groupList');
+    expect(exportTableId(blocks, datasources, tpl, 'memberMatches.rows')).toBe('groupList');
     // … or through its data.
     const withUsers = [
       ...blocks,
       { id: 'userList', widget: 'table', data: 'userList.rows' },
     ] as unknown as Block[];
-    expect(exportTableId(withUsers, datasources, '${ x }', 'inactiveMatches.rows')).toBe('userList');
+    expect(exportTableId(withUsers, datasources, tpl, 'inactiveMatches.rows')).toBe('userList');
+  });
+
+  it("is none for a path the template doesn't name, even one a table shows", () => {
+    const tpl = "${ params.v = 'x' ? 'memberMatches.rows' : params.path }";
+    expect(exportTableId(blocks, datasources, tpl, 'groups.value')).toBeUndefined();
   });
 
   it('is none while the template renders, or when it names no table', () => {

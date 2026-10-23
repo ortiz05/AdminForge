@@ -58,6 +58,20 @@ describe('feed library', () => {
         'feeds.powershell-modules',
         'feeds.sharepoint-blog',
         'feeds.teams-blog',
+        // Each vendor's own feeds (ADR-013 addendum, 2026-10-23).
+        'feeds.anthropic-status',
+        'feeds.avd-blog',
+        'feeds.claude-code-releases',
+        'feeds.digicert-status',
+        'feeds.hpe-newsroom',
+        'feeds.learn-avd-whats-new',
+        'feeds.m365-blog',
+        'feeds.microsoft-security-blog',
+        'feeds.n8n-blog',
+        'feeds.n8n-releases',
+        'feeds.openrouter-blog',
+        'feeds.vmware-cloud-foundation-blog',
+        'feeds.vmware-security-blog',
       ].sort(),
     );
   });
@@ -66,7 +80,7 @@ describe('feed library', () => {
     for (const { file, def } of feeds) expect(file).toBe(`feeds/${def.id.replace(/^feeds\./, '')}.feed.yaml`);
   });
 
-  it('fetches public feeds only from allow-listed hosts and cites Microsoft domains', () => {
+  it('fetches public feeds only from allow-listed hosts and cites only allowed domains', () => {
     for (const { def } of feeds) {
       expect(isCitationUrl(def.homepage), def.id).toBe(true);
       for (const url of publicUrls(def)) expect(isFeedUrl(url), `${def.id}: ${url}`).toBe(true);

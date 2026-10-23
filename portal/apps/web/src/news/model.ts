@@ -15,6 +15,8 @@ export const AREA_LABEL: Record<NewsArea, string> = {
   endpoint: 'Endpoint',
   security: 'Security',
   azure: 'Azure',
+  infrastructure: 'Infrastructure',
+  ai: 'AI and automation',
   platform: 'Platform',
 };
 export const AREAS = Object.keys(AREA_LABEL) as NewsArea[];

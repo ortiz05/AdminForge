@@ -1,0 +1,30 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.microsoft-security-blog
+version: 1.0.0
+title: Microsoft Security Blog
+summary: >-
+  Threat intelligence, security guidance and product news from Microsoft's own Security Blog — the context behind MSRC
+  advisories and Defender changes.
+owner: portal-admins
+tags: [news, security, public, blog]
+publisher: Microsoft
+homepage: https://www.microsoft.com/en-us/security/blog/
+collector:
+  kind: rss
+  url: https://www.microsoft.com/en-us/security/blog/feed/
+  lookbackDays: 90
+keep: all
+defaultAreas: [security]
+classify:
+  - match: { title: [vulnerability, CVE, exploit, exploited, zero-day, ransomware, campaign, threat actor] }
+    kind: security
+  # Areas set by a rule replace defaultAreas: name security too.
+  - match: { text: [Microsoft Entra, Entra ID] }
+    areas: [identity, security]
+    tags: [entra]
+  - match: { text: [Microsoft Defender, Defender for Endpoint, Microsoft Sentinel] }
+    tags: [defender]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 180
+retentionDays: 180

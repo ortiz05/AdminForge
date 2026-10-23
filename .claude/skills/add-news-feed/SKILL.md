@@ -1,6 +1,6 @@
 ---
 name: add-news-feed
-description: Use when asked to add, change or remove a source in News and changes (a Microsoft blog, roadmap, update or security feed, a Learn what's-new page, a PowerShell module's releases, Message Center or service health), or when news items land in the wrong area, show up when they shouldn't, or are missing.
+description: Use when asked to add, change or remove a source in News and changes (a Microsoft blog, roadmap, update or security feed, a Learn what's-new page, a PowerShell module's releases, Message Center or service health, or a vendor's own status page, blog or release feed — VMware, HPE, DigiCert, Anthropic, OpenRouter, n8n), or when news items land in the wrong area, show up when they shouldn't, or are missing.
 ---
 
 # Adding a News and changes feed
@@ -9,15 +9,16 @@ description: Use when asked to add, change or remove a source in News and change
 
 A feed is content: `portal/content/feeds/<name>.feed.yaml` (`kind: feed`, id `feeds.<name>`, schema
 `portal/packages/schemas/src/news.ts`). The hourly schedule `maintenance.news-refresh-hourly` collects every active feed;
-`/news` shows the items with a citation. **First-party sources only** — your tenant (Graph, Resource Graph) or
-Microsoft's own public feeds. Read `docs/news.md` first.
+`/news` shows the items with a citation. **First-party sources only** — your tenant (Graph, Resource Graph),
+Microsoft's own public feeds, or a vendor's own official feed (its status page, blog or the release feed of its own
+repository; ADR-013 addendum). Read `docs/news.md` first.
 
 ## When not to use
 
 - Your tenant's own state on a page (service health, Message Center as a list) → `adding-a-page-or-report`.
 - A check that should alert when something breaks → `adding-a-schedule-or-probe`.
-- A news site, aggregator, community blog or scraped HTML page — never: first-party RSS/Atom or Microsoft's documented
-  API only. A source on a host outside `NEWS_FEED_HOSTS` needs a security-reviewed code change first (step 3).
+- A news site, aggregator, community blog or scraped HTML page — never: the publisher's own RSS/Atom or Microsoft's
+  documented API only. A source on a host outside `NEWS_FEED_HOSTS` needs a security-reviewed code change first (step 3).
 - A new schedule for feeds — `maintenance.news-refresh-hourly` already collects every active feed.
 
 ## Steps
@@ -32,7 +33,9 @@ Microsoft's own public feeds. Read `docs/news.md` first.
    aggregator, scraper or unofficial mirror.
 3. **Host allow-list.** The URL's host must be in `NEWS_FEED_HOSTS` (`news.ts`). Adding a host is a **code change for
    security review** (SECURITY.md) — never a configuration or content workaround. Citation links must be on
-   `NEWS_LINK_DOMAINS`.
+   `NEWS_LINK_DOMAINS` (Microsoft, with sub-domains) or exactly on `NEWS_LINK_HOSTS` (vendors). On a host anyone can
+   publish on (GitHub), the exact feed path goes in `NEWS_FEED_PATHS` (also a reviewed code change: check the
+   repository is the vendor's own verified organisation) and the feed narrows `linkPrefixes` to its release pages.
 4. **Scaffold:** `pnpm adminforge new feed feeds/<name>` → a draft RSS feed + a fixture stub. Fill in `title`,
    `summary` (say plainly what the source is), `publisher` (who publishes it — a community project is not "Microsoft"),
    `homepage` (the human page), `collector`.
@@ -40,7 +43,8 @@ Microsoft's own public feeds. Read `docs/news.md` first.
    AdminForge manages (derive them from `portal/content`); narrow feeds use `keep: all` + `defaultAreas`. `services` /
    `categories` match exactly; `title` / `text` match whole words or phrases — add `exclude: true` rules for look-alikes
    (on-premises "Exchange Server", "Internet Key Exchange", "Graphics"). Set `kind`/`status` from the source's status
-   categories. Don't set severity high on public feeds unless the source says so — Breaking must stay meaningful.
+   categories. A `kind: incident` stays in Breaking for 14 days unless its `status` is `resolved`: on a status page,
+   add a rule that reads the final update into `status: resolved` (`feeds.anthropic-status`). Don't set severity high on public feeds unless the source says so — Breaking must stay meaningful.
 6. **Politeness:** `pollMinutes` 60 for small or conditional (ETag) feeds, 180–360 for large feeds without conditional
    requests, 1440 for page-updated signals. Keep `excerptChars` ≤ 300 (headline + short excerpt + link, never the
    article).

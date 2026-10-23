@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>VMware Security Blog</title><link>https://blogs.vmware.com/security/</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: stopping an RCE with VMware vDefend</title><link>https://blogs.vmware.com/security/2026/10/20/example-rce/</link><guid>https://blogs.vmware.com/security/2026/10/20/example-rce/</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>Synthetic threat research for Example Org.</description></item></channel></rss>"
+  }
+}

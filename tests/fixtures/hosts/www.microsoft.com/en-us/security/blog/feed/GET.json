@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=UTF-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>Microsoft Security Blog</title><link>https://www.microsoft.com/en-us/security/blog/</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: a phishing campaign exploited a zero-day</title><link>https://www.microsoft.com/en-us/security/blog/2026/10/20/example-campaign/</link><guid>https://www.microsoft.com/en-us/security/blog/2026/10/20/example-campaign/</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>Synthetic threat intelligence mentioning Microsoft Defender.</description></item></channel></rss>"
+  }
+}

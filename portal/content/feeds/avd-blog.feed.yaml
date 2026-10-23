@@ -1,0 +1,32 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.avd-blog
+version: 1.0.0
+title: Azure Virtual Desktop Blog
+summary: >-
+  Announcements, previews and retirements from the Azure Virtual Desktop team, posted on Microsoft Tech Community.
+owner: portal-admins
+tags: [news, azure, public, blog, avd]
+publisher: Microsoft Tech Community
+homepage: https://techcommunity.microsoft.com/t5/azure-virtual-desktop-blog/bg-p/AzureVirtualDesktopBlog
+collector:
+  kind: rss
+  url: https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=AzureVirtualDesktopBlog
+  lookbackDays: 90
+keep: all
+defaultAreas: [azure]
+classify:
+  - match: { title: [retirement, retiring, retire, deprecation, deprecated, end of support] }
+    kind: retirement
+    tags: [avd]
+  - match: { title: [preview, public preview] }
+    kind: preview
+    tags: [avd]
+  - match: { title: [generally available, GA, now available] }
+    kind: feature
+    tags: [avd]
+  - match: { text: [Azure Virtual Desktop, AVD, Windows 365] }
+    tags: [avd]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 180
+retentionDays: 180

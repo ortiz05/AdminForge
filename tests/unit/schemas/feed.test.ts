@@ -49,7 +49,7 @@ describe('feed URLs', () => {
     expect(messages(parse({ collector: rss('https://example.com/rss') }))[0]).toMatch(/allowed feed host/);
   });
 
-  it('cites only https links on Microsoft domains', () => {
+  it('cites only https links on allowed domains', () => {
     for (const ok of [
       'https://admin.cloud.microsoft/?ref=MessageCenter/:/messages/MC000001',
       'https://app.azure.com/h/EXAMPLE-123/abc123',
@@ -66,7 +66,7 @@ describe('feed URLs', () => {
       'https://aka.ms/x',
     ])
       expect(isCitationUrl(bad), bad).toBe(false);
-    expect(messages(parse({ homepage: 'https://example.com/' }))[0]).toMatch(/Microsoft domain/);
+    expect(messages(parse({ homepage: 'https://example.com/' }))[0]).toMatch(/allowed citation domain/);
   });
 });
 

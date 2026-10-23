@@ -1,0 +1,32 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.anthropic-status
+version: 1.0.0
+title: Claude status (Anthropic)
+summary: >-
+  Incidents and maintenance on Anthropic's status page for Claude — the API, the Claude apps, Claude Code and the
+  developer platform — from its own RSS feed. Tells engineers when an AI workflow is failing because of the provider.
+owner: portal-admins
+tags: [news, ai, public, status]
+publisher: Anthropic
+homepage: https://status.claude.com
+collector:
+  kind: rss
+  # Statuspage's history feed: one item per incident, updated as it progresses (status.anthropic.com redirects here).
+  url: https://status.claude.com/history.rss
+  lookbackDays: 30
+keep: all
+defaultAreas: [ai]
+classify:
+  # Statuspage puts the newest update first ("Resolved - …", "Completed - …"): an incident or a maintenance whose latest
+  # word is that is over, so it doesn't stay in Breaking (breaking.ts counts unresolved incidents for 14 days).
+  - match: { text: [Resolved -, Completed -, Postmortem -] }
+    status: resolved
+  - match: { title: [maintenance, scheduled] }
+    kind: maintenance
+    tags: [anthropic, claude]
+  - match: { title: [Claude, claude.ai, platform.claude.com, API, Claude Code, Connectors] }
+    kind: incident
+    tags: [anthropic, claude]
+pollMinutes: 60
+retentionDays: 90

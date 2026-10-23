@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/xml"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>HPE Newsroom</title><link>https://www.hpe.com/us/en/newsroom.html</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: new HPE ProLiant servers with iLO updates</title><link>https://www.hpe.com/us/en/newsroom/press-release/2026/10/example-proliant.html</link><guid>https://www.hpe.com/us/en/newsroom/press-release/2026/10/example-proliant.html</guid><pubDate>Tue, 20 Oct 2026 09:00:00 GMT</pubDate><description>Synthetic ProLiant and iLO announcement.</description></item><item><title>Example: HPE sponsors a sports arena</title><link>https://www.hpe.com/us/en/newsroom/press-release/2026/10/example-arena.html</link><guid>https://www.hpe.com/us/en/newsroom/press-release/2026/10/example-arena.html</guid><pubDate>Mon, 19 Oct 2026 09:00:00 GMT</pubDate><description>Synthetic corporate news the rules drop.</description></item></channel></rss>"
+  }
+}

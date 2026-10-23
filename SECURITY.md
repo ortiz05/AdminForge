@@ -469,7 +469,9 @@ the reason.
   hosts, with a time limit, a size cap and an identifying User-Agent that never names the portal. XML that declares a
   DOCTYPE or entities is refused. Source text is reduced to plain text by a linear scanner (at most 64 KiB per field,
   so hostile markup can't stall the scheduler) and rendered as text (never HTML). Citation links are kept only when
-  they are https on a Microsoft domain (`NEWS_LINK_DOMAINS`), short, free of control characters and — for public feeds
+  they are https on an allowed domain (`NEWS_LINK_DOMAINS`: Microsoft's, with sub-domains) or a vendor's exact feed
+  host (`NEWS_LINK_HOSTS`, ADR-013 addendum: VMware by Broadcom, HPE, DigiCert, Anthropic, OpenRouter, n8n, GitHub —
+  where only the paths in `NEWS_FEED_PATHS`, two vendors' release feeds, may be fetched at all), short, free of control characters and — for public feeds
   — on the feed's own or its homepage's host; otherwise the feed's homepage is cited. "Microsoft host" doesn't mean
   "Microsoft-authored": Tech Community and the PowerShell Gallery carry others' posts and packages, so every item names
   its publisher. Only a headline, a short excerpt and a few facts are stored. Tenant feeds read Message Center and

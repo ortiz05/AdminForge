@@ -28,6 +28,8 @@ export interface ScheduleRow {
   runAs: string | null;
   runAsSetBy: string | null;
   runAsSetAt: Date | null;
+  /** The account (identityKey) the two-person approval covered; null = approved before accounts were recorded. */
+  approvedIdentity: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +68,7 @@ export type SchedulePatch = Partial<
     | 'runAs'
     | 'runAsSetBy'
     | 'runAsSetAt'
+    | 'approvedIdentity'
   >
 >;
 

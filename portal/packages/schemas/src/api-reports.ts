@@ -64,6 +64,8 @@ export const ScheduleSummary = z.object({
       source: z.enum(['override', 'definition', 'default', 'automation']).optional(),
       setBy: z.string().optional(),
       setAt: z.string().optional(),
+      /** With an override: the account "Default" would mean (its definition's or the installation default). */
+      defaultLabel: z.string().optional(),
     })
     .optional(),
 });

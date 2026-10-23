@@ -26,8 +26,9 @@ chosen in `ScheduleIdentities.prepare` (`portal/apps/api/src/schedules/grants.ts
 1. **Effective identity** of a schedule, first that applies:
    1. its **override** (set in the portal; content schedules only — portal schedules change theirs in the editor);
    2. the identity its **definition** names (`identity:`);
-   3. the installation **default for its kind**, for read-only jobs only (`AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS`,
-      `…_PROBES`, else `AF_SCHEDULE_DEFAULT_IDENTITY`);
+   3. the installation **default for its kind**, for read-only jobs that aren't probe sweeps
+      (`AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS`, else `AF_SCHEDULE_DEFAULT_IDENTITY`; the security review found that
+      sweeps of synthetic transactions change test objects, so `…_PROBES` was dropped);
    4. the **automation identity**.
 
    News and content-health jobs always run as the automation identity (as today). A write-capable job (`isWriteCapable`)
@@ -47,8 +48,8 @@ chosen in `ScheduleIdentities.prepare` (`portal/apps/api/src/schedules/grants.ts
 
 ### Tasks
 
-1. **Config** (`adding-a-configuration-key`): `AF_SCHEDULE_DEFAULT_IDENTITY`, `AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS`,
-   `AF_SCHEDULE_DEFAULT_IDENTITY_PROBES` in `config/example.env` (Named app identities section), the API config schema
+1. **Config** (`adding-a-configuration-key`): `AF_SCHEDULE_DEFAULT_IDENTITY`, `AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS`
+   in `config/example.env` (Named app identities section), the API config schema
    (a name in `AF_SCHEDULE_IDENTITIES` or `automation`; problems name keys only), `adminforge env check`.
 2. **Resolver** (`portal/packages/schemas/src/schedule.ts`, shared by API and CLI): `effectiveIdentity(def,
    { override, defaults })` → `{ identity, source: 'override' | 'definition' | 'default' | 'automation' }`, with the rules

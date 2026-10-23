@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "06239950-48d1-4d81-821d-e47a26563cda",
+  "id": "f4b37515-be85-44c1-8447-e7d039c4b8b5",
   "prevId": "f2b161f6-4b43-4d2d-9ea9-c2a51e321dac",
   "tables": {
     "approvals": {
@@ -90,17 +90,12 @@
       "indexes": {
         "approvals_subject_idx": {
           "name": "approvals_subject_idx",
-          "columns": [
-            "subject_type",
-            "subject_id"
-          ],
+          "columns": ["subject_type", "subject_id"],
           "isUnique": false
         },
         "approvals_status_idx": {
           "name": "approvals_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         }
       },
@@ -230,30 +225,22 @@
       "indexes": {
         "audit_actor_idx": {
           "name": "audit_actor_idx",
-          "columns": [
-            "actor_oid"
-          ],
+          "columns": ["actor_oid"],
           "isUnique": false
         },
         "audit_action_idx": {
           "name": "audit_action_idx",
-          "columns": [
-            "action"
-          ],
+          "columns": ["action"],
           "isUnique": false
         },
         "audit_ts_idx": {
           "name": "audit_ts_idx",
-          "columns": [
-            "ts"
-          ],
+          "columns": ["ts"],
           "isUnique": false
         },
         "audit_correlation_idx": {
           "name": "audit_correlation_idx",
-          "columns": [
-            "correlation_id"
-          ],
+          "columns": ["correlation_id"],
           "isUnique": false
         }
       },
@@ -361,20 +348,12 @@
       "indexes": {
         "definitions_lookup_idx": {
           "name": "definitions_lookup_idx",
-          "columns": [
-            "kind",
-            "key",
-            "status"
-          ],
+          "columns": ["kind", "key", "status"],
           "isUnique": false
         },
         "definitions_kind_key_version": {
           "name": "definitions_kind_key_version",
-          "columns": [
-            "kind",
-            "key",
-            "version"
-          ],
+          "columns": ["kind", "key", "version"],
           "isUnique": true
         }
       },
@@ -689,33 +668,22 @@
       "indexes": {
         "news_items_activity_idx": {
           "name": "news_items_activity_idx",
-          "columns": [
-            "activity_at",
-            "id"
-          ],
+          "columns": ["activity_at", "id"],
           "isUnique": false
         },
         "news_items_feed_idx": {
           "name": "news_items_feed_idx",
-          "columns": [
-            "feed_key",
-            "activity_at"
-          ],
+          "columns": ["feed_key", "activity_at"],
           "isUnique": false
         },
         "news_items_changed_idx": {
           "name": "news_items_changed_idx",
-          "columns": [
-            "changed_at"
-          ],
+          "columns": ["changed_at"],
           "isUnique": false
         },
         "news_items_feed_external_uq": {
           "name": "news_items_feed_external_uq",
-          "columns": [
-            "feed_key",
-            "external_id"
-          ],
+          "columns": ["feed_key", "external_id"],
           "isUnique": true
         }
       },
@@ -808,16 +776,12 @@
       "indexes": {
         "preauth_expires_idx": {
           "name": "preauth_expires_idx",
-          "columns": [
-            "expires_at"
-          ],
+          "columns": ["expires_at"],
           "isUnique": false
         },
         "preauth_address_idx": {
           "name": "preauth_address_idx",
-          "columns": [
-            "address_hash"
-          ],
+          "columns": ["address_hash"],
           "isUnique": false
         }
       },
@@ -896,17 +860,12 @@
       "indexes": {
         "probe_results_probe_ts_idx": {
           "name": "probe_results_probe_ts_idx",
-          "columns": [
-            "probe_key",
-            "ts"
-          ],
+          "columns": ["probe_key", "ts"],
           "isUnique": false
         },
         "probe_results_schedule_run_idx": {
           "name": "probe_results_schedule_run_idx",
-          "columns": [
-            "schedule_run_id"
-          ],
+          "columns": ["schedule_run_id"],
           "isUnique": false
         }
       },
@@ -915,12 +874,8 @@
           "name": "probe_results_schedule_run_id_schedule_runs_id_fk",
           "tableFrom": "probe_results",
           "tableTo": "schedule_runs",
-          "columnsFrom": [
-            "schedule_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schedule_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1005,18 +960,12 @@
       "indexes": {
         "run_jobs_due_idx": {
           "name": "run_jobs_due_idx",
-          "columns": [
-            "state",
-            "start_after"
-          ],
+          "columns": ["state", "start_after"],
           "isUnique": false
         },
         "run_jobs_run_state_uq": {
           "name": "run_jobs_run_state_uq",
-          "columns": [
-            "run_id",
-            "state"
-          ],
+          "columns": ["run_id", "state"],
           "isUnique": true
         }
       },
@@ -1086,10 +1035,7 @@
       "indexes": {
         "run_step_events_run_idx": {
           "name": "run_step_events_run_idx",
-          "columns": [
-            "run_id",
-            "id"
-          ],
+          "columns": ["run_id", "id"],
           "isUnique": false
         }
       },
@@ -1098,12 +1044,8 @@
           "name": "run_step_events_run_id_runs_id_fk",
           "tableFrom": "run_step_events",
           "tableTo": "runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1235,22 +1177,15 @@
           "name": "run_steps_run_id_runs_id_fk",
           "tableFrom": "run_steps",
           "tableTo": "runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "run_steps_run_id_seq_pk": {
-          "columns": [
-            "run_id",
-            "seq"
-          ],
+          "columns": ["run_id", "seq"],
           "name": "run_steps_run_id_seq_pk"
         }
       },
@@ -1434,45 +1369,32 @@
       "indexes": {
         "runs_initiator_idx": {
           "name": "runs_initiator_idx",
-          "columns": [
-            "initiator_oid",
-            "created_at"
-          ],
+          "columns": ["initiator_oid", "created_at"],
           "isUnique": false
         },
         "runs_status_idx": {
           "name": "runs_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         },
         "runs_definition_idx": {
           "name": "runs_definition_idx",
-          "columns": [
-            "definition_key"
-          ],
+          "columns": ["definition_key"],
           "isUnique": false
         },
         "runs_parent_idx": {
           "name": "runs_parent_idx",
-          "columns": [
-            "parent_run_id"
-          ],
+          "columns": ["parent_run_id"],
           "isUnique": false
         },
         "runs_created_idx": {
           "name": "runs_created_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         },
         "runs_schedule_idx": {
           "name": "runs_schedule_idx",
-          "columns": [
-            "schedule_id"
-          ],
+          "columns": ["schedule_id"],
           "isUnique": false
         }
       },
@@ -1481,12 +1403,8 @@
           "name": "runs_schedule_id_schedules_id_fk",
           "tableFrom": "runs",
           "tableTo": "schedules",
-          "columnsFrom": [
-            "schedule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schedule_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1494,12 +1412,8 @@
           "name": "runs_parent_run_id_runs_id_fk",
           "tableFrom": "runs",
           "tableTo": "runs",
-          "columnsFrom": [
-            "parent_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1577,10 +1491,7 @@
       "indexes": {
         "saved_views_page_idx": {
           "name": "saved_views_page_idx",
-          "columns": [
-            "page_key",
-            "user_oid"
-          ],
+          "columns": ["page_key", "user_oid"],
           "isUnique": false
         }
       },
@@ -1655,12 +1566,8 @@
           "name": "schedule_grants_schedule_id_schedules_id_fk",
           "tableFrom": "schedule_grants",
           "tableTo": "schedules",
-          "columnsFrom": [
-            "schedule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schedule_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1758,17 +1665,12 @@
       "indexes": {
         "schedule_runs_schedule_idx": {
           "name": "schedule_runs_schedule_idx",
-          "columns": [
-            "schedule_id",
-            "started_at"
-          ],
+          "columns": ["schedule_id", "started_at"],
           "isUnique": false
         },
         "schedule_runs_run_idx": {
           "name": "schedule_runs_run_idx",
-          "columns": [
-            "run_id"
-          ],
+          "columns": ["run_id"],
           "isUnique": false
         }
       },
@@ -1777,12 +1679,8 @@
           "name": "schedule_runs_schedule_id_schedules_id_fk",
           "tableFrom": "schedule_runs",
           "tableTo": "schedules",
-          "columnsFrom": [
-            "schedule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schedule_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1790,12 +1688,8 @@
           "name": "schedule_runs_run_id_runs_id_fk",
           "tableFrom": "schedule_runs",
           "tableTo": "runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1918,6 +1812,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "approved_identity": {
+          "name": "approved_identity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -1936,9 +1837,7 @@
       "indexes": {
         "schedules_key_unique": {
           "name": "schedules_key_unique",
-          "columns": [
-            "key"
-          ],
+          "columns": ["key"],
           "isUnique": true
         }
       },
@@ -2101,16 +2000,12 @@
       "indexes": {
         "sessions_user_idx": {
           "name": "sessions_user_idx",
-          "columns": [
-            "user_oid"
-          ],
+          "columns": ["user_oid"],
           "isUnique": false
         },
         "sessions_expires_idx": {
           "name": "sessions_expires_idx",
-          "columns": [
-            "expires_at"
-          ],
+          "columns": ["expires_at"],
           "isUnique": false
         }
       },
@@ -2207,9 +2102,7 @@
       "indexes": {
         "signals_created_idx": {
           "name": "signals_created_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         }
       },

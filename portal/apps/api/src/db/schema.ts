@@ -385,6 +385,8 @@ export const schedules = sqliteTable(
     runAs: text('run_as'),
     runAsSetBy: text('run_as_set_by'),
     runAsSetAt: ts('run_as_set_at'),
+    /** The account (identityKey) the two-person approval covered; a write-capable schedule runs only as that one. */
+    approvedIdentity: text('approved_identity'),
     createdAt: ts('created_at').notNull().$defaultFn(now),
     updatedAt: ts('updated_at').notNull().$defaultFn(now),
   },

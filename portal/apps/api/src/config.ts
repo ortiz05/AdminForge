@@ -180,11 +180,10 @@ const Schema = z
     AF_SCHEDULE_IDENTITIES: z.string().optional(),
     /**
      * The account read-only schedules run as when they name none (docs/plans/2026-10-23-run-as-and-vault.md):
-     * `automation` or a name in AF_SCHEDULE_IDENTITIES; the _REPORTS and _PROBES keys win for those jobs.
+     * `automation` or a name in AF_SCHEDULE_IDENTITIES; _REPORTS wins for report jobs; probe sweeps take none.
      */
     AF_SCHEDULE_DEFAULT_IDENTITY: z.string().optional(),
     AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS: z.string().optional(),
-    AF_SCHEDULE_DEFAULT_IDENTITY_PROBES: z.string().optional(),
     AF_AUTOMATION_CLIENT_ID: z.guid().optional(),
     AF_AUTOMATION_CLIENT_SECRET: z.string().optional(),
     /** PEM with certificate + private key; preferred over the secret. */
@@ -456,11 +455,10 @@ export type Config = z.infer<typeof Schema> & {
 const DEFAULT_IDENTITY_KEYS = {
   all: 'AF_SCHEDULE_DEFAULT_IDENTITY',
   reports: 'AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS',
-  probes: 'AF_SCHEDULE_DEFAULT_IDENTITY_PROBES',
 } as const;
 
 /**
- * The default accounts from AF_SCHEDULE_DEFAULT_IDENTITY(_REPORTS|_PROBES): each `automation` or a configured app
+ * The default accounts from AF_SCHEDULE_DEFAULT_IDENTITY(_REPORTS): each `automation` or a configured app
  * identity. Problems name keys only.
  */
 export function scheduleDefaults(

@@ -799,10 +799,11 @@ whose read access any Operator may use for a report.
 ### Choosing the account schedules run as
 
 Each read-only schedule that names no identity runs as the installation default for its kind, else the automation
-identity: set `AF_SCHEDULE_DEFAULT_IDENTITY` (all read-only jobs), `AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS` or
-`AF_SCHEDULE_DEFAULT_IDENTITY_PROBES` to `automation` or a name in `AF_SCHEDULE_IDENTITIES`, then run
-`pnpm adminforge provision entra` so that identity holds the permissions of the schedules it now runs (and of the
-probes those sweeps run). Write-capable schedules never take a default.
+identity: set `AF_SCHEDULE_DEFAULT_IDENTITY` (all read-only jobs) or `AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS` (reports)
+to `automation` or a name in `AF_SCHEDULE_IDENTITIES`, then run `pnpm adminforge provision entra` so that identity
+holds the permissions of the schedules it now runs. Write-capable schedules never take a default, nor do probe sweeps
+(some run synthetic transactions); a sweep's account is set in content or on its page, and provisioning credits a
+sweep's probes to it.
 
 An Operator can also choose one content schedule's account on its page (**Run as**; a portal schedule changes it in its
 editor): the identity must already hold the permissions the schedule declares — AdminForge checks and names what is

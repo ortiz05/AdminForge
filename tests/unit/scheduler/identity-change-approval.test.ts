@@ -30,6 +30,7 @@ function row(def: Schedule): ScheduleRow {
     runAs: null,
     runAsSetBy: null,
     runAsSetAt: null,
+    approvedIdentity: 'automation',
     approvedBy: 'blake@example.com',
     approvedTarget: 'fingerprint-1',
     nextRunAt: NOW,
@@ -54,6 +55,7 @@ describe('changing a write schedule’s identity', () => {
       enabled: false,
       approvedBy: null,
       approvedTarget: null,
+      approvedIdentity: null,
       definition: { identity: { app: 'identity-ops' } },
     });
   });

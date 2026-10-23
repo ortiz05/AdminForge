@@ -9,12 +9,15 @@ All notable changes to AdminForge are recorded here. The format follows
 ### Run-as accounts (2026-10-23)
 
 - **Choose the account schedules run as** (`docs/plans/2026-10-23-run-as-and-vault.md`). Read-only schedules that name
-  no identity run as the installation default for their kind — `AF_SCHEDULE_DEFAULT_IDENTITY`, `…_REPORTS`,
-  `…_PROBES`: the automation identity or a named app identity — and an Operator can choose another for a content
+  no identity run as the installation default for their kind — `AF_SCHEDULE_DEFAULT_IDENTITY`, `…_REPORTS`: the
+  automation identity or a named app identity; probe sweeps take none — and an Operator can choose another for a content
   schedule on its page (**Run as**, `PUT /api/schedules/:key/run-as`), audited `schedule.run_as_changed`. The identity
   must already hold the permissions the schedule declares (checked live; the refusal names them). A write-capable
-  schedule never takes a default; changing its account turns it off, and the enable approval records the account, so
-  an approval for another one no longer applies.
+  schedule never takes a default; changing its account turns it off and cancels a pending request, the approval
+  records the account, and the scheduler runs it only as the account it was approved for (`approved_identity`), so an
+  approval can't be stretched to another account. A sweep that runs synthetic transactions keeps the account its
+  content names. The permission check reads Entra with the automation identity on the Operator's request
+  (rate-limited, 10 a minute).
 - Provisioning, `validate --scopes` and content health credit a schedule's permissions to the account it runs as, and
   a probe's to the account of each schedule that runs it (a sweep running as an app identity used to need the probes'
   permissions on the automation identity).

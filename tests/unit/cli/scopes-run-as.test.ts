@@ -37,7 +37,12 @@ describe('declared permissions by run-as account', () => {
       loaded(
         probe('probes.lonely', { tags: ['nobody'], requires: { scopes: { graph: ['Group.Read.All'] } } }),
       ),
-      loaded(schedule('sweep.a', { job: { kind: 'probe', select: { tags: ['sweep-15m'] } } })),
+      loaded(
+        schedule('sweep.a', {
+          job: { kind: 'probe', select: { tags: ['sweep-15m'] } },
+          identity: { app: 'reports-team' },
+        }),
+      ),
       loaded(
         schedule('sweep.b', { job: { kind: 'probe', ref: 'probes.sites' }, identity: { app: 'ops-team' } }),
       ),

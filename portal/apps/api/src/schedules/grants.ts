@@ -181,6 +181,11 @@ export class ScheduleIdentities {
    * still hold `requiredRoles`; throws NeedsSignIn when the grant can't be used, `creator_access_removed` (and drops the
    * grant) when the creator lost access.
    */
+  /** The account `s` runs as now (override, definition, installation default; run-as.ts). */
+  runAs(s: ScheduleRow) {
+    return runAsOf(s, this.o.defaults).identity;
+  }
+
   async prepare(s: ScheduleRow, requiredRoles: readonly string[]): Promise<PreparedIdentity> {
     const def = s.definition;
     // The account it runs as now: an Operator's override, the definition, the installation default (run-as.ts).

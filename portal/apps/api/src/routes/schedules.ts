@@ -100,13 +100,18 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
     return svc.get(key(request.params.key), session);
   });
 
-  api.put<{ Params: { key: string } }>('/schedules/:key/run-as', async (request) => {
-    const body = parseBody(RunAsBody, request.body);
-    const caller = callerOf(request);
-    const k = key(request.params.key);
-    const { disabled } = await svc.setRunAs(caller, k, body.identity);
-    return { ...(await svc.get(k, caller.session)), ...(disabled ? { disabled: true } : {}) };
-  });
+  // Each change checks the account's permissions live with the automation identity (a Graph read): rate-limited.
+  api.put<{ Params: { key: string } }>(
+    '/schedules/:key/run-as',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request) => {
+      const body = parseBody(RunAsBody, request.body);
+      const caller = callerOf(request);
+      const k = key(request.params.key);
+      const { disabled } = await svc.setRunAs(caller, k, body.identity);
+      return { ...(await svc.get(k, caller.session)), ...(disabled ? { disabled: true } : {}) };
+    },
+  );
 
   api.put<{ Params: { key: string } }>('/schedules/:key', async (request) =>
     schedules.portal.update(callerOf(request), key(request.params.key), request.body),

@@ -60,7 +60,7 @@ describe('identity.users inactivity views at 50,000 accounts', () => {
       enabled: 'Enabled',
       licensed: 'Licensed',
       source: 'Cloud',
-      department: 'sal',
+      department: 'Sales',
       created: 'Any',
       q: 'person1',
     });

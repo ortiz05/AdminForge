@@ -20,6 +20,18 @@ params:
   q: { type: string, default: "", label: Search, placeholder: Name or sign-in name }
   userType: { type: enum, values: [All, Member, Guest], default: All, label: Type, facet: true }
   enabled: { type: enum, values: [Any, Enabled, Disabled], default: Any, label: Sign-in, facet: true }
+  activity:
+    type: enum
+    label: Last sign-in
+    facet: true
+    default: Any
+    description: >-
+      Last successful sign-in (Entra ID P1). Accounts with no recorded sign-in aren't listed here — the Inactive users
+      report includes them.
+    values:
+      - { value: Any, label: Any time }
+      - { value: Inactive90, label: Over 90 days ago }
+      - { value: Inactive365, label: Over a year ago }
   licensed: { type: enum, values: [Any, Licensed, Unlicensed], default: Any, label: Licences, facet: true }
   source:
     type: enum
@@ -57,22 +69,9 @@ params:
     values:
       - { value: Any, label: Any time }
       - { value: Last30Days, label: In the last 30 days }
-  activity:
-    type: enum
-    label: Last sign-in
-    facet: true
-    default: Any
-    description: >-
-      Last successful sign-in (Entra ID P1). Accounts with no recorded sign-in aren't listed here — the Inactive users
-      report includes them.
-    values:
-      - { value: Any, label: Any time }
-      - { value: Inactive90, label: Over 90 days ago }
-      - { value: Inactive365, label: Over a year ago }
-
 filters:
   search: q
-  facets: [userType, enabled, licensed, source, mfa, department, invitation, created, activity]
+  facets: [userType, enabled, activity, licensed, source, mfa, department, invitation, created]
   advanced:
     dialect: odata
     param: adv
@@ -104,7 +103,7 @@ savedViews:
     - name: New in the last 30 days
       params: { created: Last30Days }
       columns: [displayName, userType, department, sourceLabel, createdDateTime]
-    - { name: Members inactive 90 days, params: { userType: Member, enabled: Enabled, activity: Inactive90 } }
+    - { name: No sign-in for 90 days (members), params: { userType: Member, enabled: Enabled, activity: Inactive90 } }
     - { name: No sign-in for a year, params: { activity: Inactive365 } }
 
 datasources:
@@ -162,7 +161,8 @@ datasources:
         $top: 120
     paging: all
     maxItems: 50000
-    cache: { ttl: 3600 }
+    # Five minutes, not the hour the report keeps: this table offers Block and Allow sign-in.
+    cache: { ttl: 300 }
   # Every account of an inactivity view, with the page's facets applied natively and the labels the Graph list adds, by
   # partition: no JSONata per account. The export reads this; the table reads the capped view below.
   inactiveMatches:
@@ -187,7 +187,7 @@ datasources:
           $p.licensed = 'Unlicensed' ? $unlicensed,
           $p.source = 'Synced' ? $synced,
           $p.source = 'Cloud' ? $cloud,
-          $p.department ? $c('department', 'string', 'containsAny', [$substring($p.department, 0, 256)]),
+          $p.department ? $c('department', 'string', 'eq', $p.department),
           $p.invitation = 'Pending' ? $c('externalUserState', 'string', 'eq', 'PendingAcceptance'),
           $p.created = 'Last30Days' ? $c('createdDateTime', 'date', 'ge', $daysAgo(30))
         ]);
@@ -210,7 +210,8 @@ datasources:
           "partial": ds.inactive.truncated = true
         }
       ) }
-  # What the browser gets in an inactivity view: the first 10,000 accounts (the export has every one).
+  # What the browser gets in an inactivity view: the first 10,000 accounts, longest without a sign-in first (the
+  # export has every one).
   userList:
     source: static
     when: ${ params.activity in ['Inactive90', 'Inactive365'] and $not(params.mfa in ['Registered', 'NotRegistered']) }
@@ -218,7 +219,7 @@ datasources:
     transform: >-
       ${ (
         $m := ds.inactiveMatches;
-        { "rows": $take($m.rows, 10000), "matched": $count($m.rows), "listCapped": $count($m.rows) > 10000, "partial": $m.partial }
+        { "rows": $take($m.rows^(signInActivity.lastSuccessfulSignInDateTime), 10000), "matched": $count($m.rows), "listCapped": $count($m.rows) > 10000, "partial": $m.partial }
       ) }
   registrations:
     source: graph
@@ -421,7 +422,7 @@ layout:
     text: >-
       **Last successful sign-in ${ params.activity = 'Inactive365' ? 'over a year' : 'over 90 days' } ago.** Accounts
       with no recorded sign-in aren't listed: [Inactive users](/p/identity.inactive-users) includes them. Search matches
-      part of the name or sign-in name, and the advanced filter doesn't apply here.${ userList.listCapped = true ? ' The first 10,000 of ' & $formatNumber(userList.matched, '#,##0') & ' accounts are listed; the export has every one.' : '' }${ userList.partial = true ? ' **Partial:** the read stopped at 50,000 accounts — narrow it with a facet.' : '' }
+      part of the name or sign-in name, and the advanced filter doesn't apply here.${ userList.listCapped = true ? ' The first 10,000 of ' & $formatNumber(userList.matched, '#,##0') & ' accounts are listed; the export has every one.' : '' }${ userList.partial = true ? ' **Partial:** only the first 50,000 accounts were read; later ones are missing here and from the export.' : '' }
   - widget: table
     id: userList
     span: 12
@@ -557,7 +558,7 @@ layout:
           concurrency: 5
         maxItems: 200
     empty:
-      title: Nobody matches
+      title: No users match these filters
       body: Everyone in scope signed in more recently. Clear a facet or the search.
 
   - widget: markdown
@@ -565,8 +566,8 @@ layout:
     span: 12
     when: ${ params.mfa in ['Registered', 'NotRegistered'] }
     text: |
-      Showing the **authentication methods registration report** (refreshed by Microsoft every few hours). The
-      department, licence and source filters don't apply in this view; type and search do. Open the
+      Showing the **authentication methods registration report** (refreshed by Microsoft every few hours). Only type
+      and search apply in this view; the other filters don't. Open the
       [MFA registration](/p/identity.auth-registration) page for the full report.
   - widget: table
     id: registrations

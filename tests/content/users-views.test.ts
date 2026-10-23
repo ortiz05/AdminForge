@@ -87,7 +87,7 @@ describe('identity.users — views Graph filters', () => {
       'Pending guest invitations',
       'Blocked but licensed',
       'New in the last 30 days',
-      'Members inactive 90 days',
+      'No sign-in for 90 days (members)',
       'No sign-in for a year',
     ])
       expect(presets.map((p) => p.name)).toContain(want);
@@ -143,7 +143,9 @@ describe('identity.users — inactivity views', () => {
     expect(await pick({ licensed: 'Licensed' })).toEqual(names([AVERY, SYNCED, NEW]));
     expect(await pick({ source: 'Synced' })).toEqual(names([SYNCED]));
     expect(await pick({ source: 'Cloud' })).not.toContain('Drew Synced');
+    // Department matches the whole name, case ignored, as Graph's `department eq` does.
     expect(await pick({ department: 'finance' })).toEqual(names([AVERY]));
+    expect(await pick({ department: 'fin' })).toEqual([]);
     expect(await pick({ invitation: 'Pending' })).toEqual(names([GUEST]));
     expect(await pick({ created: 'Last30Days' })).toEqual(names([NEW]));
   });
@@ -181,6 +183,20 @@ describe('identity.users — inactivity views', () => {
     expect(await exported({ mfa: 'NotRegistered' })).toBe('registrations.value');
     expect(await exported({ mfa: 'NotRegistered', activity: 'Inactive90' })).toBe('registrations.value');
     expect(await exported({})).toBe('users.value');
+  });
+
+  it('lists the longest without a sign-in first', async () => {
+    const stale = user({
+      displayName: 'Old',
+      signInActivity: { lastSuccessfulSignInDateTime: '2024-02-01T09:00:00Z' },
+    });
+    const matches = await view(
+      'inactiveMatches',
+      { activity: 'Inactive90' },
+      { inactive: { value: [AVERY, stale] } },
+    );
+    const list = await view('userList', { activity: 'Inactive90' }, { inactiveMatches: matches });
+    expect(list.rows.map((r: Def) => r.displayName)).toEqual(['Old', 'Avery Example']);
   });
 
   it('says when the read stopped at its cap', async () => {

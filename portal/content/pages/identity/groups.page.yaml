@@ -54,7 +54,7 @@ params:
     label: Owners
     facet: true
     default: Any
-    description: Graph counts apps as owners — Groups without owners tells people from apps.
+    description: Graph counts apps as owners — the Groups without owners report tells people from apps.
     values:
       - { value: Any, label: Any number }
       - { value: None, label: No owners }
@@ -334,6 +334,14 @@ layout:
     label: Role-assignable
     format: number
     href: /p/identity.groups?roleAssignable=Yes
+  - widget: markdown
+    id: ownersNote
+    span: 12
+    when: ${ params.owners in ['None', 'One'] }
+    text: >-
+      **Owners as Graph counts them**, apps included: a group whose only owner is an app (a provisioning or automation
+      app) shows as having one owner. The [Groups without owners](/p/identity.groups-without-owners) report tells people
+      from apps.
   - widget: table
     id: groups
     span: 12
@@ -410,9 +418,7 @@ layout:
     when: ${ params.members in ['None', 'UnderFive'] }
     text: >-
       **Direct members**: a nested group counts as one member, and a dynamic group counts the members its rule has
-      added so far. This view reads every group, so it takes longer to open; search matches part of the name, and the
-      advanced filter doesn't apply here.${ groupList.listCapped = true ? ' The first 10,000 of ' & $formatNumber(groupList.matched, '#,##0') & ' groups are listed; the export has every one.' : '' }${ groupList.partial = true ? ' **Partial:** the read stopped at 50,000 groups — narrow it with a facet.' : '' }
-      Graph counts apps as owners: [Groups without owners](/p/identity.groups-without-owners) tells people from apps.
+      added so far. Search matches part of the name, and the advanced filter doesn't apply here.${ groupList.listCapped = true ? ' The first 10,000 of ' & $formatNumber(groupList.matched, '#,##0') & ' groups are listed; the export has every one.' : '' }${ groupList.partial = true ? ' **Partial:** only the first 50,000 groups were read; later ones are missing here and from the export.' : '' }
   - widget: table
     id: groupList
     span: 12
@@ -422,10 +428,11 @@ layout:
     selection: multi
     columns:
       - { field: displayName, label: Group, kind: identity, secondary: mail, sortable: true }
-      - { field: memberCount, label: Direct members, kind: number, sortable: true }
+      - { field: memberCount, label: Members, kind: number, sortable: true }
       - field: kind
         label: Type
         kind: enum
+        width: 176
         map: { Microsoft 365: Microsoft 365, Security: Security, Mail-enabled security: Mail-enabled security, Distribution: Distribution }
         filter: { type: facet, param: kind }
       - field: membership
@@ -444,7 +451,7 @@ layout:
         kind: status
         map: { On: [ok, On], Paused: [warn, Paused] }
         hidden: true
-      - { field: description, label: Description, wrap: true }
+      - { field: description, label: Description, wrap: true, hidden: true }
       - { field: visibility, label: Visibility, hidden: true }
       - { field: createdDateTime, label: Created, kind: date, filter: date }
       - { field: renewedDateTime, label: Renewed, kind: date, hidden: true }

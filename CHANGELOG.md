@@ -13,10 +13,11 @@ All notable changes to AdminForge are recorded here. The format follows
   the Views menu and as facets, combining with the others. Owners, dates and paused rules are Graph filters on the
   page's own list. Graph can't filter on member count (and refuses `$expand` in an advanced query), so the member views
   read every group once with its direct members expanded (20 at most a group; up to 50,000 groups, cached 15 minutes),
-  count them natively and keep the groups under 5; the page's facets then run natively and the table shows "Direct
-  members", fewest first. Graph counts apps as owners: the note links Groups without owners, which tells them apart.
-- **Users (1.4.0): views for pending guest invitations, blocked but licensed, new in the last 30 days, members
-  inactive 90 days and no sign-in for a year.** Graph's sign-in filter can't be combined with another, so the
+  count them natively and keep the groups under 5; the page's facets then run natively and the table shows "Members"
+  (direct), fewest first. Graph counts apps as owners: the owner views' note links Groups without owners, which tells
+  them apart.
+- **Users (1.4.0): views for pending guest invitations, blocked but licensed, new in the last 30 days, no sign-in for
+  90 days (members) and no sign-in for a year.** Graph's sign-in filter can't be combined with another, so the
   inactivity views read it alone (as Inactive users does) and apply the page's facets and search natively; accounts
   that never signed in are in the Inactive users report, which the note links.
 - **Exports follow the view:** `export.data` may be a `${ … }` template over params naming the path to export,

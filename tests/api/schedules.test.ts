@@ -69,6 +69,8 @@ describe('schedules API', () => {
       identity: 'automation',
       runsAs: { kind: 'automation', name: null, label: 'automation identity', source: 'automation' },
       job: { kind: 'probe', select: { tags: ['sweep-15m'] } },
+      group: null,
+      tags: [],
       nextRunAt: '2026-10-15T12:15:00.000Z',
       lastRunAt: null,
       lastStatus: null,

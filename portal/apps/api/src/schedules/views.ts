@@ -57,6 +57,10 @@ export interface ScheduleItem {
     /** Report jobs: the params the report runs with. */
     params?: Record<string, unknown>;
   };
+  /** The service it belongs to (`scheduleGroup`), or null for a probe sweep. */
+  group: string | null;
+  /** The definition's tags. */
+  tags: string[];
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: string | null;
@@ -138,10 +142,26 @@ export const APPROVAL_TTL_MS = 7 * 86_400_000;
 /** Run now on a portal schedule: not again within this long of the last manual run. */
 export const PORTAL_RUN_NOW_INTERVAL_MS = 15 * 60_000;
 
-/** What `item` needs of a report: who may open it and which params it redacts. */
+/** What `item` needs of a report: who may open it, which params it redacts, and its area (the service it belongs to). */
 export interface ReportAccess {
   requires?: { portalRoles?: PortalRole[] };
   params?: Record<string, { redact?: boolean }>;
+  area?: string;
+}
+
+/**
+ * The service a schedule belongs to, for Monitoring's filters: a report's `area` (else its key's first segment), the
+ * first segment of a playbook's key or a script's folder, AdminForge itself (`platform`) for its own housekeeping, and none for a
+ * probe sweep (its probes name their services).
+ */
+export function scheduleGroup(def: Schedule, report?: Pick<ReportAccess, 'area'>): string | null {
+  const job = def.job;
+  if (job.kind === 'news' || job.kind === 'contentHealth') return 'platform';
+  if (job.kind === 'report') return report?.area ?? job.ref.split('.')[0] ?? null;
+  if (job.kind === 'playbook') return job.ref.split('.')[0] ?? null;
+  // A script's folder is its service (`exchange/Get-MailboxForwarding.ps1`).
+  if (job.kind === 'script') return job.script.includes('/') ? job.script.split('/')[0]! : null;
+  return null;
 }
 
 /** A portal schedule that was deleted (soft delete: kept for its history, hidden everywhere else). */

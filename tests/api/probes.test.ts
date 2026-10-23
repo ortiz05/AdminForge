@@ -79,6 +79,7 @@ describe('probes API', () => {
       summary: null,
       remedy: null,
       link: null,
+      tags: [],
       latest: {
         status: 'warn',
         metric: 1800,

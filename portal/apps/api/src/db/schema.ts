@@ -378,6 +378,13 @@ export const schedules = sqliteTable(
     nextRunAt: ts('next_run_at'),
     lastRunAt: ts('last_run_at'),
     lastStatus: text('last_status'),
+    /**
+     * The account an Operator chose for a content schedule (`automation` or `app:<name>`, identityKey), over what its
+     * definition names; null = the definition's or the installation default. Kept when content is republished.
+     */
+    runAs: text('run_as'),
+    runAsSetBy: text('run_as_set_by'),
+    runAsSetAt: ts('run_as_set_at'),
     createdAt: ts('created_at').notNull().$defaultFn(now),
     updatedAt: ts('updated_at').notNull().$defaultFn(now),
   },

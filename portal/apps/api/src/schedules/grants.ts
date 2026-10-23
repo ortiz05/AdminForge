@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { identityLabel, type Schedule } from '@adminforge/schemas';
+import { identityLabel, type RunAsDefaults, type Schedule } from '@adminforge/schemas';
 import { portalRoles } from '../auth/roles';
 import type { TokenCacheStore } from '../auth/token-cache';
 import { hasAccountStatus, isGuestAccount, ReauthRequired, type AuthClient } from '../auth/types';
@@ -9,6 +9,7 @@ import { scheduleGrants } from '../db/schema';
 import { AppError } from '../errors';
 import type { ExecutionIdentity } from '../execution/types';
 import type { ScheduleRow } from './types';
+import { runAsOf } from './run-as';
 
 /**
  * Who a schedule runs as (ADR-014), ready for its jobs: the automation identity, a named app identity, or — for a
@@ -151,6 +152,8 @@ export interface ScheduleIdentitiesOptions {
   auth: AuthClient | null;
   tokenCache: Pick<TokenCacheStore, 'delete'>;
   now: () => Date;
+  /** The installation's default accounts for read-only schedules (AF_SCHEDULE_DEFAULT_IDENTITY…). */
+  defaults?: RunAsDefaults;
 }
 
 /** The creator lost what the schedule needs: their grant is gone and the scheduler turns the schedule off. */
@@ -180,7 +183,8 @@ export class ScheduleIdentities {
    */
   async prepare(s: ScheduleRow, requiredRoles: readonly string[]): Promise<PreparedIdentity> {
     const def = s.definition;
-    const identity = def.identity;
+    // The account it runs as now: an Operator's override, the definition, the installation default (run-as.ts).
+    const identity = runAsOf(s, this.o.defaults).identity;
     if (!identity || identity === 'automation')
       return {
         identity: { ...AUTOMATION_READ, schedule: s.key },

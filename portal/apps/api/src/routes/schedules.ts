@@ -26,6 +26,9 @@ import type { Caller } from '../schedules/service';
  * - POST  /api/schedules (report schedule created in the portal; Portal.Operator; audited) → 201 item
  * - PUT   /api/schedules/:key (portal schedule; its creator or Portal.Admin; audited) → 200 item
  * - DELETE /api/schedules/:key (portal schedule; its creator or Portal.Admin; soft delete; audited) → 204
+ * - PUT   /api/schedules/:key/run-as {identity: 'automation' | 'app:<name>' | null} (content schedule; Portal.Operator;
+ *         the identity must hold the permissions it declares; write-capable → turned off, re-enabling is approved for
+ *         the new account; audited) → 200 item (+ disabled: true)
  * - PATCH /api/schedules/:key {enabled} → 200 {key, enabled} | 202 {approvalId} (write-capable: a second person approves
  *         in the approvals inbox; Portal.Operator)
  * - POST  /api/schedules/:key/run → 202 {scheduleRunId} (Portal.Operator; audited)
@@ -38,6 +41,8 @@ const Key = z
   .string()
   .regex(/^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/, 'Expected a schedule key like reports.weekly-x');
 const ToggleBody = z.object({ enabled: z.boolean() });
+/** `automation`, `app:<name>`, or null to go back to the definition / installation default. */
+const RunAsBody = z.object({ identity: z.string().max(64).nullable() });
 const RunsQuery = z.object({
   cursor: z.string().max(400).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -93,6 +98,14 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
     const session = requireSession(request);
     requireRole(session, 'Portal.Reader', 'Schedules');
     return svc.get(key(request.params.key), session);
+  });
+
+  api.put<{ Params: { key: string } }>('/schedules/:key/run-as', async (request) => {
+    const body = parseBody(RunAsBody, request.body);
+    const caller = callerOf(request);
+    const k = key(request.params.key);
+    const { disabled } = await svc.setRunAs(caller, k, body.identity);
+    return { ...(await svc.get(k, caller.session)), ...(disabled ? { disabled: true } : {}) };
   });
 
   api.put<{ Params: { key: string } }>('/schedules/:key', async (request) =>

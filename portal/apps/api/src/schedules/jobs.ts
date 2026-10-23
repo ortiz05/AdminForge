@@ -14,6 +14,7 @@ import {
   type NewsJob,
   type Probe,
   type ProbeJob,
+  type RunAsDefaults,
   type Schedule,
 } from '@adminforge/schemas';
 import type { ArtifactStore, WrittenArtifact } from '../artifacts/store';
@@ -38,6 +39,7 @@ import type { RunService } from '../runs/service';
 import { contentHealth } from './content-health';
 import type { ScheduleStore } from './store';
 import type { ScheduleRow, ScheduleRunRow } from './types';
+import { appNameOf, runAsOf } from './run-as';
 
 /**
  * What each `job.kind` does when a schedule fires (R6, ADR-011, ADR-014). Reports and probes run in read mode as the
@@ -105,6 +107,8 @@ export interface JobDeps {
   automationClientId: string | null;
   /** Application ids of the named app identities (ADR-014), for content health's permission check. */
   identityClientIds?: Readonly<Record<string, string>>;
+  /** The installation's default accounts for read-only schedules (AF_SCHEDULE_DEFAULT_IDENTITY…). */
+  scheduleDefaults?: RunAsDefaults;
   exportMaxRows: number;
   now: () => Date;
   /** Abortable sleep (tests inject a fake). */
@@ -505,7 +509,9 @@ export function createJobRunner(deps: JobDeps): JobRunner {
           ...(ctx.requestedByOid ? { requestedByOid: ctx.requestedByOid } : {}),
           approvedBy: ctx.schedule.approvedBy ? [ctx.schedule.approvedBy] : [],
           approvedTarget: ctx.schedule.approvedTarget,
-          ...(appIdentityOf(ctx.def) ? { identity: appIdentityOf(ctx.def) } : {}),
+          ...(appNameOf(runAsOf(ctx.schedule, deps.scheduleDefaults).identity)
+            ? { identity: appNameOf(runAsOf(ctx.schedule, deps.scheduleDefaults).identity)! }
+            : {}),
         },
         playbook: job.ref,
         inputs: job.inputs,
@@ -579,7 +585,18 @@ export function createJobRunner(deps: JobDeps): JobRunner {
                 return missing === null ? null : missing.length === 0;
               }
             : undefined;
+          // Each schedule's permissions are checked against the account it runs as now (overrides, defaults).
+          const overrides = new Map(
+            (await deps.store.listSchedules())
+              .filter((r) => r.source === 'content' && r.runAs)
+              .map((r) => [r.key, r.runAs]),
+          );
           const report = await contentHealth(deps.definitions, {
+            identityOf: (def) =>
+              runAsOf(
+                { definition: def, source: 'content', runAs: overrides.get(def.id) ?? null },
+                deps.scheduleDefaults,
+              ).identity,
             scopes: job.scopes,
             outbound: deps.outbound,
             automationClientId: deps.automationClientId,

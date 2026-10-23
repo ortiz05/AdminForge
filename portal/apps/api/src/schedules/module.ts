@@ -29,6 +29,8 @@ import { ScheduleService } from './service';
 import { automationFingerprint } from '../runs/fingerprint';
 import { isPaused } from '../execution/emergency';
 import { MemoryScheduleStore, type ScheduleStore } from './store';
+import { grantedAppRoles } from './content-health';
+import { appNameOf } from './run-as';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -111,6 +113,7 @@ export function createSchedulesModule(
   });
   const artifacts = new ArtifactStore(ctx.config.ADMINFORGE_ARTIFACTS_DIR);
   const identities = new ScheduleIdentities({
+    ...(ctx.config.SCHEDULE_DEFAULTS ? { defaults: ctx.config.SCHEDULE_DEFAULTS } : {}),
     grants:
       opts.grants ??
       (ctx.database ? new SqliteScheduleGrantStore(ctx.database.db) : new MemoryScheduleGrantStore()),
@@ -172,6 +175,7 @@ export function createSchedulesModule(
         (ctx.config.SCHEDULE_IDENTITIES ?? []).map((i) => [i.name, i.clientId]),
       ),
       exportMaxRows: ctx.config.EXPORT_MAX_ROWS,
+      ...(ctx.config.SCHEDULE_DEFAULTS ? { scheduleDefaults: ctx.config.SCHEDULE_DEFAULTS } : {}),
       now: ctx.now,
       ...(opts.sleep ? { sleep: opts.sleep } : {}),
       ...(log ? { log } : {}),
@@ -192,6 +196,20 @@ export function createSchedulesModule(
   const service = new ScheduleService({
     store,
     grants: identities.grants,
+    ...(ctx.config.SCHEDULE_DEFAULTS ? { defaults: ctx.config.SCHEDULE_DEFAULTS } : {}),
+    apps: () => (ctx.config.SCHEDULE_IDENTITIES ?? []).map((i) => i.name),
+    // Live, as content health checks them: the app roles the identity's service principal holds.
+    permissionsMissing: async (identity, scopes) => {
+      const app = appNameOf(identity);
+      const clientId = app
+        ? (ctx.config.SCHEDULE_IDENTITIES ?? []).find((i) => i.name === app)?.clientId
+        : ctx.automation?.clientId;
+      if (!clientId || !ctx.automation || ctx.config.AUTH_MODE !== 'entra') return null;
+      const granted = await grantedAppRoles(probeDeps.outbound, clientId);
+      return Object.entries(scopes).flatMap(([svc, list]) =>
+        (list ?? []).filter((s) => !granted.has(`${svc}:${s.toLowerCase()}`)).map((s) => `${s} (${svc})`),
+      );
+    },
     automationPaused: () => isPaused(ctx.settings, 'automation'),
     definitions: ctx.definitions,
     audit: ctx.audit,

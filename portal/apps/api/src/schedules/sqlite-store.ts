@@ -40,6 +40,9 @@ const toSchedule = (r: SchedulesRow): ScheduleRow => ({
   nextRunAt: r.nextRunAt,
   lastRunAt: r.lastRunAt,
   lastStatus: r.lastStatus,
+  runAs: r.runAs,
+  runAsSetBy: r.runAsSetBy,
+  runAsSetAt: r.runAsSetAt,
   createdAt: r.createdAt,
   updatedAt: r.updatedAt,
 });

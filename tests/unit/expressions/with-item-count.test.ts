@@ -74,6 +74,14 @@ describe('$withItemCount', () => {
     );
   });
 
+  it('keeps an own __proto__ key as a key when it drops the counted field', () => {
+    const row = JSON.parse('{"id":"a","__proto__":{"isAssignableToRole":true},"members":[{"id":"1"}]}');
+    const [out] = withItemCount([row], 'members', 'n', undefined, true) as Array<Record<string, unknown>>;
+    expect(Object.keys(out!)).toEqual(['id', '__proto__', 'n']);
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect((out as { isAssignableToRole?: unknown }).isAssignableToRole).toBeUndefined();
+  });
+
   it('stops at the evaluation deadline', () => {
     const many = Array.from({ length: 5000 }, () => ({ m: [1] }));
     expect(() => withItemCount(many, 'm', 'n', Date.now() - 1)).toThrow();

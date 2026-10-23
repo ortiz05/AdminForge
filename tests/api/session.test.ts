@@ -43,7 +43,8 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
     expect(set).not.toMatch(/Secure/);
 
     const evil = await t.app.inject({ method: 'GET', url: '/auth/login?returnTo=%2F%2Fevil.example' });
-    expect(evil.headers.location).toBe('/');
+    // An unsafe target falls back to the sign-in landing: Monitoring.
+    expect(evil.headers.location).toBe('/monitoring');
   });
 
   it('stores only the hash of the session id', async () => {

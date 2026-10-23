@@ -6,7 +6,7 @@ import { noPortalRole, parseBody, unauthenticated } from '../errors';
 import { buildMe } from '../routes/me';
 import { ARM_RATE_LIMIT, armMinutes, armPreconditions } from './arm-routes';
 import { requireSessionWithCsrf } from './guards';
-import { safeReturnTo } from './return-to';
+import { safeReturnTo, signInReturnTo } from './return-to';
 import {
   clearSessionCookie,
   dropWriteAccess,
@@ -55,7 +55,7 @@ export function mockAuthRoutes(app: FastifyInstance, ctx: AppContext) {
       result: 'success',
       details: { roles: session.roles, mock: true },
     });
-    return reply.redirect(safeReturnTo(request.query.returnTo));
+    return reply.redirect(signInReturnTo(request.query.returnTo));
   });
 
   app.post('/auth/mock/state', async (request, reply) => {

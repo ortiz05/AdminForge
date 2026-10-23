@@ -22,3 +22,15 @@ export function safeReturnTo(value: unknown, fallback = '/'): string {
   if (url.pathname === '/auth' || url.pathname.startsWith('/auth/')) return fallback;
   return `${url.pathname}${url.search}${url.hash}`;
 }
+
+/** Where a sign-in lands when the person wasn't on their way to a page: Monitoring, the health of everything. */
+export const HOME_AFTER_SIGN_IN = '/monitoring';
+
+/**
+ * The page a sign-in returns to: the one the person was opening (a deep link survives), else Monitoring — also for `/`,
+ * which a fresh visit to the portal's address asks for.
+ */
+export function signInReturnTo(value: unknown): string {
+  const target = safeReturnTo(value, HOME_AFTER_SIGN_IN);
+  return target === '/' ? HOME_AFTER_SIGN_IN : target;
+}

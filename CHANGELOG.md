@@ -6,6 +6,12 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Sign-in lands on Monitoring (2026-10-23)
+
+- **After signing in you land on Monitoring** (`/monitoring`), the health of everything — unless you were opening a
+  page: a deep link still lands where it pointed. The portal's bare address (`/`) and an unsafe `returnTo` land on
+  Monitoring too (`signInReturnTo`); the Overview dashboard stays at `/`.
+
 ### Navigation: pinned items, no section counts (2026-10-23)
 
 - **Monitoring and News and changes are always in the rail**: a navigation item can be `pinned: true`

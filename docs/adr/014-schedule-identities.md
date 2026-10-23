@@ -46,3 +46,14 @@ plain disable keeps the grant so turning it back on needs no new sign-in. Runner
 yet: the runner can't sign in to Exchange, Teams or SharePoint as the automation identity, so a schedule's `script` job
 fails with `script_not_supported` (`schedules/jobs.ts`; `docs/backlog.md` (Engine and runs, F-18)). `news` and
 `contentHealth` jobs always run as the automation identity.
+
+**Addendum (2026-10-23): defaults and overrides.** Which account a schedule runs as can also be set by the installation
+and by an Operator, without editing content (`docs/plans/2026-10-23-run-as-and-vault.md`). In order: an Operator's
+override on a content schedule (`PUT /api/schedules/:key/run-as`, stored in `schedules.run_as`, audited
+`schedule.run_as_changed`), the identity the definition names, the installation default for its kind
+(`AF_SCHEDULE_DEFAULT_IDENTITY`, `…_REPORTS`, `…_PROBES`), the automation identity (`effectiveIdentity`, schemas).
+Defaults apply to read-only jobs only, so a deploy never moves a write-capable schedule to another account; an override
+on a write-capable schedule turns it off, and the enable approval records the account (`policy.identity`), so an
+approval for another one no longer applies. An override may only name an identity that already holds the application
+permissions the schedule declares (checked live); provisioning and `validate --scopes` credit a schedule's permissions
+to the account it runs as by default, and a probe's to the account of each schedule that runs it.

@@ -6,6 +6,21 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Run-as accounts (2026-10-23)
+
+- **Choose the account schedules run as** (`docs/plans/2026-10-23-run-as-and-vault.md`). Read-only schedules that name
+  no identity run as the installation default for their kind — `AF_SCHEDULE_DEFAULT_IDENTITY`, `…_REPORTS`,
+  `…_PROBES`: the automation identity or a named app identity — and an Operator can choose another for a content
+  schedule on its page (**Run as**, `PUT /api/schedules/:key/run-as`), audited `schedule.run_as_changed`. The identity
+  must already hold the permissions the schedule declares (checked live; the refusal names them). A write-capable
+  schedule never takes a default; changing its account turns it off, and the enable approval records the account, so
+  an approval for another one no longer applies.
+- Provisioning, `validate --scopes` and content health credit a schedule's permissions to the account it runs as, and
+  a probe's to the account of each schedule that runs it (a sweep running as an app identity used to need the probes'
+  permissions on the automation identity).
+- The schedules service's views and caller helpers moved to `schedules/views.ts` (O-04: `service.ts` was over its
+  ratchet).
+
 ### Schedules and usage reports (2026-10-23)
 
 - **The Schedules page names the five most recent failures** in its "failed on the last run" alert and folds the rest

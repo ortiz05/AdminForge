@@ -107,7 +107,10 @@ synthetic tests and configuration checks that write time-series results shown on
    shouldn't hold — then `identity: { app: <name> }` with a name from `AF_SCHEDULE_IDENTITIES` (add it to the env file
    if new); `provision entra` gives that app registration exactly the `requires.scopes` of the schedules naming it, and
    `validate --scopes` checks it separately; a write, sensitive-read or tier-0 permission also needs that identity's
-   own `AF_IDENTITY_<NAME>_ALLOW_*` opt-in. `news` and `contentHealth` jobs always use `automation`.
+   own `AF_IDENTITY_<NAME>_ALLOW_*` opt-in. `news` and `contentHealth` jobs always use `automation`. A read-only
+   schedule that names none runs as the installation default for its kind (`AF_SCHEDULE_DEFAULT_IDENTITY…`), and an
+   Operator can choose another on its page (`docs/operations.md` › Choosing the account schedules run as) — so declare
+   every permission the job needs in `requires.scopes`: the chosen identity must hold them.
    `{ user: creator }` is only for report schedules created in the portal ("Run as: Me") — content can't use it.
    A report with runner (PowerShell) datasources runs as the automation identity only: a named app identity or a
    portal schedule's "Run as: Me" is refused (`runner_identity_not_supported`).

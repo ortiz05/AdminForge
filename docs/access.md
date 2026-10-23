@@ -92,7 +92,7 @@ validate --scopes` compares them), within ceilings that need a deliberate opt-in
   signs in once for the schedule through the Read app; it reads only what they can, never writes, and stops (the
   stored sign-in is deleted) when they lose `Portal.Operator` or a role the report needs, or the schedule is deleted,
   switched to another identity or changed by someone else. Only they (and Portal Admins) open its files. Offboarding
-  someone therefore also ends their schedules' access.
+  someone therefore also ends their schedules' access. Its permissions also cover the schedules it runs by default (`AF_SCHEDULE_DEFAULT_IDENTITY…`) and the probes those sweeps run; an Operator can point a content schedule at it only once it holds that schedule's permissions.
 
 ## Who sees News and changes
 

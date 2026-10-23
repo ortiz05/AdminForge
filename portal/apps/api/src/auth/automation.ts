@@ -164,11 +164,12 @@ export function createAppTokenProvider(
     : `${keys}CLIENT_ID and its certificate/secret`;
   const readFile = opts.readFile ?? ((p: string) => readFileSync(p, 'utf8'));
   let client: ClientCredentialClient | undefined;
-  // The Vault secret version the client was built from: a new version (rotation) builds a new client.
-  let builtVersion: number | undefined;
+  // The Vault credential the client was built from: another one (rotation, or a secret written again at the same
+  // version) builds a new client.
+  let builtFrom: string | undefined;
 
   const getClient = (cred?: VaultCredential): ClientCredentialClient => {
-    if (client && (!cred || cred.version === builtVersion)) return client;
+    if (client && (!cred || cred.fingerprint === builtFrom)) return client;
     let auth: Configuration['auth'];
     if (cred) {
       auth = {
@@ -178,7 +179,7 @@ export function createAppTokenProvider(
           ? { clientCertificate: certificateCredential(cred.certificatePem, `Vault identities/${vaultName}`) }
           : { clientSecret: cred.clientSecret! }),
       };
-      builtVersion = cred.version;
+      builtFrom = cred.fingerprint;
     } else if (certPath) {
       let pem: string;
       try {
@@ -268,7 +269,7 @@ export function createAppTokenProvider(
           );
           if (!vault || !cred || !REJECTED_CREDENTIAL.test(text)) throw err;
           const fresh = await vault.refreshNow(vaultName);
-          if (!fresh || fresh.version === cred.version) throw err;
+          if (!fresh || fresh.fingerprint === cred.fingerprint) throw err;
           result = await getClient(await vaultCredential()).acquireTokenByClientCredential({
             ...request,
             skipCache: true,

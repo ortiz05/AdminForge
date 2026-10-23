@@ -97,8 +97,9 @@ chosen in `ScheduleIdentities.prepare` (`portal/apps/api/src/schedules/grants.ts
   audit details or run outputs.
 - **Wiring:** `createAppIdentityRegistry` takes a credential source (`env` today, `vault`); `createAppTokenProvider`
   takes a credential getter and rebuilds its MSAL client when the credential changes.
-- **Visibility:** `adminforge env check` (keys and states), `provision status` (Vault reachable, each identity's secret
-  present — no values), a `platform` probe "Credentials from Vault" with a remedy.
+- **Visibility:** `adminforge env check` (keys and states) and a `platform` probe "Credentials from Vault" with a remedy.
+  `provision status` doesn't read Vault (it runs on an operator's machine, which has no Vault login): the probe shows
+  each identity's state.
 - **Deployment:** the Kubernetes README (Vault section: policy, auth role bound to the AdminForge service account,
   NetworkPolicy egress to Vault, moving today's credentials in with `vault kv put`), `docs/operations.md`
   (rotation), ADR-018 (credentials from Vault), `SECURITY.md` (token custody).
@@ -110,7 +111,7 @@ chosen in `ScheduleIdentities.prepare` (`portal/apps/api/src/schedules/grants.ts
    KV v2 read, 403/404/503) and the Vault client with its tests (login per method, namespace header, CA, refresh, renew,
    unreachable → last good, never a value in an error).
 3. The credential source and the token provider changes (rotation without restart) with tests.
-4. Probe, `provision status`, docs, ADR-018.
+4. Probe, docs, ADR-018.
 
 ---
 

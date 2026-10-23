@@ -47,9 +47,10 @@ export async function auditChain(
 }
 
 /**
- * The credentials from Vault (ADR-018): ok when every identity's secret was read at the last refresh; warn when the last
- * refresh failed (the last good credentials stay in use) or hasn't run yet; crit when an identity has nothing at its
- * path. Without Vault (the env file holds the credentials) it says so and is ok.
+ * The credentials from Vault (ADR-018): ok when every identity's secret was read at the last refresh; warn when a read
+ * failed but the identity's last good credential stays in use, or nothing was read yet; crit when an identity has no
+ * usable credential (nothing at its path, or never read). Messages name identities only; which Vault path failed and
+ * how is in the details, which only Operators see. Without Vault (the env file holds the credentials) it is ok.
  */
 export async function vaultCredentials(
   _c: Extract<ProbeCheck, { kind: 'vaultCredentials' }>,
@@ -60,30 +61,45 @@ export async function vaultCredentials(
     return {
       metric: null,
       status: 'ok',
-      message: 'Vault isn’t used here: the credentials come from the env file.',
+      message: 'Vault isn’t used here: the credentials come from the installation’s settings.',
     };
   const names = Object.entries(status.identities);
-  const loaded = names.filter(([, s]) => s === 'loaded').length;
-  const missing = names.filter(([, s]) => s === 'missing').map(([n]) => n);
-  if (missing.length)
+  const inState = (...states: string[]) => names.filter(([, s]) => states.includes(s)).map(([n]) => n);
+  const usable = inState('loaded', 'stale').length;
+  const details = {
+    rows: names.map(([identity, state]) => ({ identity, state, problem: status.errors[identity] ?? null })),
+  };
+  const list = (n: string[]) => n.join(', ');
+  const none = inState('missing', 'unavailable');
+  if (none.length)
     return {
-      metric: loaded,
+      metric: usable,
       status: 'crit',
       code: 'credential_unavailable',
-      message: `No credential in Vault for ${missing.join(', ')} (identities/<name> under AF_VAULT_PATH): its schedules and checks fail.`,
+      message: `No usable credential from Vault for ${list(none)}: its schedules and checks fail.`,
+      details,
     };
-  if (status.error)
+  const stale = inState('stale');
+  if (stale.length)
     return {
-      metric: loaded,
+      metric: usable,
       status: 'warn',
       code: 'vault_unreachable',
-      message: `${status.error} The last good credentials stay in use${status.lastRefreshAt ? ` (read ${status.lastRefreshAt})` : ''}.`,
+      message: `Vault couldn’t be read for ${list(stale)}; the credentials read earlier stay in use.`,
+      details,
     };
-  if (!status.lastRefreshAt)
-    return { metric: loaded, status: 'warn', code: 'vault_not_read', message: 'Vault hasn’t been read yet.' };
+  if (!status.lastRefreshAt || inState('not_read').length)
+    return {
+      metric: usable,
+      status: 'warn',
+      code: 'vault_not_read',
+      message: 'Vault hasn’t been read yet.',
+      details,
+    };
   return {
-    metric: loaded,
+    metric: usable,
     status: 'ok',
-    message: `${loaded} credential${loaded === 1 ? '' : 's'} read from Vault at ${status.lastRefreshAt}.`,
+    message: `${usable} credential${usable === 1 ? '' : 's'} read from Vault (checked ${status.lastRefreshAt}).`,
+    details,
   };
 }

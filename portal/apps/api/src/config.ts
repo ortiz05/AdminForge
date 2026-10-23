@@ -13,6 +13,7 @@ import {
 } from '@adminforge/schemas';
 import { z } from 'zod';
 import { chainKeyProblems } from './audit/keys';
+import { KUBERNETES_API_TOKEN_FILE, VAULT_TOKEN_FILE, vaultPathProblem } from './auth/vault';
 import { DEFAULT_TIMEOUT_OVERRIDES, TimeoutOverrideList } from './execution/timeouts';
 import { workspaceRoot } from './paths';
 import type { Keyring } from './security/envelope';
@@ -197,8 +198,8 @@ const Schema = z
       .optional(),
     /** Kubernetes auth: the Vault role bound to AdminForge's service account. */
     AF_VAULT_ROLE: z.string().optional(),
-    /** Kubernetes auth: the service-account token file (default the pod's projected token). */
-    AF_VAULT_K8S_TOKEN_FILE: z.string().default('/var/run/secrets/kubernetes.io/serviceaccount/token'),
+    /** Kubernetes auth: the projected service-account token for Vault (audience `vault`; the README mounts it here). */
+    AF_VAULT_K8S_TOKEN_FILE: z.string().default(VAULT_TOKEN_FILE),
     /** AppRole auth: the role id, and the file holding the secret id. */
     AF_VAULT_ROLE_ID: z.string().optional(),
     AF_VAULT_SECRET_ID_FILE: z.string().optional(),
@@ -209,14 +210,8 @@ const Schema = z
     /** PEM bundle of the CA that signed Vault's certificate (default the system's). */
     AF_VAULT_CA_FILE: z.string().optional(),
     /** The KV version 2 engine's mount (default `secret`) and the path under it (default `adminforge/<AF_ENV_LABEL>`). */
-    AF_VAULT_KV_MOUNT: z
-      .string()
-      .regex(/^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/)
-      .default('secret'),
-    AF_VAULT_PATH: z
-      .string()
-      .regex(/^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/)
-      .optional(),
+    AF_VAULT_KV_MOUNT: z.string().default('secret'),
+    AF_VAULT_PATH: z.string().optional(),
     /** How often the credentials are read again (seconds; 30–86400). */
     AF_VAULT_REFRESH_SECONDS: z.coerce.number().int().min(30).max(86_400).default(300),
     /** PEM with certificate + private key; preferred over the secret. */
@@ -635,6 +630,24 @@ export function vaultProblems(parsed: z.infer<typeof Schema>): string[] {
     problems.push('AF_VAULT_ROLE_ID and AF_VAULT_SECRET_ID_FILE: required with AF_VAULT_AUTH=approle');
   if (parsed.AF_VAULT_AUTH === 'token' && !parsed.AF_VAULT_TOKEN_FILE)
     problems.push('AF_VAULT_TOKEN_FILE: required with AF_VAULT_AUTH=token');
+  // The pod mounts no Kubernetes API token; turning it on for Vault would give every container one.
+  if (
+    parsed.AF_VAULT_AUTH === 'kubernetes' &&
+    parsed.NODE_ENV === 'production' &&
+    parsed.AF_VAULT_K8S_TOKEN_FILE === KUBERNETES_API_TOKEN_FILE
+  )
+    problems.push(
+      'AF_VAULT_K8S_TOKEN_FILE: use a projected token for Vault (audience vault), not the Kubernetes API token — portal/deploy/kubernetes/README.md › Credentials from Vault',
+    );
+  const kvProblem = vaultPathProblem(parsed.AF_VAULT_KV_MOUNT);
+  if (kvProblem) problems.push(`AF_VAULT_KV_MOUNT: ${kvProblem}`);
+  const pathProblem = vaultPathProblem(parsed.AF_VAULT_PATH ?? `adminforge/${parsed.AF_ENV_LABEL}`);
+  if (pathProblem)
+    problems.push(
+      parsed.AF_VAULT_PATH
+        ? `AF_VAULT_PATH: ${pathProblem}`
+        : `AF_ENV_LABEL: names the default AF_VAULT_PATH (adminforge/<label>), so it ${pathProblem}`,
+    );
   for (const key of ['AF_AUTOMATION_CLIENT_SECRET', 'AF_AUTOMATION_CERT_PATH'] as const)
     if (parsed[key])
       problems.push(`${key}: must be empty with AF_VAULT_ADDR (the credential comes from Vault)`);

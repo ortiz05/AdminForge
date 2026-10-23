@@ -25,8 +25,11 @@ in one place and never copied into an env file. No Vault instance exists yet.
   identity) when Entra rejects a credential, so a rotation needs no restart. The Vault token is renewed before it
   expires, or the login repeated. While Vault is unreachable the last good credentials stay in use; an identity that
   never loaded fails its runs with `credential_unavailable`.
-- **Never a value outside memory**: errors, logs, the `vaultCredentials` probe and `provision status` name paths and
-  HTTP statuses only.
+- **Never a value outside memory**: errors and logs name paths and HTTP statuses only; the `vaultCredentials` probe's
+  messages name identities, its paths are in the Operator-only details. AdminForge **never follows a redirect** from
+  Vault (fetch would send the token and a login's JWT or secret id on to wherever it points), reads each identity on
+  its own (a path the policy doesn't grant leaves the others alone and starts no new login), revokes a token it
+  replaces, and treats only KV v2's own 404 as a deleted secret.
 - Provisioning keeps writing new credentials to the env file; moving them into Vault is a documented `vault kv put`
   (a provisioning target for Vault can come later).
 

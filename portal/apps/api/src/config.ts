@@ -9,6 +9,7 @@ import {
   KQL_SOURCES,
   PORTAL_ROLES,
   type PortalRole,
+  type RunAsDefaults,
 } from '@adminforge/schemas';
 import { z } from 'zod';
 import { chainKeyProblems } from './audit/keys';
@@ -177,6 +178,13 @@ const Schema = z
      * AF_IDENTITY_<NAME>_CLIENT_ID and …_CERT_PATH (preferred) or …_CLIENT_SECRET (scheduleIdentities()).
      */
     AF_SCHEDULE_IDENTITIES: z.string().optional(),
+    /**
+     * The account read-only schedules run as when they name none (docs/plans/2026-10-23-run-as-and-vault.md):
+     * `automation` or a name in AF_SCHEDULE_IDENTITIES; the _REPORTS and _PROBES keys win for those jobs.
+     */
+    AF_SCHEDULE_DEFAULT_IDENTITY: z.string().optional(),
+    AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS: z.string().optional(),
+    AF_SCHEDULE_DEFAULT_IDENTITY_PROBES: z.string().optional(),
     AF_AUTOMATION_CLIENT_ID: z.guid().optional(),
     AF_AUTOMATION_CLIENT_SECRET: z.string().optional(),
     /** PEM with certificate + private key; preferred over the secret. */
@@ -441,7 +449,37 @@ export interface AppIdentityConfig {
 export type Config = z.infer<typeof Schema> & {
   /** The named app identities, read from AF_IDENTITY_<NAME>_* (loadConfig; absent in hand-built test configs). */
   SCHEDULE_IDENTITIES?: readonly AppIdentityConfig[];
+  /** The default accounts for read-only schedules (scheduleDefaults; absent in hand-built test configs). */
+  SCHEDULE_DEFAULTS?: RunAsDefaults;
 };
+
+const DEFAULT_IDENTITY_KEYS = {
+  all: 'AF_SCHEDULE_DEFAULT_IDENTITY',
+  reports: 'AF_SCHEDULE_DEFAULT_IDENTITY_REPORTS',
+  probes: 'AF_SCHEDULE_DEFAULT_IDENTITY_PROBES',
+} as const;
+
+/**
+ * The default accounts from AF_SCHEDULE_DEFAULT_IDENTITY(_REPORTS|_PROBES): each `automation` or a configured app
+ * identity. Problems name keys only.
+ */
+export function scheduleDefaults(
+  parsed: Partial<Record<(typeof DEFAULT_IDENTITY_KEYS)[keyof typeof DEFAULT_IDENTITY_KEYS], string>>,
+  identities: readonly Pick<AppIdentityConfig, 'name'>[],
+): { defaults: RunAsDefaults; problems: string[] } {
+  const known = new Set(['automation', ...identities.map((i) => i.name)]);
+  const defaults: RunAsDefaults = {};
+  const problems: string[] = [];
+  for (const [field, key] of Object.entries(DEFAULT_IDENTITY_KEYS) as Array<
+    [keyof RunAsDefaults, keyof typeof parsed]
+  >) {
+    const value = parsed[key]?.trim();
+    if (!value) continue;
+    if (known.has(value)) defaults[field] = value;
+    else problems.push(`${key}: must be automation or a name listed in AF_SCHEDULE_IDENTITIES`);
+  }
+  return { defaults, problems };
+}
 
 /**
  * The named app identities from AF_SCHEDULE_IDENTITIES and their AF_IDENTITY_<NAME>_* keys. Problems name keys only,
@@ -545,10 +583,12 @@ export function loadConfig(env: Record<string, string | undefined> = loadEnv()):
     throw new Error(`Invalid AdminForge configuration:\n${lines.join('\n')}`);
   }
   const { identities, problems } = scheduleIdentities(values, parsed.data);
+  const { defaults, problems: defaultProblems } = scheduleDefaults(parsed.data, identities);
+  problems.push(...defaultProblems);
   if (parsed.data.NODE_ENV === 'production') problems.push(...strayCredentials(values));
   if (problems.length)
     throw new Error(`Invalid AdminForge configuration:\n${problems.map((p) => `  ${p}`).join('\n')}`);
-  return { ...parsed.data, SCHEDULE_IDENTITIES: identities };
+  return { ...parsed.data, SCHEDULE_IDENTITIES: identities, SCHEDULE_DEFAULTS: defaults };
 }
 
 /** Keys of the Postgres releases that carry a database password. */

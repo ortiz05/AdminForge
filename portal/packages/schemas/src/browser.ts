@@ -15,6 +15,7 @@ export * from './page';
 export * from './playbook';
 export * from './cadence';
 export * from './schedule';
+export * from './run-as';
 export * from './probe';
 export * from './connection';
 export * from './navigation';

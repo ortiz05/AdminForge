@@ -40,7 +40,10 @@ async function view(
 }
 /** The member read as Graph answers it (members expanded), through its own transform. */
 const everyGroupFrom = (groups: Def[], extra: Record<string, unknown> = {}) =>
-  renderString(PAGE.datasources.everyGroup.transform, scope({}, { value: { value: groups, ...extra } }));
+  renderString(
+    PAGE.datasources.everyGroup.transform,
+    scope({}, { value: { value: groups, ...extra } }),
+  ) as Promise<Def>;
 
 let n = 0;
 const group = (over: Record<string, unknown>) => ({
@@ -163,6 +166,15 @@ describe('identity.groups — views Graph filters', () => {
         );
         expect(values, `${p.name}: ${k}=${String(v)}`).toContain(v);
       }
+  });
+
+  it('explains in the owner views that Graph counts apps as owners, with the report that tells them apart', async () => {
+    const note = PAGE.layout.find((b: Def) => b.id === 'ownersNote');
+    expect(note.text).toContain('/p/identity.groups-without-owners');
+    const shows = (params: Record<string, unknown>) => renderString(note.when, scope(params));
+    expect(await shows({ owners: 'None' })).toBe(true);
+    expect(await shows({ owners: 'One', members: 'UnderFive' })).toBe(true);
+    expect(await shows({})).toBe(false);
   });
 
   it('offers every new view as a facet', () => {

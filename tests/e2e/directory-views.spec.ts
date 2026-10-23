@@ -39,7 +39,7 @@ test.describe('identity.groups views', () => {
     await expect(grid(page).getByRole('row').nth(2)).toBeVisible();
     await pickView(page, 'Fewer than 5 members');
     await expect(page).toHaveURL(/members=UnderFive/);
-    await expect(page.getByRole('columnheader', { name: /Direct members/ })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /^Members(?!hip)/ })).toBeVisible();
     await expect(page.getByText(/a nested group counts as one member/)).toBeVisible();
     // The fixture's groups under 5 members, and not the one with 7.
     await expect(grid(page).getByText('SG-Example-Approvers')).toBeVisible();
@@ -50,7 +50,8 @@ test.describe('identity.groups views', () => {
     await open(page, '/p/identity.groups');
     await pickView(page, 'No owners');
     await expect(page).toHaveURL(/owners=None/);
-    await expect(page.getByRole('columnheader', { name: /Direct members/ })).toHaveCount(0);
+    await expect(page.getByText(/Owners as Graph counts them/)).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /^Members(?!hip)/ })).toHaveCount(0);
     await expect(grid(page).getByRole('row').nth(1)).toBeVisible();
   });
 

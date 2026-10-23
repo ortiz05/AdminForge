@@ -253,6 +253,7 @@ dated heading, a known status and owner type on every row.
 | Personal dashboards: pin widgets to "My dashboard" and arrange them (master plan 7.4). | open | 2026-10-15 | code | [widgets.md](widgets.md) |
 | The treeshake rule for `packages/schemas/src` in `vite.config.ts` is redundant now that schemas has a browser entry. | open, low | 2026-10-21 | code | `portal/apps/web/vite.config.ts` |
 | Coded screens follow two conventions (`web/src/pages/`, and `web/src/ops/` as a grab-bag) where the rest sit in feature folders (O-15): move them, after the design work settles. | deferred | 2026-10-21 | code | [O-15](plans/2026-10-21-platform-review-organization.md) |
+| Views that read a datasource the query builder doesn't reach (the Groups member and Users inactivity views) still offer Advanced and show its chip; their note says it doesn't apply. A generic `filters.advanced.when` would switch it off with that reason. | open, low | 2026-10-22 | code | `portal/apps/web/src/renderer/FilterRegion.tsx` |
 
 ## API
 

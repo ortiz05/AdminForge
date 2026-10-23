@@ -70,7 +70,8 @@ export const REQUIRED: Record<Purpose, readonly string[]> = {
   schedules: [
     'AF_TENANT_ID',
     'AF_AUTOMATION_CLIENT_ID',
-    'AF_AUTOMATION_CLIENT_SECRET|AF_AUTOMATION_CERT_PATH',
+    // The credential: a secret or certificate in the env file, or from HashiCorp Vault (ADR-018).
+    'AF_AUTOMATION_CLIENT_SECRET|AF_AUTOMATION_CERT_PATH|AF_VAULT_ADDR',
   ],
   validation: ['AF_TENANT_ID', 'AF_PRIMARY_DOMAIN', 'AF_TEST_USER_UPN', 'AF_TEST_USER_PASSWORD'],
 };
@@ -145,6 +146,11 @@ function validate(key: string, value: string): string | undefined {
     if (!names.length || !names.every((v) => (KQL_SOURCES as readonly string[]).includes(v)))
       return `expected ${KQL_SOURCES.join(', ')} (comma-separated, at least one)`;
   }
+  // Vault answers with credentials: https, or http on loopback only (as the API checks at start, config.ts).
+  if (key === 'AF_VAULT_ADDR') {
+    const problem = originProblem(value.replace(/\/+$/, ''));
+    if (problem) return 'expected an https URL (http only for localhost, 127.0.0.1 or ::1)';
+  }
   if (key === 'DATABASE_PATH' && value.includes('CHANGE_ME'))
     return 'still contains the CHANGE_ME placeholder';
   return undefined;
@@ -215,6 +221,14 @@ export function checkEnv(
       r.problem ??= message;
     }
   }
+  // With Vault on, the app-only credentials come only from Vault: the API refuses to start with one in the env file too.
+  if (valueOf('AF_VAULT_ADDR')) {
+    for (const r of keys)
+      if (r.state === 'set' && /^AF_AUTOMATION_(CLIENT_SECRET|CERT_PATH)$/.test(r.key)) {
+        r.state = 'invalid';
+        r.problem = 'must be empty with AF_VAULT_ADDR set: the credential comes from Vault';
+      }
+  }
   const ok = (k: string) => {
     const r = byKey.get(k);
     return !!r && (r.state === 'set' || r.state === 'default');
@@ -222,7 +236,7 @@ export function checkEnv(
   const readiness = Object.fromEntries(
     PURPOSES.map((p) => [
       p,
-      REQUIRED[p].filter((alt) => !alt.split('|').some(ok)).map((alt) => alt.replace('|', ' or ')),
+      REQUIRED[p].filter((alt) => !alt.split('|').some(ok)).map((alt) => alt.split('|').join(' or ')),
     ]),
   ) as Record<Purpose, string[]>;
   const warnings: string[] = [];
@@ -237,6 +251,13 @@ export function checkEnv(
     warnings.push(
       "AUDIT_CHAIN_KEY is not set: the audit log is unkeyed, so whoever can write the database volume can rewrite it and re-hash it. Set it to 32 random bytes (openssl rand -base64 32) in the installation's Secret.",
     );
+  if (valueOf('AF_VAULT_ADDR'))
+    for (const k of Object.keys(fileValues).filter(
+      (k) => identityKey(k) && /_(CLIENT_SECRET|CERT_PATH)$/.test(k) && valueOf(k),
+    ))
+      warnings.push(
+        `${k} is set, but with AF_VAULT_ADDR set the credential comes from Vault: the API refuses to start until it is empty.`,
+      );
   return { keys, unknown, readiness, warnings };
 }
 

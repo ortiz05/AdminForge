@@ -46,3 +46,15 @@ spec:
       ports:
         - port: 443
           protocol: TCP
+    # HashiCorp Vault, when the app-only credentials come from it (ADR-018): an in-cluster Vault by its pods, or its
+    # private address. Uncomment and adjust.
+    # - to:
+    #     - namespaceSelector:
+    #         matchLabels:
+    #           kubernetes.io/metadata.name: vault
+    #       podSelector:
+    #         matchLabels:
+    #           app.kubernetes.io/name: vault
+    #   ports:
+    #     - port: 8200
+    #       protocol: TCP

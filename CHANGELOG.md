@@ -6,6 +6,18 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Credentials from Vault (2026-10-23)
+
+- **App-only credentials from HashiCorp Vault** (ADR-018; `docs/plans/2026-10-23-run-as-and-vault.md` › Part 2). With
+  `AF_VAULT_ADDR` set, the automation identity's and each named app identity's client secret or certificate is read
+  from a KV v2 secret at `identities/<name>` under `AF_VAULT_PATH` — Kubernetes auth (a projected token for Vault
+  only), AppRole or a token file; namespace and CA supported — kept in memory, read every `AF_VAULT_REFRESH_SECONDS`
+  and at once when Entra rejects one, so a rotation needs no restart; the last good credentials stay while Vault is
+  unreachable. The env file keeps the client ids and must hold no secret or certificate path for them then. Errors
+  name the path and status, never a value. Tested against a stand-in Vault (no instance yet).
+- **Credentials from Vault** probe (platform): critical when an identity has nothing at its path, a warning when Vault
+  can't be read. The platform checks moved from `probes/checks.ts` to `platform-checks.ts` (O-04).
+
 ### Run-as accounts (2026-10-23)
 
 - **Choose the account schedules run as** (`docs/plans/2026-10-23-run-as-and-vault.md`). Read-only schedules that name

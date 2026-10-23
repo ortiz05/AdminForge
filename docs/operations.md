@@ -767,6 +767,17 @@ pnpm adminforge provision entra             # then update the Secret (What runs 
 pnpm adminforge provision status
 ```
 
+### Credentials from Vault (ADR-018)
+
+With `AF_VAULT_ADDR` set, the automation identity's and each app identity's secret or certificate is read from Vault
+(`identities/<name>` under `AF_VAULT_PATH`) instead of the env file — set up in `portal/deploy/kubernetes/README.md` ›
+Credentials from Vault. **Rotating** one: add the new secret or certificate in Entra, `vault kv put` it (a new
+version), and AdminForge uses it from its next refresh (`AF_VAULT_REFRESH_SECONDS`) — or at once, when Entra rejects
+the old one — then remove the old credential in Entra. No restart. The **Credentials from Vault** probe (Monitoring ›
+platform) says when an identity has nothing at its path or Vault can't be read; meanwhile the last good credentials
+stay in use. New identities from `provision entra` get their credentials in the env file: move them into Vault and
+empty them there (start-up refuses both at once).
+
 ### Named app identities (ADR-014)
 
 A schedule can run as an app identity of its own instead of the shared automation identity — e.g. a team's reports

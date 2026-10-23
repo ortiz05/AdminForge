@@ -272,7 +272,9 @@ the runner share one node and its clock, so that window holds by construction.
 `env check` warns without it —, `RUNNER_SHARED_KEY`, `PUBLIC_BASE_URL`), `adminforge-tls` (the Ingress certificate, or
 cert-manager) and, with a certificate-based automation identity, `adminforge-automation-cert` — made by an AdminForge
 operator from the env file on their machine (§ 2), never from the admin-only file. The cluster's part: Secrets encrypted
-at rest, `get` on them only for that operator (RBAC), and cert-manager if certificates should renew themselves.
+at rest, `get` on them only for that operator (RBAC), and cert-manager if certificates should renew themselves. With
+HashiCorp Vault holding the app-only credentials (§ 2 › Credentials from Vault), `adminforge-env` keeps only their
+client ids.
 
 ### Logs
 
@@ -399,6 +401,55 @@ Changing a Secret takes effect at the next restart: `kubectl -n adminforge rollo
 Entra: the Read and Write apps need the Ingress URL as a redirect URI — set `PUBLIC_BASE_URL` (or add it to
 `AF_REDIRECT_BASE_URLS`) in your workstation env file and run `pnpm adminforge provision entra --dry-run`, then without
 `--dry-run`.
+
+### Credentials from Vault (optional)
+
+The automation identity's and the app identities' client secrets or certificates can come from HashiCorp Vault
+instead of `adminforge-env` (ADR-018; `config/example.env` › Credentials from HashiCorp Vault). The env file keeps
+the client ids; set `AF_VAULT_ADDR`, `AF_VAULT_ROLE` (and `AF_VAULT_PATH`, `AF_VAULT_CA_FILE`, `AF_VAULT_NAMESPACE` as
+needed) and leave every `…_CLIENT_SECRET` / `…_CERT_PATH` of those identities empty.
+
+In Vault (the platform team), a KV version 2 engine, a read-only policy and a Kubernetes auth role bound to the pod's
+service account:
+
+```bash
+vault secrets enable -path=secret kv-v2            # if not there yet
+vault policy write adminforge-read - <<'HCL'
+path "secret/data/adminforge/prod/identities/*" { capabilities = ["read"] }
+HCL
+vault write auth/kubernetes/role/adminforge \
+  bound_service_account_names=adminforge bound_service_account_namespaces=adminforge \
+  audience=vault policies=adminforge-read ttl=1h
+# Move today's credentials in (from the env file on the operator's machine), then empty them there:
+vault kv put secret/adminforge/prod/identities/automation client_id=<AF_AUTOMATION_CLIENT_ID> client_secret=-
+vault kv put secret/adminforge/prod/identities/reports-team client_id=<…> certificate_pem=@reports-team.pem
+```
+
+The pod mounts no Kubernetes API token (`automountServiceAccountToken: false`). Give the API container a projected
+token for Vault only, in your overlay, and point `AF_VAULT_K8S_TOKEN_FILE` at it:
+
+```yaml
+# overlays/<yours>/deployment-vault-token.yaml (a strategic-merge patch of the Deployment)
+spec:
+  template:
+    spec:
+      volumes:
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken: { audience: vault, expirationSeconds: 3600, path: token }
+      containers:
+        - name: api
+          volumeMounts:
+            - { name: vault-token, mountPath: /var/run/secrets/vault, readOnly: true }
+# and in adminforge-env: AF_VAULT_K8S_TOKEN_FILE=/var/run/secrets/vault/token
+```
+
+Vault's address is private: open it in your private-egress policy (`overlays/example/networkpolicy-private-egress.yaml`
+has a commented rule). The **Credentials from Vault** probe on the Monitoring page (platform) goes critical when an
+identity has nothing at its path and warns when Vault can't be read — AdminForge keeps using the credentials it last
+read. AppRole instead: `AF_VAULT_AUTH=approle`, `AF_VAULT_ROLE_ID` and the secret id in a file from a Secret
+(`AF_VAULT_SECRET_ID_FILE`).
 
 ## 3. Deploy
 

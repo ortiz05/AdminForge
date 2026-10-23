@@ -63,10 +63,17 @@ describe('Schedules: failed on the last run', () => {
       'Failing report 6',
       failed.title,
     ]);
+    // The same button, relabelled: focus stays on it.
     const fewer = within(alert).getByRole('button', { name: 'Show fewer' });
     expect(fewer).toHaveAttribute('aria-expanded', 'true');
+    expect(fewer).toHaveFocus();
     await userEvent.click(fewer);
     expect(names()).toHaveLength(5);
+    expect(within(alert).getByRole('button', { name: 'Show 2 more' })).toHaveFocus();
+    // And from the keyboard.
+    await userEvent.keyboard('{Enter}');
+    expect(names()).toHaveLength(7);
+    expect(within(alert).getByRole('button', { name: 'Show fewer' })).toHaveFocus();
     expect(await axeViolations()).toEqual([]);
   });
 

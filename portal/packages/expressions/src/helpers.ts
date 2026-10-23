@@ -961,7 +961,18 @@ export function withItemCount(
     if (omitKey === undefined) return { ...row, [name]: n };
     // A key loop: object rest with a computed key is several times slower in V8 at this size.
     const out: Record<string, unknown> = {};
-    for (const k of Object.keys(row)) if (k !== omitKey) out[k] = row[k];
+    for (const k of Object.keys(row)) {
+      if (k === omitKey) continue;
+      // An own "__proto__" (JSON.parse makes one) stays a key, never the copy's prototype — as omit() keeps it.
+      if (k === '__proto__')
+        Object.defineProperty(out, k, {
+          value: row[k],
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      else out[k] = row[k];
+    }
     out[name] = n;
     return out;
   });

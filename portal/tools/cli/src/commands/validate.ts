@@ -25,6 +25,7 @@ import {
   declaredScopes,
   provisionedScopes,
   type ScopeApp,
+  runAsDefaultsFrom,
 } from '../content/scopes';
 
 const LABELS: Record<string, string> = {
@@ -66,7 +67,7 @@ export async function validateContent(
   }
   if (!opts.scopes) return ok;
 
-  const declared = declaredScopes(report.loaded);
+  const declared = declaredScopes(report.loaded, runAsDefaultsFrom(ctx.env));
   const apps: Partial<Record<ScopeApp, string>> = {
     read: ctx.env.AF_READ_CLIENT_ID,
     write: ctx.env.AF_WRITE_CLIENT_ID,

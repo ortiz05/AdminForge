@@ -10,6 +10,8 @@ import {
   type Scopes,
   type Schedule,
   type ScheduleIdentity,
+  probeJobCovers,
+  type Probe,
 } from '@adminforge/schemas';
 import type { DefinitionSource } from '../definitions/types';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
@@ -171,6 +173,21 @@ export async function contentHealth(
     // named app identity's (the schedules naming it). Creators' schedules use delegated access: not app roles.
     const byIdentity = new Map<string, Map<string, string[]>>([['automation', new Map()]]);
     const unlicensed: string[] = [];
+    const identityOf = (def: Schedule) => opts.identityOf?.(def) ?? def.identity;
+    const sweeps = entries
+      .map((e) => e.def)
+      .filter(
+        (d): d is Schedule =>
+          d.kind === 'schedule' && ACTIVE(d.status) && d.enabled !== false && d.job.kind === 'probe',
+      );
+    const probeAccounts = (probe: Probe): string[] => {
+      const keys = new Set(
+        sweeps
+          .filter((s) => s.job.kind === 'probe' && probeJobCovers(s.job, probe))
+          .map((s) => identityKey(identityOf(s))),
+      );
+      return keys.size ? [...keys] : ['automation'];
+    };
     for (const e of entries) {
       // Everything the automation identity runs: schedules, probes and News and changes feeds.
       if (
@@ -184,15 +201,23 @@ export async function contentHealth(
         unlicensed.push(e.def.id);
         continue;
       }
+      // A schedule's permissions belong to the account it runs as; a probe's to the account of each enabled sweep
+      // that runs it (the automation identity when none does).
       const who =
-        e.def.kind === 'schedule' ? identityKey(opts.identityOf?.(e.def) ?? e.def.identity) : 'automation';
-      if (who === 'user') continue;
-      const name = who.startsWith('app:') ? who.slice(4) : 'automation';
-      const declared = byIdentity.get(name) ?? new Map<string, string[]>();
-      byIdentity.set(name, declared);
-      for (const service of CHECKED)
-        for (const s of e.def.requires?.scopes?.[service] ?? [])
-          declared.set(`${service}:${s}`, [...(declared.get(`${service}:${s}`) ?? []), e.file]);
+        e.def.kind === 'schedule'
+          ? [identityKey(identityOf(e.def))]
+          : e.def.kind === 'probe'
+            ? probeAccounts(e.def)
+            : ['automation'];
+      for (const key of who) {
+        if (key === 'user') continue;
+        const name = key.startsWith('app:') ? key.slice(4) : 'automation';
+        const declared = byIdentity.get(name) ?? new Map<string, string[]>();
+        byIdentity.set(name, declared);
+        for (const service of CHECKED)
+          for (const s of e.def.requires?.scopes?.[service] ?? [])
+            declared.set(`${service}:${s}`, [...(declared.get(`${service}:${s}`) ?? []), e.file]);
+      }
     }
     const declared = byIdentity.get('automation')!;
     // Drift of one app-only identity: declared but not granted, granted but declared by nothing.

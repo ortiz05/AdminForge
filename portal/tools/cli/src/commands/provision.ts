@@ -16,8 +16,8 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { repoRoot } from '@adminforge/config';
 import { ApiError, type GraphClient } from '@adminforge/connectors';
-import { loadContentDir } from '@adminforge/schemas';
-import { declaredScopes, serviceForResource, type Declared } from '../content/scopes';
+import { loadContentDir, type RunAsDefaults } from '@adminforge/schemas';
+import { declaredScopes, runAsDefaultsFrom, serviceForResource, type Declared } from '../content/scopes';
 import { ConfigError } from '../shared/errors';
 import { counts, isChange, renderPlan, renderStatus, summaryLine } from '../shared/output';
 import { RESOURCES, OPTIONAL_RESOURCES, RESOURCE_KEYS } from '../provision/catalog';
@@ -94,9 +94,10 @@ export interface EntraRun {
 /** Everything portal/content declares (requires.scopes), with the files that declare it. */
 export async function contentDeclarations(
   contentDir = path.join(repoRoot, 'portal', 'content'),
+  defaults?: RunAsDefaults,
 ): Promise<Declared> {
   const { definitions } = await loadContentDir(contentDir);
-  return declaredScopes(definitions);
+  return declaredScopes(definitions, defaults);
 }
 
 /** Permissions declared by portal/content (requires.scopes) — provisioning grants exactly these on top of the baseline. */
@@ -115,7 +116,7 @@ export async function planEntraRun(
 ): Promise<EntraRun> {
   const declared = ctx.contentScopes
     ? { scopes: ctx.contentScopes, files: ctx.contentFiles ?? new Map<string, string[]>() }
-    : await contentDeclarations();
+    : await contentDeclarations(undefined, runAsDefaultsFrom(ctx.env));
   const resources = await fetchResources(clients.graph);
   const desired = buildDesiredEntra(settings, resources, declared.scopes as ContentScopes);
   const state = await fetchEntraState(clients.graph, clients.arm, desired, resources, envSubset(ctx.env));

@@ -1,5 +1,6 @@
 import { isWriteCapable } from './definition';
-import type { Schedule, ScheduleIdentity } from './schedule';
+import type { Probe } from './probe';
+import type { ProbeJob, Schedule, ScheduleIdentity } from './schedule';
 
 /**
  * The installation's default accounts for read-only schedules (AF_SCHEDULE_DEFAULT_IDENTITY, …_REPORTS, …_PROBES):
@@ -53,4 +54,16 @@ export function effectiveIdentity(
     if (name) return { identity: asIdentity(name), source: 'default' };
   }
   return { identity: 'automation', source: 'automation' };
+}
+
+/**
+ * Whether a probe job runs this probe — as the scheduler selects them (`selectProbes`): by `ref`, by `refs`, or every
+ * active probe carrying all `select.tags`. Provisioning and content health credit a probe's permissions to the account
+ * of each schedule that runs it.
+ */
+export function probeJobCovers(job: ProbeJob, probe: Pick<Probe, 'id' | 'tags' | 'status'>): boolean {
+  if (job.ref) return job.ref === probe.id;
+  if (job.refs) return job.refs.includes(probe.id);
+  if (probe.status === 'draft' || probe.status === 'retired') return false;
+  return (job.select?.tags ?? []).every((t) => probe.tags?.includes(t));
 }

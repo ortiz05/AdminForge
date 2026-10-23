@@ -6,6 +6,15 @@ All notable changes to AdminForge are recorded here. The format follows
 
 ## Unreleased
 
+### Onboarding in one step (2026-10-23)
+
+- **Say "onboard" in Claude Code** (the `onboard` skill) or run `node tooling/onboard.mjs` (`pnpm onboard`): it sets a
+  new checkout up — `pnpm install`, the git hooks, the generated schemas and design tokens — and checks the pinned Node
+  and pnpm, `.githooks` and the commit-message rules, Chrome for Playwright, PowerShell 7 (optional), Claude Code's
+  after-edit hook (it runs it), every skill and reviewer agent's front matter, `CLAUDE.md` and the env file's
+  permissions, then runs the guard tests. Each problem comes with its fix; `--check` changes nothing, `--quick` skips
+  the guard tests. Built-ins only, so it runs on a fresh clone.
+
 ### Sign-in lands on Monitoring (2026-10-23)
 
 - **After signing in you land on Monitoring** (`/monitoring`), the health of everything — unless you were opening a

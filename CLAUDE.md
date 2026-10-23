@@ -76,6 +76,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 
 | Task                           | Command                                                                                                                                  |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Onboard a machine              | `node tooling/onboard.mjs` (in Claude Code say "onboard"): installs and checks tools, hooks, skills, agents                              |
 | Install                        | `pnpm install`                                                                                                                           |
 | Dev (no tenant needed)         | `ADMINFORGE_ENV_FILE=/dev/null PUBLIC_BASE_URL=http://localhost:5173 AUTH_MODE=mock DATA_MODE=fixtures pnpm dev` → http://localhost:5173 |
 | Check the env file             | `pnpm adminforge env check` (key names and states only, never values)                                                                    |

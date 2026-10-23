@@ -26,6 +26,7 @@
     "live:run-playbook": "tsx tests/live/scripts/run-playbook.ts",
     "live:run-schedule-once": "tsx tests/live/scripts/run-schedule-once.ts",
     "live:check-mail-sender": "tsx tests/live/scripts/check-mail-sender.ts",
+    "onboard": "node tooling/onboard.mjs",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
